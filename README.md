@@ -16,7 +16,15 @@ the Linux command line
 
 * IceSat-2 ground track data by latitude or time, plot the resulting ATL03 data, and save any figures created
 
+
+
 <h3>Download PhoREALGUI.exe (for Windows)</h3>
 https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot.png)
+
+<h4>Copyright 2019 Applied Research Laboratories, University of Texas at Austin
+
+This package is free software; the copyright holder gives unlimited
+permission to copy and/or distribute, with or without modification, as
+long as this notice is preserved.</h4>
