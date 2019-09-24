@@ -12,9 +12,7 @@ Data products from IceSAT-2 require some familiarity working with large datafile
 * On Linux systems, the PhoREAL toolbox can be run as a Python GUI or as a series of Python function commands via
 the Linux command line
 
-* PhoREAL also has the ability to classify ATL03 data points from the classifications in the ATL08 data product, trim
-
-* IceSat-2 ground track data by latitude or time, plot the resulting ATL03 data, and save any figures created
+* PhoREAL also has the ability to classify ATL03 data points from the classifications in the ATL08 data product, trim IceSat-2 ground track data by latitude or time, plot the resulting ATL03 data, and save any figures created
 
 
 
