@@ -17,6 +17,7 @@ the Linux command line
 
 
 <h3>Download PhoREALGUI.exe (for Windows)</h3>
+Update (December, 5, 2019): PhoREAL v2.0 released
 https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot.png)
