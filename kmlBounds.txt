@@ -1,7 +1,7 @@
 # KML BOUNDS FILE FOR ICESAT-2 ATL03/ATL08 ANALYSIS
 #
-# HEADER FILE PATH, Z:/data/validation/analysis/HeaderOutput/
-# TRUTH FILE PATH,  Z:/data/validation/data/
+# HEADER FILE PATH, /HeaderOutput/
+# TRUTH FILE PATH,  /data/
 #
 # KML FILE NAME					LON MIN (DEG)	LON MAX (DEG)	LAT MIN (DEG)	LAT MAX (DEG)	HEADER FILE PATH							TRUTH FILES PATH
 AustinTx,						-97.844571,		-97.689181,		30.212641,		30.406014,		AustinTx_HeaderData.mat,					AustinTx/LAZ_UTM

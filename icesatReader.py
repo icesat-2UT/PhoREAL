@@ -626,10 +626,8 @@ def convert_atl03_to_legacy(atl03):
     return atl03legacy, rotationData, headerData
 
 if __name__ == "__main__":    
-    if os.name == 'nt':
-        basepath = 'Y:/USERS/eric/2_production/'
-    else:
-        basepath = '/LIDAR/server/USERS/eric/2_production/'
+
+    basepath = ''
 
     atl03file = 'ATL03_20181021130238_03500103_002_01.h5'
     atl08file = 'ATL08_20181021130238_03500103_002_01.h5'

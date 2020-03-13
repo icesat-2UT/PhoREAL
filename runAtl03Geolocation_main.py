@@ -22,37 +22,18 @@ from getAtlTruthSwath_auto import getAtlTruthSwath
 from getMeasurementError_auto import getMeasurementError, offsetsStruct
 
 
-##### Start Inputs for getAtlMeasuredSwath
 
-# Path to ATL03 Input File
-# atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181030110205_04860106_001_01.h5' # SONONMA
-# atl03FilePath = 'Z:/data/release/R002/ATL03_rR002/ATL03_20190928175636_00280506_R002_01_sreq_3002.h5' # WSMR 20190928
-# atl03FilePath = 'Z:/data/release/001/ATL03_r001/ATL03_20190331023705_00280306_001_02_sreq_2695.h5' # WSMR 20190331
-# atl03FilePath = 'z:/data/release/R002/ATL03_rR002/ATL03_20191008052407_01730502_R002_01_sub_344.h5' # WSMR 20191008
-# atl03FilePath = 'z:/data/release/R002/ATL03_rR002/ATL03_20191031162419_05310506_R002_01_sub_344.h5' # WSMR 20191008
-# atl03FilePath = 'z:/data/release/R002/ATL03_rR002/ATL03_20200107010352_01730602_R002_01_sub_344.h5' # WSMR 20200107
-# atl03FilePath = 'z:/data/release/002/ATL03_r002/ATL03_20190928175636_00280506_002_01_sreq_3181.h5' # WSMR 20190928 r002
-# atl03FilePath = 'z:/data/release/002/ATL03_r002/ATL03_20191012051547_02340502_002_01_sreq_3181.h5' # WSMR 20191012 r002
-# atl03FilePath = 'z:/data/release/002/ATL03_r002/ATL03_20191031162419_05310506_002_01_sreq_3181.h5' # WSMR 20191031 r002
-atl03FilePath = 'z:/data/release/002/ATL03_r002/WSMR/ATL03_20190331023705_00280306_002_01.h5' # WSMR 20190331 r002
+atl03FilePath = 'ATL03_20190331023705_00280306_002_01.h5' # WSMR 20190331 r002
 
 # Path to ATL08 Input File
-# atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181030110205_04860106_952_01.h5' # SONOMA
-# atl08FilePath = 'Z:/data/release/R002/ATL08_rR002/ATL08_20190928175636_00280506_R002_01_sub_344.h5' # WSMR
-atl08FilePath = 'z:/data/release/002/ATL08_r002/WSMR/ATL08_20190331023705_00280306_002_01.h5' # WSMR 20190331 r002
+
+atl08FilePath = 'ATL08_20190331023705_00280306_002_01.h5' # WSMR 20190331 r002
 # atl08FilePath = []
 
 # Path to Output Directory
-# outFilePath = '//lidar-server/lidar/USERS/test'
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/rapid002_wsmr_20190928_old' # WSMR
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r001_wsmr_20190331' # WSMR  
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/rapid002_wsmr_20191008' # WSMR 
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/rapid002_wsmr_20191031' # WSMR
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/rapid002_wsmr_20200107' # WSMR
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_wsmr_20190928_new' # WSMR r002
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_wsmr_20191012_new' # WSMR r002
-# outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_wsmr_20191031_new' # WSMR r002
-outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_wsmr_20190331' # WSMR r002
+# outFilePath = '/test'
+
+outFilePath = '/r002_wsmr_20190331' # WSMR r002
 
 # Ground track number(s) to analyze
 gtNums = ['gt2r']
@@ -80,7 +61,7 @@ createAtl08CsvFile = False    # Option to create output measured ATL08 .csv file
 
 buffer = 50                 # Distance in cross-track (meters) around ATL03 track to look for truth data 
 useExistingTruth = True     # Option to use existing truth data if it exists
-truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/'  # Path to existing truth data
+truthSwathDir = '/truth_data/'  # Path to existing truth data
 createTruthFile = False      # Option to create output truth .las file
 
 ##### End Inputs for getAtlTruthSwath
