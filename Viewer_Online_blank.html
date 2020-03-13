@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+.area {
+  fill: none;
+  stroke: #C6C0B8;
+  stroke-width: 1;
+  clip-path: url(#clip);
+}
+
+.zoom {
+  cursor: move;
+  fill: none;
+  pointer-events: all;
+}
+
+rect.selection
+{
+	fill:gray;
+}
+
+</style>
+<svg width="960" height="500"></svg>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script>
+var data = [
+
+
+
+];
+			
+var svg = d3.select("svg"),
+    margin = {top: 20, right: 20, bottom: 110, left: 40},
+    margin2 = {top: 430, right: 20, bottom: 30, left: 40},
+    width = +svg.attr("width") - margin.left - margin.right,
+    height = +svg.attr("height") - margin.top - margin.bottom,
+    height2 = +svg.attr("height") - margin2.top - margin2.bottom;
+
+var parseytrack = d3.timeParse("%H:%M:%S");//"%b %Y");
+
+var x = d3.scaleLinear().range([0, width]),
+    x2 = d3.scaleLinear().range([0, width]),
+    y = d3.scaleLinear().range([height, 0]),
+    y2 = d3.scaleLinear().range([height2, 0]),
+    dlon = d3.scaleLinear().range([height, 0]),
+    dlat = d3.scaleLinear().range([height, 0]);
+
+var xAxis = d3.axisBottom(x),
+    xAxis2 = d3.axisBottom(x2),
+    yAxis = d3.axisLeft(y);
+
+var brush = d3.brushX()
+    .extent([[0, 0], [width, height2]])
+    .on("brush end", brushed);
+
+var zoom = d3.zoom()
+    .scaleExtent([1, Infinity])
+    .translateExtent([[0, 0], [width, height]])
+    .extent([[0, 0], [width, height]])
+    .on("zoom", zoomed);
+
+    var area = d3.line()
+
+				
+var area2 = d3.line()
+
+	
+
+svg.append("defs").append("clipPath")
+    .attr("id", "clip")
+  .append("rect")
+    .attr("width", width)
+    .attr("height", height);
+
+var focus = svg.append("g")
+    .attr("class", "focus")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var context = svg.append("g")
+    .attr("class", "context")
+    .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
+
+  function upytrack(){	
+	
+	  for(var k in data)
+		{
+			type(data[k]);
+		}	  
+	  
+	  //Establish x-y axes for top graph
+	  x.domain(d3.extent(data, function(d) { return d.ytrack; }));
+	  y.domain([(d3.min(data, function(d) { return d.zheight; })) - 20, (d3.max(data, function(d) { return d.zheight; })) + 20]);
+	  dlon.domain([(d3.min(data, function(d) { return d.lon; })), (d3.max(data, function(d) { return d.lon; }))]);
+	  dlat.domain([(d3.min(data, function(d) { return d.lat; })), (d3.max(data, function(d) { return d.lat; }))]);
+
+	  
+	  //Establish x-y axes for bottom graph
+	  x2.domain(x.domain());
+	  y2.domain(y.domain());
+
+
+      focus.append("path")
+		  .datum(data)
+		  .attr("class", "area")
+		  .attr("d", area);
+
+	  focus.append("g")
+		  .attr("class", "axis axis--x")
+		  .attr("transform", "translate(0," + height + ")")
+		  .call(xAxis);
+
+	  focus.append("g")
+		  .attr("class", "axis axis--y")
+		  .call(yAxis);
+
+	//Circles in main graph
+	  focus.selectAll("circle")                                    
+		  .data(data)                                         
+		  .enter().append("circle") 
+		  .attr("class","circle")	
+		  .attr("r", 1)
+		  
+		  .style("fill", function(d) { return d.color; })
+		  .style("stroke", function(d) { return d.color; })
+		  .style("stroke-width", "2")
+		  .attr("cx", function(d) { return x(d.ytrack) })
+		  .attr("cy", function(d) { return y(d.zheight); });
+	
+	  context.append("path")
+		  .datum(data)
+		  .attr("class", "area")
+		  .attr("d", area2);
+
+	  context.append("g")
+		  .attr("class", "axis axis--x")
+		  .attr("transform", "translate(0," + height2 + ")")
+		  .call(xAxis2);
+	
+	//Circles in guide graph
+	  context.selectAll("circle")                                    
+		  .data(data)                                         
+		  .enter().append("circle") 
+		  .attr("class","circle")	
+		  .attr("r", 0.25)
+		  .style("fill", function(d) { return d.color; })
+		  .style("stroke", function(d) { return d.color; })
+		  .style("stroke-width", "2")
+		  .attr("cx", function(d) { return x2(d.ytrack) })
+		  .attr("cy", function(d) { return y2(d.zheight); });	
+
+	  context.append("g")
+		  .attr("class", "brush")
+		  .call(brush)
+		  .call(brush.move, x.range());
+
+	  svg.append("rect")
+		  .attr("class", "zoom")
+		  .attr("width", width)
+		  .attr("height", height)
+		  .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+		  .call(zoom);
+}
+
+
+
+function brushed() {
+  if (d3.event.sourceEvent && d3.event.sourceEvent.type === "zoom") return; // ignore brush-by-zoom
+  var s = d3.event.selection || x2.range();
+  x.domain(s.map(x2.invert, x2));
+  focus.select(".area").attr("d", area);
+  
+  focus.selectAll('.circle')
+		  .attr("cx", function(d) { return x(d.ytrack) })
+		  .attr("cy", function(d) { return y(d.zheight); });
+  
+  
+
+  focus.select(".axis--x").call(xAxis);
+  focus.select(".axis--y").call(yAxis);
+  svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
+      .scale(width / (s[1] - s[0]))
+      .translate(-s[0], 0));
+	  
+
+  lon0 = dlon.domain()[0];
+  lon1 = dlon.domain()[1];
+  lat0 = dlat.domain()[0];
+  lat1 = dlat.domain()[1];
+  lonavg = (((lon0 + lon1)/2));
+  latavg = (((lat0 + lat1)/2));
+
+  midpointLon = (lonavg);
+  midpointLat = (latavg);
+
+  latdif = Math.abs(lat1 - lat0);
+
+  if (latdif < 0.029005) {
+  zoomlvl = 13;
+  } else if (latdif < 0.057859) {
+    zoomlvl = 12;
+  }else if (latdif < 0.11453) {
+    zoomlvl = 11;
+  }else if (latdif < 0.197468) {
+    zoomlvl = 10;
+  }else if (latdif < 0.465536) {
+    zoomlvl = 9;
+  }else if (latdif < 1.2) {
+  zoomlvl = 8;
+  }else{
+  zoomlvl = 7;
+  }
+
+}
+
+function zoomed() {
+  if (d3.event.sourceEvent && d3.event.sourceEvent.type === "brush") return; // ignore zoom-by-brush
+  var t = d3.event.transform;
+  x.domain(t.rescaleX(x2).domain());
+  focus.select(".area").attr("d", area);
+  var filteredData = data.filter(d=>d.ytrack > x.domain()[0] && d.ytrack < x.domain()[1]);
+  y.domain([d3.min(filteredData, function(d) { return d.zheight; }) - 20, d3.max(filteredData, function(d) { return d.zheight; }) + 20]);
+  dlon.domain([d3.min(filteredData, function(d) { return d.lon; }), d3.max(filteredData, function(d) { return d.lon; })]);
+  dlat.domain([d3.min(filteredData, function(d) { return d.lat; }), d3.max(filteredData, function(d) { return d.lat; })]);
+
+  focus.selectAll('.circle')
+		  .attr("cx", function(d) { return x(d.ytrack) })
+		  .attr("cy", function(d) { return y(d.zheight); });
+		
+  focus.select(".axis--x").call(xAxis);
+  focus.select(".axis--y").call(yAxis);
+  context.select(".brush").call(brush.move, x.range().map(t.invertX, t));
+  context.selectAll('.circle')
+		  .attr("cx", function(d) { return x2(d.ytrack) })
+		  .attr("cy", function(d) { return y2(d.zheight); });
+
+  lon0 = dlon.domain()[0];
+  lon1 = dlon.domain()[1];
+  lat0 = dlat.domain()[0];
+  lat1 = dlat.domain()[1];
+  lonavg = (((lon0 + lon1)/2));
+  latavg = (((lat0 + lat1)/2));
+
+  midpointLon = (lonavg);
+  
+  midpointLat = (latavg);
+
+  latdif = Math.abs(lat1 - lat0);
+
+  if (latdif < 0.029005) {
+  zoomlvl = 13;
+  } else if (latdif < 0.057859) {
+    zoomlvl = 12;
+  }else if (latdif < 0.11453) {
+    zoomlvl = 11;
+  }else if (latdif < 0.197468) {
+    zoomlvl = 10;
+  }else if (latdif < 0.465536) {
+    zoomlvl = 9;
+  }else if (latdif < 1.2) {
+  zoomlvl = 8;
+  }else{
+  zoomlvl = 7;
+  }
+ 
+
+	mymap.setView([midpointLat, midpointLon], zoomlvl)
+  mymap.removeLayer(guideline)
+//INCLUDE GUIDELINE
+
+}
+
+function type(d) {
+  // d.ytrack = parseytrack(d.ytrack);
+  d.ytrack = d.ytrack;
+  d.zheight = +d.zheight;
+  return d;
+}
+upytrack();
+</script>
+
+</head>
+
+<body>
+	
+	<title>PhoShow Sonoma 2018-10-30 GT1R</title>
+
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	
+	<link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css" integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js" integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og==" crossorigin=""></script>
+
+<div id="mapid" style="width: 960px; height: 400px;"></div>
+
+<style>
+    body { margin:0; padding:0; }
+    #map { position: absolute; top:0; bottom:0; right:0; left:0; }
+  </style>
+</head>
+<body>
+
+  <meta charset="utf-8" />
+  <title>Switching basemaps</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+  <!-- Load Leaflet from CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+  integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+  crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+  integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+  crossorigin=""></script>
+
+
+  <!-- Load Esri Leaflet from CDN -->
+  <script src="https://unpkg.com/esri-leaflet@2.3.1/dist/esri-leaflet.js"
+  integrity="sha512-Np+ry4Dro5siJ1HZ0hTwn2jsmu/hMNrYw1EIK9EjsEVbDge4AaQhjeTGRg2ispHg7ZgDMVrSDjNrzH/kAO9Law=="
+  crossorigin=""></script>
+
+<style>
+  #basemaps-wrapper {
+    position: absolute;
+    bottom: 20px;
+    left: 10px;
+    z-index: 400;
+    background: white;
+    padding: 5px;
+  }
+  #basemaps {
+    margin-bottom: 5px;
+  }
+</style>
+
+<div id="basemaps-wrapper" class="leaflet-bar">
+    <select id="basemaps">
+      <option value="Topographic">ESRI Topographic</option>
+      <option value="Streets">ESRI Streets</option>
+      <option value="NationalGeographic">National Geographic</option>
+      <option value="Oceans">ESRI Oceans</option>
+      <option value="Gray">ESRI Gray</option>
+      <option value="DarkGray">ESRI Dark Gray</option>
+      <option value="Imagery">ESRI Imagery</option>
+      <option value="ImageryClarity">ESRI Imagery (Clarity)</option>
+      <option value="ImageryFirefly">ESRI Imagery (Firefly)</option>
+      <option value="ShadedRelief">ESRI Shaded Relief</option>
+      <option value="Physical">ESRI Physical</option>
+      <option value="Terrain">Stamen Terrain</option>
+      <option value="Geoportail">Geoportail France Imagery</option>
+      <option value="Landsat">NASA/USGS Landsat 8</option>
+      <option value="Modis">NASA MODIS Terra</option>
+
+
+    </select>
+  </div>
+
+<script>
+
+  var mymap = L.map('mapid').setView([midpointLat, midpointLon], zoomlvl);
+
+
+    var layer = L.esri.basemapLayer('Topographic').addTo(mymap);
+    var layerLabels;
+
+  function setBasemap (basemap) {
+    if (layer) {
+      mymap.removeLayer(layer);
+    }
+    
+    if ( basemap === 'Terrain'){
+    layer = L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.{ext}', {
+	attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+	subdomains: 'abcd',
+	minZoom: 0,
+	maxZoom: 18,
+	ext: 'png'
+    })
+    } else if ( basemap === 'Modis') {
+    layer = L.tileLayer('https://map1.vis.earthdata.nasa.gov/wmts-webmerc/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/{tilematrixset}{maxZoom}/{z}/{y}/{x}.{format}', {
+	attribution: 'Imagery provided by services from the Global Imagery Browse Services (GIBS), operated by the NASA/GSFC/Earth Science Data and Information System (<a href="https://earthdata.nasa.gov">ESDIS</a>) with funding provided by NASA/HQ.',
+	bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]],
+	minZoom: 1,
+	maxZoom: 9,
+	format: 'jpg',
+	time: '2018-10-30',
+	tilematrixset: 'GoogleMapsCompatible_Level'
+    })
+
+    } else if ( basemap === 'Geoportail') {
+    layer = L.tileLayer('https://wxs.ign.fr/{apikey}/geoportail/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0&STYLE={style}&TILEMATRIXSET=PM&FORMAT={format}&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', {
+	attribution: '<a target="_blank" href="https://www.geoportail.gouv.fr/">Geoportail France</a>',
+	bounds: [[-75, -180], [81, 180]],
+	minZoom: 2,
+	maxZoom: 19,
+	apikey: 'choisirgeoportail',
+	format: 'image/jpeg',
+	style: 'normal'
+    })
+
+    } else if ( basemap === 'Landsat') {
+    layer = L.esri.imageMapLayer({
+      url: 'https://landsat.arcgis.com/arcgis/rest/services/Landsat/PS/ImageServer',
+    //   url: 'https://landsat.arcgis.com/arcgis/rest/services/Landsat/MS/ImageServer',
+    //   url: 'https://landsat.arcgis.com/arcgis/rest/services/Landsat8_Views/ImageServer',
+      attribution: 'United States Geological Survey (USGS), National Aeronautics and Space Administration (NASA)',
+    // bandIds: b,g,r
+    //   bandIds: '4,3,2', //Natural Color 
+    //   bandIds: '7,6,2', //Geoloy
+    //   bandIds: '4,3,1', //Bathymetric 
+    //   bandIds: '5,4,3', //Color Infrared 
+
+      from: new Date('2018/9/1'),
+      to: new Date('2018/11/1')
+    })
+
+    } else {
+    layer = L.esri.basemapLayer(basemap);
+    }
+    mymap.addLayer(layer);
+
+    if (layerLabels) {
+      mymap.removeLayer(layerLabels);
+    }
+
+    if (
+      basemap === 'ShadedRelief' ||
+      basemap === 'Oceans' ||
+      basemap === 'Gray' ||
+      basemap === 'DarkGray' ||
+      basemap === 'Terrain'
+    ) {
+      layerLabels = L.esri.basemapLayer(basemap + 'Labels');
+      mymap.addLayer(layerLabels);
+    } else if (basemap.includes('Imagery')) {
+      layerLabels = L.esri.basemapLayer('ImageryLabels');
+      mymap.addLayer(layerLabels);
+    } else if (
+      basemap === 'Terrain' 
+    ){
+      layerLabels = L.esri.basemapLayer(basemap + 'Labels');
+      mymap.addLayer(layerLabels);
+    }
+  }
+
+  document
+    .querySelector('#basemaps')
+    .addEventListener('change', function (e) {
+      var basemap = e.target.value;
+      setBasemap(basemap);
+    });
+
+//xINCLUDE BASELINE
+
+//INCLUDE GUIDELINE
+
+	var popup = L.popup();
+
+	function onMapClick(e) {
+		popup
+			.setLatLng(e.latlng)
+			.setContent("You clicked the map at " + e.latlng.toString())
+			.openOn(mymap);
+	}
+
+	mymap.on('click', onMapClick); 
+
+</script>
+	
+</body>

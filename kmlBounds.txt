@@ -1,0 +1,38 @@
+# KML BOUNDS FILE FOR ICESAT-2 ATL03/ATL08 ANALYSIS
+#
+# HEADER FILE PATH, Z:/data/validation/analysis/HeaderOutput/
+# TRUTH FILE PATH,  Z:/data/validation/data/
+#
+# KML FILE NAME					LON MIN (DEG)	LON MAX (DEG)	LAT MIN (DEG)	LAT MAX (DEG)	HEADER FILE PATH							TRUTH FILES PATH
+AustinTx,						-97.844571,		-97.689181,		30.212641,		30.406014,		AustinTx_HeaderData.mat,					AustinTx/LAZ_UTM
+CalhounCritZoneNcSc_leafoff,	-81.768867,		-81.621599,		34.559816,		34.672744,		CalhounCritZoneNcSc_LeafOff_HeaderData.mat,	CalhounCritZoneNcSc/LeafOff_UTM
+CalhounCritZoneNcSc_leafon,		-81.785899,		-81.643344,		34.537184,		34.673257,		CalhounCritZoneNcSc_LeafOn_HeaderData.mat,	CalhounCritZoneNcSc/LeafOn_UTM
+DryValleys_north,				160.476212,		163.030577,		-77.589778,		-77.211905,		DryValleys_North_57S_HeaderData.mat,		DryValleys/north_57S
+DryVallyes_taylor,				160.948091,		163.866213,		-77.855867,		-77.484818,		DryValleys_Taylor_HeaderData.mat,			DryValleys/taylor_latlon
+Finland,						21.1043575,		31.48667987,	60.04393153,	66.7472715,		Finland_HeaderData.mat,						Finland/LAZ_UTM
+GeoCoalBedMt,					-107.119121,	-106.973124,	47.474953,		47.53811,		GeoCoalBedMt_HeaderData.mat,				GeoCoalBedMt/LAZ_UTM
+LaytonvilleCa,					-123.62878,		-123.407376,	39.545998,		39.595219,		LaytonvilleCa_HeaderData.mat,				LaytonvilleCa/LAZ_UTM
+RangioraNz,						172.152748,		172.748843,		-43.450151,		-43.193716,		RangioraNz_HeaderData.mat,					RangioraNz/LAZ_UTM
+SantaMariaAz,					-113.532051,	-113.329216,	34.279668,		34.324427,		SantaMariaAz_HeaderData.mat,				SantaMariaAz/LAZ_UTM
+Sonoma,							-123.537898,	-122.345848,	38.107684,		38.942991,		Sonoma_HeaderData.mat,						Sonoma/LAZ_UTM
+TahoeCa,						-120.671491,	-120.562162,	38.934143,		38.951164,		TahoeCa_HeaderData.mat,						TahoeCa/LAZ_UTM
+TrinityRiverTx,					-94.881097,		-94.715161,		29.854685,		30.287299,		TrinityRiverTx_HeaderData.mat,				TrinityRiverTx/LAZ_UTM
+WellingtonNz,					174.1786667,	178.6361111,	-41.94777778,	-37.06066672,	WellingtonNz_HeaderData.mat,				WellingtonNz/LAZ_UTM
+WheelerRidgeCa,					-119.082515,	-118.906398,	34.977503,		35.043565,		WheelerRidgeCa_HeaderData.mat,				WheelerRidgeCa/LAZ_UTM
+WoodlandNv,						-117.685925,	-117.558042,	39.427699,		39.513857,		WoodlandNv_HeaderData.mat,					WoodlandNv/LAZ_UTM
+WSMR_ir_extents_east,			-106.4459401,	-106.3361953,	32.8628036,		33.05336581,	WSMR_HeaderData.mat,						WSMR/ir
+StThomas,						-65.03768859,	-64.91666726,	18.26655903,	18.35224888,	StThomas_HeaderData.mat,					Bathy_StThomas
+Indiana,						-88.115509,		-84.763981,		37.756954,		41.781294,		Indiana_HeaderData.mat,						Indiana/LAZ_IN_East_Converted
+Florida,						-82.86461508,	-82.82713738,	28.19987105,	28.25352155,	Florida_HeaderData.mat,						Florida_bathy
+Arctic DEM Zone 1,				-179.1843444,	-173.9135935,	51.20049474,	52.51948424,	ArcticDEM_zone_1_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_1
+Arctic DEM Zone 2,				-174.1922168,	-167.2799674,	51.9598009,		63.83557696,	ArcticDEM_zone_2_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_2
+Arctic DEM Zone 3,				-169.1164219,	-160.2995152,	53.26055855,	70.25248053,	ArcticDEM_zone_3_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_3
+Arctic DEM Zone 4,				-163.4786659,	-154.1111586,	54.67721407,	71.43022396,	ArcticDEM_zone_4_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_4
+Arctic DEM Zone 5,				-157.0975868,	-148.8897439,	56.32771131,	71.22313463,	ArcticDEM_zone_5_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_5
+Arctic DEM Zone 6,				-151.3522336,	-142.664491,	59.37158264,	70.71545195,	ArcticDEM_zone_6_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_6
+Arctic DEM Zone 7,				-145.1334555,	-138.2983305,	59.009671,		70.21151359,	ArcticDEM_zone_7_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_7
+Arctic DEM Zone 8,				-138.3801234,	-131.8260155,	54.22277267,	60.20000163,	ArcticDEM_zone_8_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_8
+Arctic DEM Zone 9,				-132.0646413,	-129.8098332,	54.11516436,	57.2247962,		ArcticDEM_zone_9_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_9
+Arctic DEM Zone 43,				70.71032432,	78.08425707,	63.18908564,	69.15423994,	ArcticDEM_zone_43_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_43
+Arctic DEM Zone 60,				178.9300769,	180.9699791,	51.33201644,	51.97378759,	ArcticDEM_zone_60_HeaderData.mat,			ArcticDEM_v3.0/las_utm/zone_60
+Oregon,							-124.1511,		-116.8917,		42.7657,		46.2396,		Oregon_HeaderData.mat,						Oregon/Oregon_UTM
