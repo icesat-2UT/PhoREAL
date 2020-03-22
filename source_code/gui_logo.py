@@ -13,10 +13,10 @@ Authors:
     Eric Guenther
     
 Date: September 20, 2019
-
 """
+
 # Import modules
 import os
 
 root = os.path.dirname(__file__)
-images = os.path.normpath(os.path.join(root,'pho_image.ico'))
+images = os.path.join(root,'pho_image.ico')

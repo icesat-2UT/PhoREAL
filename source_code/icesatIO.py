@@ -13,7 +13,6 @@ Authors:
     Eric Guenther
     
 Date: September 20, 2019
-
 """
 
 # Import modules
@@ -27,6 +26,10 @@ import laspy
 from laspy.file import File
 from scipy.io import loadmat
 import simplekml
+from osgeo import gdal,osr,ogr
+import socket
+from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
+
 
 
 # Object for readKmlBounds function
@@ -164,7 +167,7 @@ def readHeaderMatFile(headerFilePath):
         # Get UTM zone and hemisphere
         zone = str(matData['headerData'][0][0][7][0][0])
         hemi = matData['headerData'][0][0][8][0][0]
-        ellipsoid = matData['headerData'][0][0][9][0][0]
+        ellipsoid = matData['headerData'][0][0][9][0][0:]
         
     else:
         
@@ -190,21 +193,24 @@ def readHeaderMatFile(headerFilePath):
 def readAtl03H5(in_file03, fieldName, label):
 	
 	# fieldName Options:
-	# lat_ph
-	# lon_ph
-	# h_ph
-	# delta_time
-	# crossing_time
-	# signal_conf_ph
+	# /heights/lat_ph
+	# /heights/lon_ph
+	# /heights/h_ph
+	# /heights/delta_time
+	# /heights/crossing_time
+	# /heights/signal_conf_ph
 
+    # Initialize output
+    dataOut = []
+    
     if not os.path.isfile(in_file03):
       print('ATL03 file does not exist')
     try:
       with h5py.File(in_file03, 'r') as f:
-          dsname=''.join([label,'/heights/', fieldName])
+          dsname=''.join([label, fieldName])
           if dsname in f:
               dataOut = np.array(f[dsname])
-              if(fieldName == 'signal_conf_ph'):
+              if('signal_conf_ph' in fieldName.lower()):
                   dataOut = dataOut[:,0]
           else:
               dataOut = []
@@ -223,8 +229,11 @@ def readAtl08H5(in_file08, fieldName, label):
 	# /land_segments/terrain/h_te_best_fit
 	# /land_segments/terrain/h_te_median
 
+    # Initialize output
+    dataOut = []
+
     if not os.path.isfile(in_file08):
-      print('ATL03 file does not exist')
+      print('ATL08 file does not exist')
     try:
       with h5py.File(in_file08, 'r') as f:
           dsname=''.join([label, fieldName])
@@ -236,6 +245,22 @@ def readAtl08H5(in_file08, fieldName, label):
         print('Python message: %s\n' % e)
     return dataOut
 
+def readAtlH5(in_file, fieldName):
+    # Initialize output
+    dataOut = []
+    
+    if not os.path.isfile(in_file):
+      print('ATL08 file does not exist')
+    try:
+      with h5py.File(in_file, 'r') as f:
+          dsname=''.join([fieldName])
+          if dsname in f:
+              dataOut = np.array(f[dsname])
+          else:
+              dataOut = []
+    except Exception as e:
+        print('Python message: %s\n' % e)
+    return dataOut
 
 ##### Function to read ATL03 .h5 files for mapping
 def readAtl03DataMapping(in_file03, label):
@@ -251,6 +276,7 @@ def readAtl03DataMapping(in_file03, label):
     f = h5py.File(in_file03, 'r')
   except Exception as e:
     print('Python message: %s\n' % e)
+    return [], []
 # endif
 #
 # segment_ph_cnt
@@ -302,6 +328,7 @@ def readAtl08DataMapping(in_file08, label):
     f = h5py.File(in_file08, 'r')
   except Exception as e:
     print('Python message: %s\n' % e)
+    return [], [], []
 # endif
 #
 # classed_pc_indx
@@ -389,23 +416,23 @@ def selectwkt(proj,hemi=None,zone=None):
         if zone:
             zone = str(zone)
             if hemi.lower() == "n":
-                if zone == "1":
+                if zone == "1" or zone == "01":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 1N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32601"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "2":
+                elif zone == "2" or zone == "02":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 2N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-171],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32602"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "3":
+                elif zone == "3" or zone == "03":
                     wkt == b'''ROJCS["WGS 84 / UTM zone 3N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-165],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32603"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "4":
+                elif zone == "4" or zone == "04":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 4N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-159],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32604"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "5":
+                elif zone == "5" or zone == "05":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 5N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-153],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32605"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "6":
+                elif zone == "6" or zone == "06":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 6N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-147],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32606"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "7":
+                elif zone == "7" or zone == "07":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 7N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-141],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32607"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "8":
+                elif zone == "8" or zone == "08":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 8N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-135],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32608"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "9":
+                elif zone == "9" or zone == "09":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 9N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-129],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32609"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
                 elif zone == "10": 
                     wkt = b'''PROJCS["WGS 84 / UTM zone 10N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-123],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32610"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''                        
@@ -510,23 +537,23 @@ def selectwkt(proj,hemi=None,zone=None):
                 elif zone == "60":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 60N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32660"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
             elif hemi.lower() == "s":
-                if zone == "1":
+                if zone == "1" or zone == "01":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 1S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32701"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "2":
+                elif zone == "2" or zone == "02":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 2S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-171],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32702"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "3":
+                elif zone == "3" or zone == "03":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 3S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-165],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32703"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "4":
+                elif zone == "4" or zone == "04":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 4S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-159],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32704"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "5":
+                elif zone == "5" or zone == "05":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 5S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-153],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32705"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "6":
+                elif zone == "6" or zone == "06":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 6S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-147],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32706"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "7":
+                elif zone == "7" or zone == "07":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 7S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-141],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32707"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "8":
+                elif zone == "8" or zone == "08":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 8S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-135],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32708"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-                elif zone == "9":
+                elif zone == "9" or zone == "09":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 9S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-129],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32709"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
                 elif zone == "10":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 10S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-123],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32710"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
@@ -630,7 +657,10 @@ def selectwkt(proj,hemi=None,zone=None):
                     wkt = b'''PROJCS["WGS 84 / UTM zone 59S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",171],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32759"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
                 elif zone == "60":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 60S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],AUTHORITY["EPSG","32760"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
-
+    elif proj.lower() == "arctic" or proj.lower() == "north polar":
+        wkt = b'''PROJCS["NSIDC Sea Ice Polar Stereographic North",GEOGCS["Unspecified datum based upon the Hughes 1980 ellipsoid",DATUM["Not_specified_based_on_Hughes_1980_ellipsoid",SPHEROID["Hughes 1980",6378273,298.279411123064,AUTHORITY["EPSG","7058"]],AUTHORITY["EPSG","6054"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4054"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Polar_Stereographic"],PARAMETER["latitude_of_origin",70],PARAMETER["central_meridian",-45],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],AUTHORITY["EPSG","3411"],AXIS["X",UNKNOWN],AXIS["Y",UNKNOWN]]'''
+    elif proj.lower() == "antarctic" or proj.lower() == "south polar": 
+        wkt = b'''PROJCS["NSIDC Sea Ice Polar Stereographic South",GEOGCS["Unspecified datum based upon the Hughes 1980 ellipsoid",DATUM["Not_specified_based_on_Hughes_1980_ellipsoid",SPHEROID["Hughes 1980",6378273,298.279411123064,AUTHORITY["EPSG","7058"]],AUTHORITY["EPSG","6054"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4054"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Polar_Stereographic"],PARAMETER["latitude_of_origin",-70],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],AUTHORITY["EPSG","3412"],AXIS["X",UNKNOWN],AXIS["Y",UNKNOWN]]'''
     elif proj.lower() == "wgs84":
         wkt = b'''GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]''' 
     else:
@@ -638,7 +668,7 @@ def selectwkt(proj,hemi=None,zone=None):
     return wkt
 
 
-def writeLas(xx,yy,zz,proj,output_file,classification,intensity,hemi=None,zone=None):
+def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,hemi=None,zone=None):
     wkt = selectwkt(proj,hemi,zone)
     
     #Create new VLR
@@ -650,7 +680,7 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,hemi=None,zone=N
     inVLRs.append(new_vlr)
 
     #Create new Header
-    hdr = laspy.header.Header()
+    hdr = laspy.header.Header(file_versoin=1.4 )
     hdr.file_sig = 'LASF'
     
     #Create new las file with Header and VLR  
@@ -697,6 +727,8 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,hemi=None,zone=N
         outfile.raw_classification = classification
     if intensity is not None:
         outfile.intensity = intensity
+    if signalConf is not None:
+        outfile.scan_angle_rank = signalConf
     
     #Close las
     outfile.close()
@@ -742,7 +774,7 @@ def writeKml(lat, lon, time, kmlName):
     kml.save(kmlName)
 
 
-def writeArrayToCSV(csv_out,namelist,datalist):
+def writeArrayToCSV(csv_out,namelist,datalist,header=True):
     if datalist:
         in_data = datalist[0]
         if len(datalist) > 0:
@@ -750,11 +782,13 @@ def writeArrayToCSV(csv_out,namelist,datalist):
                in_data = np.column_stack((in_data,data))
     with open(csv_out, 'w', newline = '') as csvFile:
         writer = csv.writer(csvFile)
-        writer.writerow(namelist)
+        if(header):
+            writer.writerow(namelist)
+        # endIf
         writer.writerows(in_data)
+    
     csvFile.close
-    
-    
+
 def writeATL08toCSV(in_file08,groundtrack,csv_out):
     delta_time = readAtl08H5(in_file08, '/land_segments/delta_time', 
                                  groundtrack)
@@ -776,55 +810,113 @@ def writeATL08toCSV(in_file08,groundtrack,csv_out):
     
     
 def writeATL03toCSV(in_file03,groundtrack,csv_out):
-    delta_time = readAtl03H5(in_file03, 'delta_time', groundtrack)
-    lat = readAtl03H5(in_file03, 'lat_ph', groundtrack)
-    lon = readAtl03H5(in_file03, 'lon_ph', groundtrack)
-    h_ph = readAtl03H5(in_file03, 'h_ph', groundtrack)
-    signal_conf_ph = readAtl03H5(in_file03, 'signal_conf_ph', groundtrack)
+    delta_time = readAtl03H5(in_file03, '/heights/delta_time', groundtrack)
+    lat = readAtl03H5(in_file03, '/heights/lat_ph', groundtrack)
+    lon = readAtl03H5(in_file03, '/heights/lon_ph', groundtrack)
+    h_ph = readAtl03H5(in_file03, '/heights/h_ph', groundtrack)
+    signal_conf_ph = readAtl03H5(in_file03, '/heights/signal_conf_ph', groundtrack)
     namelist = ['Delta Time','Latitude','Longitude','Height',
                 'Signal Confidence']
     datalist = [delta_time,lat,lon,h_ph,signal_conf_ph]
     writeArrayToCSV(csv_out,namelist,datalist)
     
-    
-    
-def createHTMLChart(ytrack, h_ph, classification, 
-                    classification_list = [1,2,3],output_folder = "",
-                    in_file03_name = "ATL03", blank = "Viewer_blank.html"):
 
-    total_photons = 20000
+def isconnected():
+    try:
+        host = socket.gethostbyname("https://www.nasa.gov/")
+        s = socket.create_connection((host, 80), 2)
+        s.close()
+        print("Internet Connection Established")
+        return True
+    except:
+        print("No Internet Connection Established")
+        return False
+ 
     
-    classification_list = [1,2,3]
-    num_returns = 0
-    classification_to_list = classification.tolist()
-    for class_num in classification_list:
-        num_returns = num_returns + classification_to_list.count(class_num)
+def createHTMLChart(ytrack, h_ph, classification, lat, lon, 
+                    direction = 'Descending',
+                    online = None,
+                    classification_list = [1,2,3],
+                    output_folder = "",in_file03_name = "ATL03", 
+                    blank = viewerBlank_html, 
+                    blanki = viewerBlankOnline_html):
     
-    file_returns = int(np.ceil(num_returns/total_photons))
+    if len(ytrack.shape) == 2:
+        ytrack = ytrack[:,0]
     
-    start = 0
-    for i in range(0,file_returns):
-        end = min([(start + total_photons),num_returns])
-        viewer_output = ("Viewer_" + in_file03_name + "_" + str(start) + "_to_" 
-                         + str(end) + ".html")
-        #Copy the Blank Template into 
-        with open(blank) as f:
-            lines = f.readlines()
-            lines = [l for l in lines]
-            with open(viewer_output, "w") as f1:
-                f1.writelines(lines)
-    
-    
-        #Read file and load it to memory
-        with open(viewer_output, "r") as in_file:
-            buf = in_file.readlines()
+    if len(h_ph.shape) == 2:
+        h_ph = h_ph[:,0]
+
+    if len(classification.shape) == 2:
+        classification = classification[:,0]
         
-        #Write data into the HTML file
-        with open(viewer_output, "w") as out_file:
-            for line in buf:
-                if line == "var data = [\n":
-                    j = i * total_photons
-                    while j < end:
+    if len(lat.shape) == 2:
+        lat = lat[:,0]
+    
+    if len(lon.shape) == 2:
+        lon = lon[:,0]
+    
+    if online == None:
+        online = isconnected()
+        
+    if online == True:
+        viewer_output = ("Viewer_Online" + in_file03_name + ".html")
+        blank = blanki
+    else:
+        viewer_output = ("Viewer_" + in_file03_name + ".html")
+
+    #Copy the Blank Template into 
+    with open(blank) as f:
+        lines = f.readlines()
+        lines = [l for l in lines]
+        with open(viewer_output, "w") as f1:
+            f1.writelines(lines)
+
+    
+    #Read file and load it to memory
+    with open(viewer_output, "r") as in_file:
+        buffer = in_file.readlines()
+
+    #Write data into the HTML file
+    with open(viewer_output, "w") as out_file:
+        for line in buffer:
+            if line == "var data = [\n":
+                for j in range(0,len(classification)):
+                    if online == True:
+                        if ((classification[j] == 0) &
+                            (0 in classification_list)):
+                            line = line + ("{ytrack: " 
+                                             + str(ytrack[j]) + ", zheight: " 
+                                             + str(h_ph[j]) +
+                                             ", color: '#C2C5CC', lat: " 
+                                             + str(lat[j]) + ", lon: " 
+                                             + str(lon[j]) + "}, \n") 
+                        elif ((classification[j] == 1) &
+                              (1 in classification_list)):
+                            line = line + ("{ytrack: "
+                                             + str(ytrack[j]) + ", zheight: "
+                                             + str(h_ph[j]) +
+                                             ", color: '#D2B826', lat: " 
+                                             + str(lat[j]) + ", lon: " 
+                                             + str(lon[j]) + "}, \n") 
+                        elif ((classification[j] == 2) &
+                              (2 in classification_list)):
+                            line = line + ("{ytrack: " 
+                                             + str(ytrack[j])  
+                                             + ", zheight: " + str(h_ph[j]) 
+                                             + ", color: '#45811A', lat: " 
+                                             + str(lat[j]) + ", lon: " 
+                                             + str(lon[j]) + "}, \n") 
+                        elif ((classification[j] == 3) & 
+                              (3 in classification_list)):
+                            line = line + ("{ytrack: " 
+                                             + str(ytrack[j]) + ", zheight: " 
+                                             + str(h_ph[j]) 
+                                             + ", color: '#85F334', lat: " 
+                                             + str(lat[j]) + ", lon: " 
+                                             + str(lon[j]) + "}, \n") 
+                            j += 1
+                    else:
                         if ((classification[j] == 0) &
                             (0 in classification_list)):
                             line = line + ("{ytrack: " 
@@ -833,8 +925,8 @@ def createHTMLChart(ytrack, h_ph, classification,
                                              ", color: '#C2C5CC' }, \n") 
                         elif ((classification[j] == 1) &
                               (1 in classification_list)):
-                            line = line + ("{ytrack: "
-                                             + str(ytrack[j]) + ", zheight: "
+                            line = line + ("{ytrack: " 
+                                             + str(ytrack[j]) + ", zheight: " 
                                              + str(h_ph[j]) +
                                              ", color: '#D2B826' }, \n")
                         elif ((classification[j] == 2) &
@@ -849,6 +941,291 @@ def createHTMLChart(ytrack, h_ph, classification,
                                              + str(ytrack[j]) + ", zheight: " 
                                              + str(h_ph[j]) 
                                              + ", color: '#85F334' }, \n")
-                        j += 1
-                out_file.write(line)
-        start = start + total_photons
+                            j += 1
+            if line == "//INCLUDE BASELINE\n":
+                if direction == 'Ascending':
+                    line = line + "baseline = L.polyline([[lat1, lon0],\n" + \
+                    "[lat0,  lon1]],{opacity:0.5, color:'gray'})" + \
+                    ".addTo(mymap).bindPopup('Icesat-2 Track' );\n"
+                else:
+                    line = line + "baseline = L.polyline([[lat1, lon1],\n" + \
+                    "[lat0,  lon0]],{opacity:0.5, color:'gray'})" + \
+                    ".addTo(mymap).bindPopup('Icesat-2 Track' );\n"     
+                    
+            if line == "//INCLUDE GUIDELINE\n":
+                if direction == 'Ascending':
+                    line = line + "guideline = L.polyline([[lat1, lon0],\n" + \
+                    "[lat0,  lon1]],{opacity:1, color:'red'})" + \
+                    ".addTo(mymap).bindPopup('Icesat-2 Track' );\n"
+                else:
+                    line = line + "guideline = L.polyline([[lat1, lon1],\n" + \
+                    "[lat0,  lon0]],{opacity:1, color:'red'})" + \
+                    ".addTo(mymap).bindPopup('Icesat-2 Track' );\n"                     
+                    
+                
+                
+            out_file.write(line)
+                 
+            
+def getDEMArrays(file):
+    # Open DEM
+    ds = gdal.Open(file)
+    
+    # Read DEM as NP Array
+    data = np.array(ds.GetRasterBand(1).ReadAsArray())
+    
+    # Get Geotransform Information
+    gt = ds.GetGeoTransform()
+    
+    #Generate X Array
+    row = np.arange(data.shape[1])
+    for pos in range(0,data.shape[1]):
+        row[pos] = gt[0] + (gt[1] * row[pos])
+    xarr = np.array([row,]*data.shape[0])
+    
+    #Generate Y Array
+    column = np.arange(data.shape[0])  
+    for pos in range(0,data.shape[0]):
+        column[pos] = gt[3] + (gt[5] * column[pos])  
+    yarr = np.array([column,]*data.shape[1]).transpose()
+    
+    # Return Data (zarray), xarray, and zarray
+    return data, xarr, yarr
+
+def readDEMepsg(file):
+    ds = gdal.Open(file)
+    proj = osr.SpatialReference(wkt=ds.GetProjection())
+    epsg = proj.GetAttrValue('AUTHORITY',1)
+    return epsg
+
+def formatDEM(file, epsg_backup = 0):
+    data, xarr, yarr = getDEMArrays(file)
+    
+    epsg = readDEMepsg(file)
+    
+    if epsg == None:
+        if epsg_backup == 0:
+            print('Missing Projection Information')
+        else:
+            epsg = epsg_backup
+            
+    
+    data = data.flatten()
+    xarr = xarr.flatten()
+    yarr = yarr.flatten()
+    
+    xarr = xarr[data > -999]
+    yarr = yarr[data > -999]
+    zarr = data[data > -999]
+    intensity = np.ones(len(zarr))
+    classification = np.ones(len(zarr)) * 2
+    
+    return xarr, yarr, zarr, intensity, classification, epsg
+
+def write_geotiff(data, epsg, x_min, y_max, pixel_size, outputfile, 
+                    nodata = None):
+
+    x_pixels = data.shape[1]
+    y_pixels = data.shape[0]
+    
+    driver = gdal.GetDriverByName('GTiff')
+
+    dataset = driver.Create(
+        outputfile,
+        x_pixels,
+        y_pixels,
+        1,
+        gdal.GDT_Float32, )
+
+    dataset.SetGeoTransform((
+        x_min,    
+        pixel_size,  
+        0,                      
+        y_max,    
+        0,                      
+        -pixel_size))  
+
+    srs = ogr.osr.SpatialReference()
+    srs.ImportFromEPSG(epsg)
+    
+    dataset.SetProjection(srs.ExportToWkt())
+    dataset.GetRasterBand(1).WriteArray(data)
+    if nodata:
+        dataset.GetRasterBand(1).SetNoDataValue(nodata)
+    dataset.FlushCache()
+    
+def calculateangle(x1,x2,y1,y2):
+    if (x2 - x1) == 0:
+        slope = np.inf
+    else:
+        slope = (y2 - y1)/(x2 - x1)
+    degree = np.rad2deg(np.arctan(slope))
+    return degree
+
+def calculategrounddirection(xx,yy):
+    degree = np.zeros(len(xx))
+    for i in range(0,len(xx)):
+        if i == 0:
+            degree[i] = calculateangle(xx[i], xx[i+1], yy[i], yy[i+1])
+        elif i == (len(xx))-1:
+            degree[i]  = calculateangle(xx[i-1], xx[i], yy[i-1], yy[i])
+        else:
+            degree[i]  = calculateangle(xx[i-1], xx[i+1], yy[i-1], yy[i+1])
+    return degree
+        
+def rotatepoint(degree,xpos,ypos):
+    angle = np.deg2rad(degree)
+    xrot = (xpos * np.cos(angle)) - (ypos * np.sin(angle)) 
+    yrot = (xpos * np.sin(angle)) + (ypos * np.cos(angle))
+    return xrot, yrot
+
+def calculatecorners(degree,xcenter,ycenter,width,height):
+    # Set corner values
+    xul = -width / 2
+    yul = height / 2
+    xur = width / 2
+    yur = height / 2
+    xll = -width / 2
+    yll = -height / 2
+    xlr = width / 2
+    ylr = -height / 2
+    
+    # Rotate based on the angle degree
+    xul, yul = rotatepoint((degree-90),xul,yul)
+    xur, yur = rotatepoint((degree-90),xur,yur)
+    xll, yll = rotatepoint((degree-90),xll,yll)
+    xlr, ylr = rotatepoint((degree-90),xlr,ylr)
+    
+    # Add corner values to centeroid
+    xul = xcenter + xul
+    yul = ycenter + yul
+    xur = xcenter + xur
+    yur = ycenter + yur
+    xll = xcenter + xll
+    yll = ycenter + yll
+    xlr = xcenter + xlr
+    ylr = ycenter + ylr
+    
+    return xul, yul, xur, yur, xll, yll, xlr, ylr
+
+def createShapefiles(xx, yy, width, height, epsg, outfile = "atl08.shp"):
+    # Generate list of degrees
+    degreelist = calculategrounddirection(xx,yy)
+    
+    # Define Esri Shapefile output
+    driver = ogr.GetDriverByName('Esri Shapefile')
+    
+    # Name output shape file (foo.shp)
+    ds = driver.CreateDataSource(outfile)
+    
+    # Define spatial reference based on EPSG code 
+    # https://spatialreference.org/ref/epsg/
+    srs = ogr.osr.SpatialReference()
+    srs.ImportFromEPSG(epsg)
+    
+    # Create file with srs
+    layer = ds.CreateLayer('', srs, ogr.wkbPolygon)
+    
+    # Create arbitary id field
+    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+    defn = layer.GetLayerDefn()
+    
+    # Create a new feature (attribute and geometry)
+    for i in range(0,len(xx)):
+        # Generate the corner points
+        xul, yul, xur, yur, xll, yll, xlr, ylr  = \
+        calculatecorners(degreelist[i],xx[i],yy[i],width,height)     
+        
+        # Create rectangle corners
+        ring = ogr.Geometry(ogr.wkbLinearRing)
+        ring.AddPoint(xul, yul)
+        ring.AddPoint(xur, yur)
+        ring.AddPoint(xlr, ylr)
+        ring.AddPoint(xll, yll)
+        ring.AddPoint(xul, yul)
+        
+        # Create polygon from corners
+        poly = ogr.Geometry(ogr.wkbPolygon)
+        poly.AddGeometry(ring)
+        
+        # Export well-known binary
+        wkb = poly.ExportToWkb()
+        
+        # Assign arbitary number to field ID
+        feat = ogr.Feature(defn)
+        feat.SetField('id', i)
+                
+        # Make a geometry, from Shapely object
+        geom = ogr.CreateGeometryFromWkb(wkb)
+        feat.SetGeometry(geom)
+        
+        # Write out geometry
+        layer.CreateFeature(feat)
+        
+        # Remove ring and poly
+        ring = poly = None
+    
+    # Remove feat and geom
+    feat = geom = None
+    
+    # Save and close everything
+    ds = layer = feat = geom = None    
+    
+def read_geotiff(file):
+    # Open DEM
+    ds = gdal.Open(file)
+    
+    # Read DEM as NP Array
+    data = np.array(ds.GetRasterBand(1).ReadAsArray())
+    
+    # Get Geotransform Information
+    gt = ds.GetGeoTransform()
+    
+    # Get upper-left coordinates and pixel resolution
+    ulx = gt[0]
+    resx = gt[1]
+    uly = gt[3]
+    resy = gt[5]
+    
+    # Check GT[2] and GT[4] are 0, if not, throw warning
+    if gt[2] != 0 or gt[4] != 0:
+        print('WARNING: CASE NOT ACCOUNTED')
+    
+    # Check if resolution for X and Y are the same
+    if np.abs(resx) != np.abs(resy):
+        print('WARNING: Unequal X-Y Pixel Size')
+    
+    # Get EPSG Code
+    proj = osr.SpatialReference(wkt=ds.GetProjection())
+    epsg = proj.GetAttrValue('Authority',1)
+    
+    # Return Data (zarray), xarray, and zarray
+    return data, epsg, ulx, uly, resx, resy
+
+
+def find_intersecting_values(x,y,data,ulx,uly,resx,resy):
+    # Calcualte opposite extents
+    if not isinstance(x,np.ndarray):
+        x = np.array([x])
+        y = np.array([y])
+    lly = uly + (resy * data.shape[0])
+    urx = ulx + (resx * data.shape[1])
+    # Create out of range (oar) filter
+    oar = np.where((x > urx) | (x < ulx) | (y > uly) | (y < lly))    
+    # Calcualte alpha-beta coordiantes
+    alpha = np.floor((y/resy) - (uly/resy))
+    beta = np.floor((x/resx) - (ulx/resx))
+    # If there are out of bound coordinates, assign them to 0 for now    
+    if oar[0].size > 0:    
+        alpha[oar] = 0
+        beta[oar] = 0    
+    # Create results with alpha-beta coordinates of data
+    result = np.array(
+        [data[int(alpha[i]),int(beta[i])] for i in range(0,len(alpha))])
+    # If there are out of range values, assign nan
+    if oar[0].size > 0:    
+        result[oar] = np.nan
+    return result
+
+if __name__ == "__main__":
+    print("Test")
