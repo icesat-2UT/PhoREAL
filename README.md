@@ -3,7 +3,7 @@
 
 Data products from IceSAT-2 require some familiarity working with large datafiles and Hdf5 files.  PhoREAL is a library of tools and source code to help scientist and researchers more easily use Icesat-2 ATL03 and ATL08 data products.
 
-<h3>PhoREAL v1.0</h3>
+<h3>PhoREAL v3.0</h3>
 
 * PhoREAL is a geospatial analysis toolbox that allows users to read in IceSat-2 ATL03 .h5 data files, process the data, and output the data into several different file formats for further analysis including .las, .csv, and .kml.
 
@@ -17,12 +17,12 @@ the Linux command line
 
 
 <h3>Download PhoREALGUI.exe (for Windows)</h3>
-Update (December, 5, 2019): PhoREAL v2.0 released
+Update (March 22, 2020): PhoREAL v3.0 released
 https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot.png)
 
-<h4>Copyright 2019 Applied Research Laboratories, University of Texas at Austin
+<h4>Copyright 2020 Applied Research Laboratories, University of Texas at Austin
 
 This package is free software; the copyright holder gives unlimited
 permission to copy and/or distribute, with or without modification, as
