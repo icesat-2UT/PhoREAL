@@ -49,7 +49,7 @@ print('\n')
 window = tk.Tk()
 
 # GUI title
-window.title('PhoREAL v3.0 - Applied Research Labs (The University of Texas at Austin)')
+window.title('PhoREAL v3.12 - Applied Research Labs (The University of Texas at Austin)')
 
 # GUI size
 window.geometry('1140x500')
