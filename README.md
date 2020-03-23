@@ -3,7 +3,7 @@
 
 Data products from IceSAT-2 require some familiarity working with large datafiles and Hdf5 files.  PhoREAL is a library of tools and source code to help scientist and researchers more easily use Icesat-2 ATL03 and ATL08 data products.
 
-<h3>PhoREAL v3.0</h3>
+<h3>PhoREAL v3.12</h3>
 
 * PhoREAL is a geospatial analysis toolbox that allows users to read in IceSat-2 ATL03 .h5 data files, process the data, and output the data into several different file formats for further analysis including .las, .csv, and .kml.
 
