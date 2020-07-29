@@ -296,11 +296,21 @@ def get_atl_coords(df, epsg = None):
         xcoord, ycoord = wgs84_to_epsg_transform(epsg, lon, lat)
     else:
         xcoord, ycoord, epsg = wgs84_to_utm_find_and_transform(lon, lat)
+        
+    if 'easting' not in columns:
+        df = pd.concat([df,pd.DataFrame(xcoord,
+                                        columns=['easting'])],axis=1)
+        df = pd.concat([df,pd.DataFrame(ycoord,
+                                        columns=['northing'])],axis=1)
+    else:
+        print('Warning: Overwritting Existing Coordinates')
+        df = df.drop(columns = ['easting'])
+        df = df.drop(columns = ['northing'])
 
-    df = pd.concat([df,pd.DataFrame(xcoord,
-                                    columns=['easting'])],axis=1)
-    df = pd.concat([df,pd.DataFrame(ycoord,
-                                    columns=['northing'])],axis=1)
+        df = pd.concat([df,pd.DataFrame(xcoord,
+                                        columns=['easting'])],axis=1)
+        df = pd.concat([df,pd.DataFrame(ycoord,
+                                        columns=['northing'])],axis=1)        
     
     return df, epsg
 
@@ -319,11 +329,21 @@ def get_atl_alongtrack(df, atl03struct = None):
         desiredAngle = 90
         crossTrack, alongTrack, R_mat, xRotPt, yRotPt, phi = \
         getCoordRotFwd(easting, northing, [], [], [], desiredAngle)
-    
-    df = pd.concat([df,pd.DataFrame(crossTrack,
-                                columns=['crosstrack'])],axis=1)
-    df = pd.concat([df,pd.DataFrame(alongTrack,
-                                    columns=['alongtrack'])],axis=1)
+
+    if 'crosstrack' not in list(df.columns):
+        df = pd.concat([df,pd.DataFrame(crossTrack,
+                                    columns=['crosstrack'])],axis=1)
+        df = pd.concat([df,pd.DataFrame(alongTrack,
+                                        columns=['alongtrack'])],axis=1)
+    else:
+        print('Warning: Overwritting Existing Alongtrack/Crosstrack')
+        df = df.drop(columns = ['crosstrack'])
+        df = df.drop(columns = ['alongtrack'])
+        df = pd.concat([df,pd.DataFrame(crossTrack,
+                                        columns=['crosstrack'])],axis=1)
+        df = pd.concat([df,pd.DataFrame(alongTrack,
+                                        columns=['alongtrack'])],axis=1)  
+
     
     rotation_data = AtlRotationStruct(R_mat, xRotPt, yRotPt, desiredAngle, phi)
     
@@ -409,7 +429,12 @@ def write_atl03_las(atlstruct, outpath):
     zone = atlstruct.zone
     
     print('   Writing ATL03 .las file...', end = " ")
-    outname = atlstruct.atl03FileName + '_' + atlstruct.gtNum + '.las'
+    try:
+        outname = atlstruct.atl03FileName + '_' + atlstruct.gtNum + '.las'
+    except AttributeError:
+        # occasionally atl03FileName is not in the atlstruct
+        outname = atlstruct.atlFileName + '_' + atlstruct.gtNum + '.las'
+
     outfile = os.path.normpath(outpath + '/' + outname)
     
     if(not os.path.exists(os.path.normpath(outpath))):
@@ -421,10 +446,11 @@ def write_atl03_las(atlstruct, outpath):
         lasProjection = atlstruct.hemi
         # Write .las file
         writeLas(xx,yy,zz,lasProjection,outfile,cc,ii,sigconf)
-        
+
     else:
         # Write .las file for UTM projection case
         writeLas(xx,yy,zz,'utm',outfile,cc,ii,sigconf,hemi,zone)
+
     print('Complete') 
 
 def get_H5_keys_info(atl08filepath,gt):
@@ -492,6 +518,16 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     else:
         header_file_path = header_file_path_out
 
+    if dataIsMapped:
+        # for some reason, need to reset nan to -1,
+        # evemn though it's done in get_atl03_classification..
+        c = np.array(df.classification)
+        nan_index = np.where(np.isnan(c))
+        c[nan_index] = -1 # assign nan to -1
+        c = c.astype(int)
+        df.classification = c
+        # df.replace({'classification' : np.nan}, -1)
+
     # Assign everything to the struct
     atl03Struct = AtlStruct(df, gt, epsg, zone, hemi,kml_region_name, 
                               header_file_path, truth_file_path, 
@@ -503,6 +539,7 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     else:
         headerData = None
     setattr(atl03Struct,'headerData',headerData)
+
         
     return atl03Struct
 
@@ -615,16 +652,31 @@ def convert_atl03_to_legacy(atl03):
                               atl03.df.easting, atl03.df.northing, 
                               atl03.df.crosstrack, atl03.df.alongtrack, 
                               atl03.df.h_ph, atl03.df.time, 
-                              atl03.df.signal_conf_ph, atl03.df.classification, 
-                              intensity, atl03.gtNum, atl03.zone, atl03.hemi, 
-                              atl03.kmlRegionName, atl03.headerFilePath, 
-                              atl03.truthFilePath, atl03.atlFileName, 
-                              atl03.atlFileName, atl03.trackDirection, 
-                              atl03h5Info, atl03.dataIsMapped)
+                              atl03.df.delta_time, atl03.df.signal_conf_ph, 
+                              atl03.df.classification, intensity, atl03.gtNum,
+                              atl03.zone, atl03.hemi, atl03.kmlRegionName, 
+                              atl03.headerFilePath, atl03.truthFilePath, 
+                              atl03.atlFileName, atl03.atlFileName, 
+                              atl03.trackDirection, atl03h5Info, 
+                              atl03.dataIsMapped)
     rotationData = atl03.rotationData
     headerData = atl03.headerData
     return atl03legacy, rotationData, headerData
 
+def write_pickle(data, filename):
+    import pickle
+    fp = open(filename, 'wb')
+    pickle.dump(data, fp)
+    fp.close()
+
+def read_pickle(filename):
+    import pickle
+    fp = open(filename, 'rb')
+    data = pickle.load(fp)
+    fp.close()
+    return data
+
+    
 if __name__ == "__main__":    
     if os.name == 'nt':
         basepath = 'Y:/USERS/eric/2_production/'

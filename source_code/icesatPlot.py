@@ -23,12 +23,18 @@ from icesatIO import writeArrayToCSV
 from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 import glob
+import pickle as pkl
 from matplotlib.backend_tools import ToolToggleBase
 plt.rcParams['toolbar'] = 'toolmanager'
 
 
+BROWN = np.array([89,60,31]) / 255 # for ground b/c matplotlib brown is terrible
+
+
 # Function to make contour plot
-def plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, counter):
+def plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, 
+                atlMeasuredData, atlCorrections, rasterResolution, showPlots, 
+                outFilePath, counter):
         
     # Make contour plot
     plt.ioff()
@@ -42,11 +48,11 @@ def plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, atlM
     plt.grid(b = True, which = 'major', axis = 'both')
     plt.xlabel('Cross-Track Offset (m)')
     plt.ylabel('Along-Track Offset (m)')
-    title = atlMeasuredData.atl03FileName + ' (' + atlMeasuredData.gtNum + '): ' + atlMeasuredData.trackDirection + '\n' + \
-            'Observed Data Correction (' + str(rasterResolution) + ' m Raster)\n' + \
-            'Easting, Northing, Vertical: ' + '{:0.1f}'.format(atlCorrections.easting[0]) + ', ' + '{:0.1f}'.format(atlCorrections.northing[0]) + ', ' + '{:0.1f}'.format(atlCorrections.z[0]) + ' m \n' + \
-            'Cross-Track, Along-Track: ' + '{:0.0f}'.format(atlCorrections.crossTrack[0]) + ', ' + '{:0.0f}'.format(atlCorrections.alongTrack[0]) + ' m'
-    plt.title(title, fontsize = 10, fontweight = 'bold')
+    titleStr = atlMeasuredData.atl03FileName + ' (' + atlMeasuredData.gtNum + '): ' + atlMeasuredData.trackDirection + '\n' + \
+    'Observed Data Correction (' + str(rasterResolution) + ' m Raster)\n' + \
+    'Easting, Northing, Vertical: ' + '{:0.1f}'.format(atlCorrections.easting[0]) + ', ' + '{:0.1f}'.format(atlCorrections.northing[0]) + ', ' + '{:0.1f}'.format(atlCorrections.z[0]) + ' m \n' + \
+    'Cross-Track, Along-Track: ' + '{:0.0f}'.format(atlCorrections.crossTrack[0]) + ', ' + '{:0.0f}'.format(atlCorrections.alongTrack[0]) + ' m'
+    plt.title(titleStr, fontsize = 10, fontweight = 'bold')
     plt.tight_layout()
     plt.legend(loc = 'upper left')
     cbar = plt.colorbar();
@@ -57,9 +63,9 @@ def plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, atlM
         os.mkdir(os.path.normpath(outFilePath))
     # EndIf
     plotNum = counter + 1
-    outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_figContour_' + '{:0.0f}'.format(plotNum) + '.png'
-    outPath = os.path.normpath(outFilePath + '/' + outName)
-    plt.savefig(outPath)
+    outNameBase = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_fig_Contour' + '{:0.0f}'.format(plotNum) + '_' + str(rasterResolution) + 'm'
+    outPath = os.path.normpath(outFilePath + '/' + outNameBase + '.png')
+    plt.savefig(outPath, bbox_inches='tight')
     
     # Show plot
     if(showPlots):
@@ -71,25 +77,36 @@ def plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, atlM
     
     
 # Function to make Z vs Y plot
-def plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY, segmentErrorZ, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, counter):
+def plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, 
+           truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY, segmentErrorZ, 
+           atlMeasuredData, atlCorrections, rasterResolution, 
+           useMeasSigConf, filterData, showPlots, outFilePath, counter):
     
     # Define plot colors
     myBlue = (0/255, 114/255, 178/255)
     myOrange = (213/255, 94/255, 0/255)
     myYellow = (230/255, 159/255, 0/255)
     
-    # Make Z vs Y subplot 1
+    # Open 2 subplots
     plt.ioff()
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    
+    # Make Z vs Y subplot 1
+    if(useMeasSigConf):
+        titleLabel = 'Using Signal Confidence = %s' %filterData
+    else:
+        titleLabel = 'Using Ground Value = %s' % filterData
+    # endIf
     ax1.plot(measRasterYCommonFinal/1000, measRasterZCommonFinal, 'o', color = myOrange, ms=0.7, label = 'Shifted ICESat-2 Mean Raster', zorder=1)
     ax1.plot(truthRasterYCommonFinal/1000, truthRasterZCommonFinal, 'o', color = myBlue, ms=0.7, label = 'Reference Mean Raster', zorder=0)
-    
     ax1.axis('tight')
     ax1.grid(b = True, which = 'major', axis = 'both')
     ax1.set_ylabel('Z (m)')
     ax1.legend(loc = 'upper left')
-    titleStr = 'Shifted ICESat-2 and Reference Data (' + str(rasterResolution) + ' m Raster)'
-    ax1.set_title(titleStr)
+    titleStr = '\n' + atlMeasuredData.atl03FileName + ' (' + atlMeasuredData.gtNum + '): ' + atlMeasuredData.trackDirection + '\n' + \
+        'Shifted ICESat-2 and Reference Data (' + str(rasterResolution) + ' m Raster)\n' + \
+        titleLabel
+    ax1.set_title(titleStr, fontsize = 10, fontweight = 'bold')
     
     # Make Z Error vs Y subplot 2
     ax2.plot(truthRasterYCommonFinal/1000, zErrorCommonFinal, 'o', color = myBlue, ms=0.7, label = 'Z Error')
@@ -99,17 +116,20 @@ def plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFin
     ax2.set_ylabel('Z Error (m)')
     ax2.set_xlabel('UTM Northing (km)')
     ax2.legend(loc = 'upper left')
-    titleStr = 'MAE = ' + '{:0.2f}'.format(atlCorrections.mae[0]) + ' m, RMSE = ' + '{:0.2f}'.format(atlCorrections.rmse[0]) + ' m, Mean Error = ' + '{:0.2f}'.format(atlCorrections.me[0]) + ' m'
+    titleStr = 'MAE = ' + '{:0.2f}'.format(atlCorrections.mae[0]) + ' m, RMSE = ' + '{:0.2f}'.format(atlCorrections.rmse[0]) + ' m, Mean Error = ' + '{:0.2f}'.format(atlCorrections.me[0]) + ' m\n'
     ax2.set_title(titleStr)
+    f.tight_layout(pad=1.0)
     
     # Save plot
     if(not os.path.exists(os.path.normpath(outFilePath))):
         os.mkdir(os.path.normpath(outFilePath))
     # EndIf
     plotNum = counter + 1
-    outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_figZY_' + '{:0.0f}'.format(plotNum) + '.png'
-    outPath = os.path.normpath(outFilePath + '/' + outName)
-    plt.savefig(outPath)
+    outNameBase = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_fig_ZY' + '{:0.0f}'.format(plotNum) + '_' + str(rasterResolution) + 'm'
+    outPath = os.path.normpath(outFilePath + '/' + outNameBase + '.png')
+    plt.savefig(outPath, bbox_inches='tight')
+    outPathPickle = os.path.normpath(outFilePath + '/' + outNameBase + '.pkl')
+    pkl.dump(f, open(outPathPickle,'wb'))
     
     # Show plot
     if(showPlots):
@@ -121,21 +141,32 @@ def plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFin
     
     
 # Function to make Z vs T plot
-def plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, counter):
+def plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, 
+           atlMeasuredData, atlCorrections, rasterResolution, 
+           useMeasSigConf, filterData, showPlots, outFilePath, counter):
     
     # Define plot colors
     myBlue = (0/255, 114/255, 178/255)
     myOrange = (213/255, 94/255, 0/255)
     
-    # Make Z vs Y subplot 1
+    # Open 2 subplots
     plt.ioff()
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    
+    # Make Z vs Y subplot 1
+    if(useMeasSigConf):
+        titleLabel = 'Using Signal Confidence = %s' %filterData
+    else:
+        titleLabel = 'Using Ground Value = %s' % filterData
+    # endIf
     ax1.plot(measRasterTCommonFinal, measRasterZCommonFinal, 'o', color = myOrange, ms=0.7)
     ax1.axis('tight')
     ax1.grid(b = True, which = 'major', axis = 'both')
     ax1.set_ylabel('Z (m)')
-    titleStr = 'IceSat-2 Time Data (' + str(rasterResolution) + ' m Raster)'
-    ax1.set_title(titleStr)
+    titleStr = '\n' + atlMeasuredData.atl03FileName + ' (' + atlMeasuredData.gtNum + '): ' + atlMeasuredData.trackDirection + '\n' + \
+        'IceSat-2 Time Data (' + str(rasterResolution) + ' m Raster)\n' + \
+        titleLabel
+    ax1.set_title(titleStr, fontsize = 10, fontweight = 'bold')
     
     # Make Z Error vs Y subplot 2
     ax2.plot(measRasterTCommonFinal, zErrorCommonFinal, 'o', color = myBlue, ms=0.7)
@@ -143,17 +174,18 @@ def plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, at
     ax2.grid(b = True, which = 'major', axis = 'both')
     ax2.set_ylabel('Z Error (m)')
     ax2.set_xlabel('Time (sec)')
-    titleStr = 'MAE = ' + '{:0.2f}'.format(atlCorrections.mae[0]) + ' m, RMSE = ' + '{:0.2f}'.format(atlCorrections.rmse[0]) + ' m, Mean Error = ' + '{:0.2f}'.format(atlCorrections.me[0]) + ' m'
+    titleStr = 'MAE = ' + '{:0.2f}'.format(atlCorrections.mae[0]) + ' m, RMSE = ' + '{:0.2f}'.format(atlCorrections.rmse[0]) + ' m, Mean Error = ' + '{:0.2f}'.format(atlCorrections.me[0]) + ' m\n'
     ax2.set_title(titleStr)
-    
+    f.tight_layout(pad=1.0)
+
     # Save plot
     if(not os.path.exists(os.path.normpath(outFilePath))):
         os.mkdir(os.path.normpath(outFilePath))
     # EndIf
     plotNum = counter + 1
-    outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_figZT_' + '{:0.0f}'.format(plotNum) + '.png'
-    outPath = os.path.normpath(outFilePath + '/' + outName)
-    plt.savefig(outPath)
+    outNameBase = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_fig_ZT' + '{:0.0f}'.format(plotNum) + '_' + str(rasterResolution) + 'm'
+    outPath = os.path.normpath(outFilePath + '/' + outNameBase + '.png')
+    plt.savefig(outPath, bbox_inches='tight')
     
     # Show plot
     if(showPlots):
@@ -648,3 +680,58 @@ def getPlot_measCorr(xData, yData, xLabel, yLabel, title, yName):
     plt.grid(b = True, which = 'major', axis = 'both')
     plt.draw()
     fig1.show()
+    
+    
+# Plot pickle file
+def getPklPlot(pklFile):
+    
+    figx = pkl.load(open(pklFile,'rb'))        
+    figx.show()
+
+def load_3d():
+    # print('from mpl_toolkits.mplot3d import Axes3D')
+    # from mpl_toolkits.mplot3d import Axes3D
+    load_3D()
+
+def load_3D():
+    # print('from mpl_toolkits.mplot3d import Axes3D')
+    from mpl_toolkits.mplot3d import Axes3D
+
+def make_fig():
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    return fig, ax
+
+def plot(data, markerstyle='-', ms=3.0): #, y=None):
+    """
+    Just plots data for quick visual; doesn't
+    interrupt ipython session like plt.figure
+    Ex:
+        import icesatPlot as ip
+        ip.plot(arr,'.')
+    """
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    # if (y == None).any():
+    ax.plot(data, markerstyle, ms=ms)
+    # else:
+    #   ax.plot(data, y, markerstyle, ms=ms)
+    fig.show()
+
+def hist(data, bins):
+    """
+    Makes a simple histogram for quick visual;
+    doesn't interrupt ipython session like plt.figure
+    Ex:
+        import icesatPlot as ip
+        ip.hist(arr, 100)
+    """
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    hist, bins = np.histogram(data, bins=bins)
+    ax.plot(bins[:-1], hist)
+    fig.show()
+    
