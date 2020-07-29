@@ -36,6 +36,12 @@ EPSG_ERR = '-1'
 DEG_ARCTIC = 84.0
 DEG_ANTARCTIC = -80.0
 
+EPSG_CEA = '6933' # Lambert Cylindrical Equal Area
+EPSG_LAEA_N = '6931' # Lambert Azimuthal Equal Area
+EPSG_LAEA_S = '6932'
+
+GT_NUMS = ['gt1r', 'gt2r', 'gt3r', 'gt1l', 'gt2l', 'gt3l']
+
 # Object for getNameParts function
 class fileStruct:
         
@@ -492,10 +498,10 @@ def find_utm_zone_arr(lon, lat, mode=True, module=None, m=None):
     if default_mod_bool and mode:
         # OG way to find zone via the mode of all points
 
-        arctic = len(lat[lat >= 84])
-        nhem = len(lat[(lat < 84) & (lat >= 0)])
-        shem = len(lat[(lat > -80) & (lat < 0)])
-        antarctic = len(lat[lat < -80])
+        arctic = len(lat[lat >= 84.0])
+        nhem = len(lat[(lat < 84.0) & (lat >= 0)])
+        shem = len(lat[(lat > -80.0) & (lat < 0)])
+        antarctic = len(lat[lat < -80.0])
         if arctic > nhem: #Arctic case
             epsg_code = EPSG_ARCTIC # '3413'
         elif antarctic > shem: #Antarctic case
@@ -557,18 +563,30 @@ def find_utm_zone_arr(lon, lat, mode=True, module=None, m=None):
 
 
 # Transform GCS/PCS based on EPSG and x/y. 
-def transform(epsg_in, epsg_out, x, y):
-	crs_in = proj.Proj(init = epsg_in)
-	crs_out = proj.Proj(init = epsg_out)
-	xx, yy= proj.transform(crs_in, crs_out, x, y)
-	return xx,yy
+def transform(epsg_in, epsg_out, x, y, use_old_version=False):
+    # import warnings
+    # warnings.filterwarnings("ignore", category=FutureWarning)
 
+    version = proj.__version__
+    if int(version[0]) < 2 or use_old_version:
+        # before version 2
+        crs_in = proj.Proj(init = epsg_in)
+        crs_out = proj.Proj(init = epsg_out)
+        xx, yy = proj.transform(crs_in, crs_out, x, y)
+        return xx, yy
+
+    else:
+        # version 2 and above
+        # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
+        transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
+        xx, yy = transformer.transform(x, y)
+        return xx,yy
 
 # Transform from lon/lat to given EPSG. 
 def wgs84_to_epsg_transform(epsg_out, lon, lat):
     epsg_in = 'epsg:4326'
     epsg_out = ('epsg:{0}'.format(str(epsg_out)))
-    xx, yy= transform(epsg_in, epsg_out, lon, lat)
+    xx, yy = transform(epsg_in, epsg_out, lon, lat)
     return xx,yy
 
 def identifyEPSG(hemi,zone):
@@ -616,7 +634,7 @@ def wgs84_to_utm_find_and_transform(lon, lat):
 
 # Inputs: lon, lat, (UTM zone), (UTM hemisphere)
 def getLatLon2UTM(*args):
-    
+
     # Set EPSG code for lat/lon coords
     epsg_in = 'epsg:4326'
     
@@ -644,7 +662,7 @@ def getLatLon2UTM(*args):
         
         # Call transform function
         xx, yy = transform(epsg_in, epsg_out, lon, lat)
-        
+
     else:
         
         # Get UTM coords
@@ -1114,10 +1132,9 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     if(any(xAllArray) and any(yAllArray)):
         
         xAll = xAllArray
-        yAll = yAllArray
+        yAll = np.flipud(yAllArray)
         
     else:
-        
         # Get min,max of rounded X,Y data
         xRndMin = xRnd.min()
         xRndMax = xRnd.max()
@@ -1127,7 +1144,7 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
         # Get all possible grid combinations
         xAll = np.arange(xRndMin, xRndMax + xResolution, xResolution)
         yAll = np.arange(yRndMax, yRndMin - yResolution, -yResolution)
-        
+
     # endIf
         
     # Get X,Y array of all pts
@@ -1605,7 +1622,313 @@ def createShapefiles(xx, yy, width, height, epsg, outfile = "atl08.shp"):
     # Save and close everything
     ds = layer = feat = geom = None    
 
+def pause(msg='enter to continue'):
+    input(msg)
 
+def mode(arr):
+    from scipy.stats import mode as mode_func
+    val = mode_func(arr)[0][0]
+    return val
+
+def sort_first(arr):
+    """
+    example: sort by x
+        x_sort, y_sort, z_sort = cm.sort_first([x, y, z])
+    """
+    s = np.transpose(sorted(np.transpose(arr), key=lambda x: x[0]))
+    return s
+
+def remove_numpy_printing():
+    np.set_printoptions(suppress=True)
+
+def array(*argv):
+    """
+    Turns this:
+      x, y, z = np.array(x), np.array(y), np.array(z)
+    into
+      import icesatUtils as it
+      x, y, z = it.array(x, y, z)
+    """
+    var_out = []
+    for var in argv:
+        var_out.append(np.array(var))
+    return var_out
+
+def meshgrid_to_xy(xx, yy, zz=None):
+    """
+    Example:
+    import icesatUtils
+    import numpy as np
+    x, y = np.linspace(0,1), np.linspace(0,1)
+    xx, yy = np.meshgrid(x, y)
+    xr, yr = icesatUtils.meshgrid_to_xy(xx, yy)
+    """
+    if type(zz) == type(None):
+        return xx.flatten(), yy.flatten()
+    else:
+        return xx.flatten(), yy.flatten(), zz.flatten()
+
+
+def get_date(*args, debug=0):
     
+    """
+    Written by Michael James
+
+    Example:
+    import icesatUtils
+    doy = icesatUtils.get_date(year, month, day)
+    # or
+    month, day = icesatUtils.get_date(year, doy)
+
+    """
+    def help():
+        print("""
+    Example:
+    import icesatUtils
+    doy = icesatUtils.get_date(year, month, day)
+    # or
+    month, day = icesatUtils.get_date(year, doy)
+            """)
+
+    import datetime
+
+    if len(args) == 2:
+        y = int(args[0]) #int(sys.argv[1])
+        d = int(args[1]) #int(sys.argv[2])
+        yp1 = datetime.datetime(y+1, 1, 1)
+        y_last_day = yp1 - datetime.timedelta(days=1)
+        if d <= y_last_day.timetuple().tm_yday:
+            date = datetime.datetime(y, 1, 1) + datetime.timedelta(days=d-1)
+            return date.month, date.day
+        else:
+            print("error")
+            help()
+
+    elif len(args) == 3:
+        y, m, d = args
+        date = datetime.datetime(y, m, d)
+        doy = int(date.timetuple().tm_yday)
+        # print("doy = {}".format(date.timetuple().tm_yday))
+        return str(doy).zfill(3)
+
+    else:
+        print("error: incorrect number of args")
+        help()
+
+
+
+def get_h5_meta(h5_file, meta='date', rtn_doy=False, rtn_hms=True, file_start='ATL'): #, debug=0):
+    # ATL03_20181016000635_02650109_200_01.h5
+    """
+    This function gets metadata directly from the ATL filename.
+
+    Input:
+        h5_file - the ATL file, full-path or not
+        meta - the type of metadata to output
+            ['date', 'track', 'release', 'version', 
+                'f_type', 'hms', 'cycle']
+            f_type - either rapid or final
+        rtn_doy - return day of year or not, if date is chosen
+        rtn_hms - return hour/min/sec, or time in sec
+        file_start - search for info based on file_start index;
+                        useful if given an ATL file that starts
+                        with "errorprocessing_..." or any other
+                        prefix
+        debug - for small errors
+
+    Output:
+        varies, but generally it's one value, unless 'hms' meta is chosen,
+        in which case it is two values.
+
+    Example:
+        import icesatUtils
+        fn = DIR + '/ATL03_20181016000635_02650109_200_01.h5'
+        # or fn = 'ATL03_20181016000635_02650109_200_01.h5'
+        year, day_of_year = icesatUtils.get_h5_meta(fn, meta='date', rtn_doy=True)
+        version = icesatUtils.get_h5_meta(fn, meta='version')
+        release = icesatUtils.get_h5_meta(fn, meta='release')
+    """
+
+    h5_file = os.path.basename(h5_file) # h5_file.split('/')[-1]
+
+    meta = meta.lower()
+
+    i0 = 0
+    try:
+        i0 = h5_file.index(file_start)
+    except ValueError:
+        print('warning: substring %s not found in %s' % (file_start, h5_file))
+    # i0 = check_file_start(h5_file, file_start, debug)
+
+    if meta == 'date':
+        year = int(h5_file[i0+6:i0+10])
+        month = int(h5_file[i0+10:i0+12])
+        day = int(h5_file[i0+12:i0+14])
+
+        if rtn_doy:
+            doy0 = get_date(year, month, day)
+            return str(year), str(doy0).zfill(3)
+
+        return str(year), str(month).zfill(2), str(day).zfill(2)
+
+    elif meta == 'track':
+        return int(h5_file[i0+21:i0+25])
+
+    elif meta == 'release':
+        r = h5_file[i0+30:i0+34]
+        if '_' in r:
+            r = h5_file[i0+30:i0+33]
+        return r
+
+    elif meta == 'version':
+        v = h5_file[i0+34:i0+36]
+        if '_' in v:
+          v = h5_file[i0+35:i0+37]
+        return v
+
+    elif meta == 'f_type':
+        r = h5_file[i0+30:i0+34]
+        f_type = 'rapid'
+        if '_' in r:
+            r = h5_file[i0+30:i0+33]
+            f_type = 'final'
+        return f_type
+
+    elif meta == 'hms':
+        hms = h5_file[i0+14:i0+20]
+        h, m, s = hms[0:2], hms[2:4], hms[4:6]
+        if rtn_hms:
+            return h, m, s
+        else:
+            h, m, s = int(h), int(m), int(s)
+            t0, t0_full = t2t(h,m,s)
+            return t0, t0_full
+
+    elif meta == 'cycle':
+        return int(h5_file[i0+25:i0+29])
+
+    else:
+        print('error: unknown meta=%s' % meta)
+        return 0
+
+def get_index(t, t0, tol=2.0, err_msg=True):
+    """
+    Gets closest index of t0 in array t, i.e. the index of time t0
+    in time array t
+
+    tol is used in case t0 is not found; default is tol = 2.0 sec
+    """
+    if type(t) != np.ndarray:
+        t = np.array(t)
+    index = np.argmin(abs(t - t0))
+    if abs(t[index] - t0) > tol:
+        if err_msg:
+            print('warning: index not found: looking for %4.2f vs. found %4.2f' % (t0, t[index]))
+        # return -1
+    return index
+
+
+def t2t(hours, mins=None, sec=None):
+    """
+    This function changes hms into seconds, or 
+    HH:MM:SSSSSS format, such as in GPS time-stamps.
+    """
+    if mins==None and sec== None:
+        tot_sec = hours%86400
+        choice = 1
+    elif hours != None and mins != None and sec != None:
+        choice = 2
+        if hours > 24 or mins > 60 or sec > 60 or hours < 0 or mins < 0 or sec < 0:
+            raise ValueError("Value out of range")
+    if choice == 1:
+        hours = int(tot_sec/3600)
+        mins = int((tot_sec%3600)/(60))
+        sec = ((tot_sec%3600)%(60))
+
+    if choice == 2:
+        tot_sec = hours*3600 + mins*60 + sec
+
+    return [tot_sec, "{:>02d}:{:>02d}:{:>09.6f}".format(hours, mins, sec)]
+
+
+def get_outlier_data(data):
+    """
+    This function returns simple Q1,Q2,Q3,IQR. It uses
+    nanpercentile and nanmedian, so nans are removed/handled.
+    """
+    Q1,Q2,Q3 = np.nanpercentile(data,25), np.nanmedian(data), np.nanpercentile(data,75)
+    IQR = Q3-Q1
+    return Q1,Q2,Q3,IQR
+
+def get_root_dir(dir_type=None, username=None, debug=0):
+
+    """
+    This function outputs directories relative to GLAM operatives.
+
+    Input:
+        dir_type - either 'data' or 'user', optional
+        username - the function will attempt to detect the username
+                    of the person that called it, but if you'd like
+                    to manually specify, the option is there
+        debug - optionally prints out the username the function detects
+
+    Output:
+        if dir_type is None:
+            returns [data, user] root directories, relative to user
+        elif dir_type is 'data':
+            returns only data
+        elif dir_type is 'user':
+            returns only user
+
+    Example:
+        import icesatUtils as iu
+        USER_ROOT, DATA_ROOT = iu.get_root_dir()
+        USER_JSIPPS = iu.get_root_dir(dir_type='user', username='jsipps')
+
+    """
+
+    dirs = {'jsipps': ['/LIDAR/server/poseidon_files/USERS/jsipps', '/bigtex_data'],
+            'malonzo': ['N:\\USERS\\mike', 'Z:'],
+            'eguenther': ['/LIDAR/server/USERS/eric', '/laserpewpew'],
+            'jmarkel': ['/LIDAR/server/USERS/jmarkel', '/laserpewpew'],
+            'hleigh': ['L:\\USERS\\holly', 'N:']}
+
+    # get or format username
+    import pwd
+    if type(username) == type(None):
+        username = pwd.getpwuid(os.getuid()).pw_name
+        if debug:
+            print('username: %s' % username)
+    username = username.lower()
+
+    # get or format directory type
+    #   user or data
+    dir_types = {'user': 0, 'data': 1}
+    if type(dir_type) != type(None):
+        if type(dir_type) != str:
+            dir_type = str(dir_type)
+        dir_type = dir_type.lower()
+        if dir_type in dir_types:
+            i = dir_types[dir_type]
+        else:
+            keys = [key for key in dir_types.keys()]
+            raise KeyError(dir_type + ' directory type unknown. Try one of', keys)
+
+    # return directory
+    if username in dirs:
+        if type(dir_type) == type(None):
+            return dirs[username]
+        else:
+            return dirs[username][i]
+
+    else:
+        keys = [key for key in dirs.keys()]
+        raise KeyError('username ' + username + ' not found in', keys)
+
+def reload(module):
+    import imp
+    imp.reload(module)
+
+
 if __name__ == "__main__":
     print("Test")
