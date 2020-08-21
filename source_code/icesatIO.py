@@ -22,12 +22,25 @@ import warnings
 import csv
 import numpy as np
 import h5py
-import laspy
-from laspy.file import File
+try:
+  import laspy
+  from laspy.file import File
+except ImportError:
+  laspy_func = ['writeLas', 'writeHeaderFile']
+  print('warning: module laspy not found')
+  print('affected functions:', laspy_func)
+
 from scipy.io import loadmat
-import simplekml
+try:
+  import simplekml
+except ImportError:
+  simplekml_func = ['writeKml']
+  print('warning: module simplekml not found')
+  print('affected functions:', simplekml_func)
+  
 from osgeo import gdal,osr,ogr
 import socket
+import shutil
 from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
 
 
@@ -150,55 +163,182 @@ def readTruthRegionsTxtFile(kmlBoundsTextFile):
 ##### Function to read header truth .mat file
 def readHeaderMatFile(headerFilePath):
 
-    # Initialize output data
-    coordType = []
-    zone = []
-    hemi = [] 
-    
-    # Get coordinate type from header .mat file (1 = UTM, 2 = Lat/Lon)
-    matData = loadmat(headerFilePath)
-    coordNum= matData['headerData'][0][0][10][0][0]
-    
-    # Convert lat/lon data to UTM coordinates
-    if(coordNum==1):
+    if headerFilePath.endswith('.mat'):
+
+        # Initialize output data
+        coordType = []
+        zone = []
+        hemi = [] 
         
-        coordType = 'UTM'
+        # Get coordinate type from header .mat file (1 = UTM, 2 = Lat/Lon)
+        matData = loadmat(headerFilePath)
+        coordNum= matData['headerData'][0][0][10][0][0]
         
-        # Get UTM zone and hemisphere
-        zone = str(matData['headerData'][0][0][7][0][0])
-        hemi = matData['headerData'][0][0][8][0][0]
-        ellipsoid = matData['headerData'][0][0][9][0][0:]
+        # Convert lat/lon data to UTM coordinates
+        if(coordNum==1):
+            
+            coordType = 'UTM'
+            
+            # Get UTM zone and hemisphere
+            zone = str(matData['headerData'][0][0][7][0][0])
+            hemi = matData['headerData'][0][0][8][0][0]
+            ellipsoid = matData['headerData'][0][0][9][0][0:]
+            
+        else:
+            
+            coordType = 'Lat/Lon'
+            
+        # Endif
         
-    else:
+        # Get x/y min/max data and truth tile name for each truth tile
+        xmin = [matData['headerData'][0][i][0][0][0] for i in range(len(matData['headerData'][0]))]
+        xmax = [matData['headerData'][0][i][1][0][0] for i in range(len(matData['headerData'][0]))]
+        ymin = [matData['headerData'][0][i][2][0][0] for i in range(len(matData['headerData'][0]))]
+        ymax = [matData['headerData'][0][i][3][0][0] for i in range(len(matData['headerData'][0]))]
+        tileName = [matData['headerData'][0][i][12][0] for i in range(len(matData['headerData'][0]))]
         
-        coordType = 'Lat/Lon'
+        # Store data as object
+        headerData = headerStruct(coordType, zone, hemi, ellipsoid, xmin, xmax, ymin, ymax, tileName)
         
-    # Endif
-    
-    # Get x/y min/max data and truth tile name for each truth tile
-    xmin = [matData['headerData'][0][i][0][0][0] for i in range(len(matData['headerData'][0]))]
-    xmax = [matData['headerData'][0][i][1][0][0] for i in range(len(matData['headerData'][0]))]
-    ymin = [matData['headerData'][0][i][2][0][0] for i in range(len(matData['headerData'][0]))]
-    ymax = [matData['headerData'][0][i][3][0][0] for i in range(len(matData['headerData'][0]))]
-    tileName = [matData['headerData'][0][i][12][0] for i in range(len(matData['headerData'][0]))]
-    
-    # Store data as object
-    headerData = headerStruct(coordType, zone, hemi, ellipsoid, xmin, xmax, ymin, ymax, tileName)
-    
-    # Return data
-    return headerData
+        # Return data
+        return headerData
+
+    elif headerFilePath.endswith('.pkl'):
+
+        from icesatReader import read_pickle
+        from icesatUtils import mode, transform
+        import pyproj
+
+        df = read_pickle(headerFilePath)
+
+        proj4_all = list(df['proj4'])
+        proj4_mode = mode(proj4_all)
+        zone0, hemi0, ellipsoid0, coordNum0 = get_params(proj4_mode)
+        tileName_v = list(df['name'])
+
+        coordType0 = 'UTM'
+        if coordNum0 != 1:
+            coordType0 = 'Lat/Lon'
+
+        xmin = np.array(df['xmin'])
+        xmax = np.array(df['xmax'])
+        ymin = np.array(df['ymin'])
+        ymax = np.array(df['ymax'])
+
+        crs_mode = pyproj.CRS.from_proj4(proj4_mode)
+        epsg_mode = crs_mode.to_epsg()
+
+        for k, proj4 in enumerate(proj4_all):
+            crs_las = pyproj.CRS.from_proj4(proj4)
+            epsg_las = crs_las.to_epsg()
+
+            epsg_in = int(epsg_las)
+            epsg_out = int(epsg_mode)
+            if epsg_in != epsg_out:
+                xmin0, ymin0 = transform(epsg_in, epsg_out, xmin[k], ymin[k])
+                xmax0, ymax0 = transform(epsg_in, epsg_out, xmax[k], ymax[k])
+                xmin[k], ymin[k] = xmin0, ymin0
+                xmax[k], ymax[k] = xmax0, ymax0
+
+        xmin_v = list(xmin)
+        xmax_v = list(xmax)
+        ymin_v = list(ymin)
+        ymax_v = list(ymax)
+
+        headerData = headerStruct(coordType0, zone0, hemi0, ellipsoid0, xmin_v, xmax_v, ymin_v, ymax_v, tileName_v)
+
+        return headerData
+
+
+def get_params(proj4):
+    from icesatUtils import identify_hemi_zone
+    import pyproj
+    crs_las = pyproj.CRS.from_proj4(proj4)
+    epsg_las = crs_las.to_epsg()
+    hemi, zone = identify_hemi_zone(epsg_las)
+
+    proj = pyproj.Proj(proj4)
+    d = proj.crs.to_json_dict()
+    ellipsoid = d['base_crs']['datum']['ellipsoid']['name']
+    coordType = d['conversion']['name']
+    coordNum = -1
+    if 'UTM' in coordType:
+        coordNum = 1
+    # else:
+    #     coordType = 'Lat/Lon'
+    return zone, hemi, ellipsoid, coordNum
+
+
+def writeHeaderMatFile(regionName, PKL_DIR, LAS_DIR):
+    writeHeaderFile(regionName, PKL_DIR, LAS_DIR)
+
+
+def writeHeaderFile(regionName, PKL_DIR, LAS_DIR):
+
+    regionName = regionName + '_HeaderData.pkl'
+    file_pkl = os.path.join(PKL_DIR, regionName)
+
+    from icesatReader import write_pickle
+    from icesatIO import readLas
+    import laspy as las
+    import pandas as pd
+
+    files_las = [fn for fn in os.listdir(LAS_DIR) if fn.endswith('.las')]
+    files_las = sorted(files_las)
+    files_las = [os.path.join(LAS_DIR, fn) for fn in files_las]
+
+    df = pd.DataFrame(columns=['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax',
+                                        'pointcount', 'zone', 'hemi', 'ellipsoid',
+                                        'coordNum', 'numRegs', 'name', 'proj4'])
+
+    for f, file_las in enumerate(files_las):
+
+        file_las_sub = os.path.basename(file_las)
+        print(file_las_sub)
+
+        fp = las.file.File(file_las, mode='r')
+
+        min_bounds = fp.get_header().get_min()
+        max_bounds = fp.get_header().get_max()
+        xb_las = np.array([min_bounds[0], max_bounds[0]])
+        yb_las = np.array([min_bounds[1], max_bounds[1]])
+        zb_las = np.array([min_bounds[2], max_bounds[2]])
+
+        xmin, xmax = xb_las[0], xb_las[1]
+        ymin, ymax = yb_las[0], yb_las[1]
+        zmin, zmax = zb_las[0], zb_las[1]
+
+        pointcount = len(fp.points) #readLas(file_las, metadata='count')
+        proj4_las = readLas(file_las, metadata='proj4')
+        zone, hemi, ellipsoid, coordNum = get_params(proj4_las)
+
+        numRegs = 0
+        name = file_las
+
+        df.loc[f] = [xmin, xmax, ymin, ymax, zmin, zmax,
+                            pointcount, zone, hemi, ellipsoid, coordNum, numRegs, name, proj4_las]
+
+        fp.close()
+
+    # save header file
+    # convert_df_to_mat(df_mat, file_mat)
+    write_pickle(df, file_pkl)
+
+    # return df
+
+# def getHeaderData():
 
 
 ##### Functions to read ATL03 .h5 files
 def readAtl03H5(in_file03, fieldName, label):
-	
-	# fieldName Options:
-	# /heights/lat_ph
-	# /heights/lon_ph
-	# /heights/h_ph
-	# /heights/delta_time
-	# /heights/crossing_time
-	# /heights/signal_conf_ph
+    
+    # fieldName Options:
+    # /heights/lat_ph
+    # /heights/lon_ph
+    # /heights/h_ph
+    # /heights/delta_time
+    # /heights/crossing_time
+    # /heights/signal_conf_ph
 
     # Initialize output
     dataOut = []
@@ -221,13 +361,13 @@ def readAtl03H5(in_file03, fieldName, label):
 
 ##### Functions to read ATL08 .h5 files
 def readAtl08H5(in_file08, fieldName, label):
-	
-	# fieldName Options:
-	# /land_segments/longitude
-	# /land_segments/latitude
-	# /land_segments/canopy/h_max_canopy_abs
-	# /land_segments/terrain/h_te_best_fit
-	# /land_segments/terrain/h_te_median
+    
+    # fieldName Options:
+    # /land_segments/longitude
+    # /land_segments/latitude
+    # /land_segments/canopy/h_max_canopy_abs
+    # /land_segments/terrain/h_te_best_fit
+    # /land_segments/terrain/h_te_median
 
     # Initialize output
     dataOut = []
@@ -389,26 +529,56 @@ def readGeoidFile(geoidFile):
 
 
 ##### Function to read .las files
-def readLas(lasFilePath):
+def readLas(lasFilePath, metadata=None):
     
-    # Read contents of .las file
-    with File(lasFilePath, mode = 'r') as lasFile:
-    
-        # Store output from .las file
-        x = lasFile.x
-        y = lasFile.y
-        z = lasFile.z
-        classification = lasFile.classification
-        intensity = lasFile.intensity
-        headerData = lasFile.header
+    if metadata is None:
+        # Read contents of .las file
+        with File(lasFilePath, mode = 'r') as lasFile:
         
-        # Store output into class structure
-        lasData = lasStruct(x, y, z, classification, intensity, headerData)
+            # Store output from .las file
+            x = lasFile.x
+            y = lasFile.y
+            z = lasFile.z
+            classification = lasFile.classification
+            intensity = lasFile.intensity
+            headerData = lasFile.header
+            
+            # Store output into class structure
+            lasData = lasStruct(x, y, z, classification, intensity, headerData)
+            
+        # EndWith
         
-    # EndWith
-    
-    return lasData
+        return lasData
 
+    else:
+        # reading some metadata instead
+        # need:
+        #   pdal installed (sudo yum install pdal)
+        #   subprocess, json
+        import subprocess, json
+        def search_dict(obj, key):
+            # https://stackoverflow.com/questions/14962485/finding-a-key-recursively-in-a-dictionary
+            # recursively search thru json dict
+            if key in obj: return obj[key]
+            for k, v in obj.items():
+                if isinstance(v,dict):
+                    item = search_dict(v, key)
+                    if item is not None:
+                        return item
+
+        cmd = 'pdal info {} --metadata'.format(lasFilePath)
+        output = subprocess.check_output(cmd, shell=True)
+        output = output.decode()
+
+        json_info = json.loads(output)
+        if metadata != 'json':
+            rtn = search_dict(json_info, metadata)
+            if rtn is None:
+                raise ValueError('%s metadata not found' % metadata)
+            else:
+                return rtn
+        else:
+            return json_info
 
 ##### Functions to write .las files
 def selectwkt(proj,hemi=None,zone=None):
@@ -421,7 +591,7 @@ def selectwkt(proj,hemi=None,zone=None):
                 elif zone == "2" or zone == "02":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 2N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-171],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32602"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
                 elif zone == "3" or zone == "03":
-                    wkt == b'''ROJCS["WGS 84 / UTM zone 3N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-165],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32603"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
+                    wkt = b'''ROJCS["WGS 84 / UTM zone 3N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-165],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32603"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
                 elif zone == "4" or zone == "04":
                     wkt = b'''PROJCS["WGS 84 / UTM zone 4N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-159],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","32604"],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'''
                 elif zone == "5" or zone == "05":
@@ -669,6 +839,10 @@ def selectwkt(proj,hemi=None,zone=None):
 
 
 def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,hemi=None,zone=None):
+    
+    import laspy
+    # from laspy.file import File
+
     wkt = selectwkt(proj,hemi,zone)
     
     #Create new VLR
@@ -680,7 +854,7 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,
     inVLRs.append(new_vlr)
 
     #Create new Header
-    hdr = laspy.header.Header(file_versoin=1.4 )
+    hdr = laspy.header.Header(file_version=1.4)
     hdr.file_sig = 'LASF'
     
     #Create new las file with Header and VLR  
@@ -737,6 +911,7 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,
 ##### Functions to write .kml files
 def writeKml(lat, lon, time, kmlName):
 
+    import simplekml
     # Suppress warnings that may come from simple kml
     if not sys.warnoptions:
         warnings.simplefilter("ignore")
@@ -837,7 +1012,9 @@ def createHTMLChart(ytrack, h_ph, classification, lat, lon,
                     direction = 'Descending',
                     online = None,
                     classification_list = [1,2,3],
-                    output_folder = "",in_file03_name = "ATL03", 
+                    input_folder = "",
+                    output_folder = "",
+                    in_file03_name = "ATL03", 
                     blank = viewerBlank_html, 
                     blanki = viewerBlankOnline_html):
     
@@ -860,10 +1037,15 @@ def createHTMLChart(ytrack, h_ph, classification, lat, lon,
         online = isconnected()
         
     if online == True:
-        viewer_output = ("Viewer_Online" + in_file03_name + ".html")
+        viewer_output = (output_folder + "\Viewer_Online" + in_file03_name + ".html")
         blank = blanki
     else:
-        viewer_output = ("Viewer_" + in_file03_name + ".html")
+        viewer_output = (output_folder + "\Viewer_" + in_file03_name + ".html")
+        
+        # Copy d3 file to output directory
+        srcPath = os.path.normpath(input_folder + '\\d3')
+        tarPath = os.path.normpath(output_folder + '\\d3')
+        shutil.copytree(srcPath, tarPath)
 
     #Copy the Blank Template into 
     with open(blank) as f:
@@ -965,6 +1147,8 @@ def createHTMLChart(ytrack, h_ph, classification, lat, lon,
                 
                 
             out_file.write(line)
+        
+    return viewer_output
                  
             
 def getDEMArrays(file):
@@ -1022,8 +1206,14 @@ def formatDEM(file, epsg_backup = 0):
     
     return xarr, yarr, zarr, intensity, classification, epsg
 
-def write_geotiff(data, epsg, x_min, y_max, pixel_size, outputfile, 
-                    nodata = None):
+def write_geotiff(data, epsg, x_min, y_max, x_pixel, y_pixel, outputfile, 
+                    nodata = None, write_raster = False):
+
+    x_offset = 0.0
+    y_offset = 0.0
+    if write_raster:
+      x_offset = -x_pixel/2.0
+      y_offset = y_pixel/2.0
 
     x_pixels = data.shape[1]
     y_pixels = data.shape[0]
@@ -1035,15 +1225,15 @@ def write_geotiff(data, epsg, x_min, y_max, pixel_size, outputfile,
         x_pixels,
         y_pixels,
         1,
-        gdal.GDT_Float32, )
+        gdal.GDT_Float64, )
 
     dataset.SetGeoTransform((
-        x_min,    
-        pixel_size,  
+        x_min + x_offset,    
+        x_pixel,  
         0,                      
-        y_max,    
+        y_max + y_offset,    
         0,                      
-        -pixel_size))  
+        -y_pixel))  
 
     srs = ogr.osr.SpatialReference()
     srs.ImportFromEPSG(epsg)
@@ -1053,7 +1243,153 @@ def write_geotiff(data, epsg, x_min, y_max, pixel_size, outputfile,
     if nodata:
         dataset.GetRasterBand(1).SetNoDataValue(nodata)
     dataset.FlushCache()
+
+
+def write_mat(file_mat, data, datasets, debug=0):
+
+  """
+  Function to write .mat files from 1D numpy arrays
+  Input:
+    file_mat - full path of output .mat file
+    data - list of numpy arrays of data
+      i.e. [x, y, z], where x, y, and z are numpy arrays, not necessarily of same size
+      x, y, z must be (1D arrays) of dimensions (n,1) or (n,) where n is number of elements
+    datasets - list of descriptions for each data
+      i.e. for x, y, and z, we have datasets = ['along', 'across', 'height']
+      Note that datasets must contain variable names allowed in MATLAB
+
+    Note that data types are maintained.
+
+  Output:
+    .mat file with file_mat name
+
+  Example:
+    # load in atl03Data, import icesatIO functions
+    OUT_DIR = '.'
+    file_mat = OUT_DIR + '/test.mat'
+    datasets = ['class','signal_conf','along_track','z']
+    data = [atl03Data.classification, atl03Data.signalConf, atl03Data.alongTrack, atl03Data.z]
+    write_mat(file_mat, data, datasets, debug=1)
+
+  """
+
+  from scipy.io import savemat
+
+  def valid_variable_name(name):
+
+    import string
+    allowed_char = list(string.ascii_lowercase) + \
+                    list(string.ascii_uppercase) + \
+                    list(string.digits) + ['_']
+
+    matlab_keywords = [
+    'break',
+    'case',
+    'catch',
+    'classdef',
+    'continue',
+    'else',
+    'elseif',
+    'end',
+    'for',
+    'function',
+    'global',
+    'if',
+    'otherwise',
+    'parfor',
+    'persistent',
+    'return',
+    'spmd',
+    'switch',
+    'try',
+    'while']
+
+    # must start with a letter or underscore
+    # cannot start with a number
+    name_lower = name.lower()
+    if name_lower[0].islower() or name[0] == '_':
+      # cannot be a matlab keyword
+      if not (name in matlab_keywords):
+        # must contain only ascii letters, digits, and underscores
+        c = 0
+        for char in name:
+          if char in allowed_char:
+            c += 1
+
+        if c == len(name):
+          return True
+
+    return False
+
+  err = False
+  for name in datasets:
+    if not valid_variable_name(name):
+      err = True
+      print('error: \"%s\" is an invalid MATLAB variable name' % name)
+      break
+
+  n_datasets = len(datasets)
+  n_data = len(data)
+  if n_datasets != n_data and not err:
+    print('error: n_datasets != n_data')
+    err = True
+
+  if n_datasets == 0 and not err:
+    print('error: len(datasets) == 0')
+    err = True
+
+  if type(datasets) != list or type(data) != list and not err:
+    print('error: type(datasets) != list or type(data) != list')
+    err = True
+
+  valid = 0
+  if not err:
+    data_out = {}
     
+    for k in range(n_datasets):
+      d = data[k]
+      
+      if type(d) == list:
+        u = np.unique(['%s' % type(val) for val in d])
+        if len(u) == 1:
+          d = np.array(d).astype(type(d[0]))
+        else:
+          print('error: inconsistent datatypes in \"%s\"' % datasets[k])
+          break
+        # endIf
+      # endIf
+      
+      if(not(isinstance(d,str))):
+          if len(d.shape) == 1:
+            d = np.c_[d]
+          elif len(d.shape) > 1:
+            if not (d.shape[1] == 1):
+              print('error: \"%s\" must be of (n>0,1) or (n>0,) dimensions' % datasets[k])
+              break
+          elif len(d.shape) == 0:
+            print('error: \"%s\" must be of (n>0,1) or (n>0,) dimensions' % datasets[k])
+            break
+
+          if d.shape[0] < 1:
+            print('error: \"%s\" must be of (n>0,1) or (n>0,) dimensions' % datasets[k])
+            break
+      # endIf
+      
+      data_out[datasets[k]] = data[k]
+      valid += 1
+    #endFor
+    
+  if valid == n_datasets:
+    savemat(file_mat, data_out)
+    if debug:
+      print('file written:')
+      print(file_mat)
+  else:
+    if debug:
+      print('file not written:')
+      print(file_mat)
+
+
 def calculateangle(x1,x2,y1,y2):
     if (x2 - x1) == 0:
         slope = np.inf
@@ -1171,7 +1507,7 @@ def createShapefiles(xx, yy, width, height, epsg, outfile = "atl08.shp"):
     # Save and close everything
     ds = layer = feat = geom = None    
     
-def read_geotiff(file):
+def read_geotiff(file, read_raster=False):
     # Open DEM
     ds = gdal.Open(file)
     
@@ -1185,15 +1521,26 @@ def read_geotiff(file):
     ulx = gt[0]
     resx = gt[1]
     uly = gt[3]
-    resy = gt[5]
+    resy = gt[5] # usually negative
+
+    x_offset = 0.0
+    y_offset = 0.0
+    if read_raster:
+      # opposite of write_geotiff
+      x_offset = resx/2.0
+      y_offset = -abs(resy)/2.0
+      # y_offset = resy/2.0
+
+    ulx += x_offset
+    uly += y_offset
     
     # Check GT[2] and GT[4] are 0, if not, throw warning
     if gt[2] != 0 or gt[4] != 0:
         print('WARNING: CASE NOT ACCOUNTED')
     
     # Check if resolution for X and Y are the same
-    if np.abs(resx) != np.abs(resy):
-        print('WARNING: Unequal X-Y Pixel Size')
+    # if np.abs(resx) != np.abs(resy):
+    #     print('WARNING: Unequal X-Y Pixel Size')
     
     # Get EPSG Code
     proj = osr.SpatialReference(wkt=ds.GetProjection())
@@ -1229,3 +1576,17 @@ def find_intersecting_values(x,y,data,ulx,uly,resx,resy):
 
 if __name__ == "__main__":
     print("Test")
+    
+    
+### Function to write console and .log messages
+def writeLog(message, fileID=False):
+    
+    # Print message to screen
+    print(message)
+        
+    # Print message to .log file
+    if(fileID):   
+        print(message, file=fileID)
+    # endIf
+    
+# endDef
