@@ -1,7 +1,250 @@
 
 import numpy as np
-import icesatUtils as it
+import icesatUtils as iu
 
+
+
+def index_1d_pd(x, bins):
+    import pandas as pd
+    df = pd.DataFrame({'x': x})
+    edges = [b[0] for b in bins] + [bins[-1][1]]
+    df['x_range'] = pd.cut(df['x'], edges)
+    d = df.groupby('x_range').indices
+    x_index = []
+    for i, key in enumerate(d):
+        index = d[key]
+        if len(index) > 0:
+            x_index.append([i, index])
+
+    return x_index
+
+
+def bin_linear(x, bins, loading_bar=False):
+    return index_1d(x, bins, loading_bar)
+
+def index_1d(x, bins, loading_bar=False):
+
+    """
+    Function to support variable binning in 1d.
+
+    Meant to be used in combination with bin_1d.
+    Bins are created with bin_1d, but useful bin
+    indices are made by this function.
+
+    Input:
+        x - array to be indexed
+        bins - array of start/end times/locations,
+                such as [[-1,1],[1,3],[3,5],...]
+
+    Output:
+        a bin index for every x value, so,
+        for instance, given bins
+        [[-1,1],[1,3],[3,5]], and x is
+        np.linspace(-1,5), then all x values
+        within [-1,1] will be given a value of
+        0, all x-values within [1,3] are given
+        a value of 1, and all x-values within
+        [3,5] are given a value of 2, such as
+
+        [0,0,0,...,1,1,1,...,2,2,2]
+
+    Example:
+        # print values of x within bins
+        # defined by A
+
+        import region_detect as rd
+        import numpy as np
+
+        A = [0,2,4,6,8]
+        x = np.linspace(0,10)
+        bins = rd.bin_1d(A,2)
+        index = rd.index_1d(x,bins)
+        for i in sorted(np.unique(index)):
+            if i != -1:
+                b = index == i
+                print(x[b])
+
+
+    Caveats:
+        For cases when x is exactly equal to
+        bin edges, the index will favor the
+        left side of the bin. i.e.,
+
+        import region_detect as rd
+        import numpy as np
+        A = [0,2,4,6,8]
+        x = np.arange(10)
+        bins = rd.bin_1d(A,2)
+        index = rd.index_1d(x,bins)
+        print(index)
+        print(x)
+
+        -1 is assigned to values of x that
+        do not fall in a bin
+
+        Function does not handle nans
+
+    """
+
+    # import pandas as pd
+    # df = pd.DataFrame({'x': x})
+    # edges = [b[0] for b in bins] + [bins[-1][1]]
+    # df['x_range'] = pd.cut(df['x'], edges)
+    # d = df.groupby('x_range').indices
+    # x_index = []
+    # for i, key in enumerate(d):
+    #     index = d[key]
+    #     if len(index) > 0:
+    #         x_index.append([i, index])  
+
+
+
+    if np.isnan(x).any():
+        raise ValueError('nans cannot exist in x')
+
+    index_s = np.argsort(x)
+    index_s_rev = np.argsort(index_s)
+    x_s = x[index_s]
+
+    if ((x_s[index_s_rev] - x) != 0.0).any():
+        # check that x_s is increasing, and sorting
+        # is reversible
+        raise ValueError('indexing error')
+
+    n = len(x_s)
+    iterator = range(n)
+    if loading_bar:
+        from tqdm import tqdm
+        iterator = tqdm(range(n))
+
+    i_index_s = np.full(n,-1).astype(int)
+    in_reg = 0 # in region
+    i = 0 # bin index
+    for j in iterator:
+        if bins[i][0] <= x_s[j] <= bins[i][1]:
+            # i_index_s[index_s_rev[j]] = i
+            i_index_s[j] = i
+            in_reg = 1
+
+        else:
+            if in_reg:
+                in_reg = 0
+                if i < len(bins)-1:
+                    i += 1
+                    if bins[i][0] <= x_s[j] <= bins[i][1]:
+                        # i_index_s[index_s_rev[j]] = i
+                        i_index_s[j] = i
+                else:
+                    break
+
+            else:
+                # skipped over region
+                while x_s[j] > bins[i][1]:
+                    if i < len(bins)-1:
+                        i += 1
+                    else:
+                        break
+
+    i_index = i_index_s[index_s_rev]
+
+    return i_index
+
+
+def bin_reg(A, dx, safety_factor=1.5, check_overlap=False):
+    return bin_1d(A, dx, safety_factor, check_overlap)
+
+def bin_1d(A, dx, safety_factor=1.5, check_overlap=False):
+
+    """
+    Function to create variable 1d binning.
+
+    This works similar to find_region, except that
+    this bins exact lengths, based on the separation
+    in values of A. For example,
+        A = [0,2,4,6,8,...]
+        dx = 2 ,
+        bin_reg will output
+            [[-1,1],[1,3],[3,5],[5,7],[7,9],...]
+    The advantage is that, if values were unevenly
+    spaced (as in ATL08), then one could set
+        A = df_08['alongtrack']
+        dx = 100 # meters
+        bin_reg() will make 1d regions of nearly
+            100m length; dx is more for what happens
+            when values are truly spaced much further
+            than 100m
+
+    Input:
+        A - numpy array, already increasing
+        dx - some nominal change in A values
+        safety_factor - if a change in A far exceeds
+                        the given dx, then the binning code
+                        will simply bin that as if it were
+                        a 1km ATL08 bin; we know that not
+                        to be the case, but we know the
+                        upper limit of 08 bins to be around
+                        105m(?). So, one can set this
+                        to specify what the error might be.
+        check_overlap - bins should never overlap (up to roundoff),
+                        so this performs an additional check to
+                        ensure this is the case, and notifies the
+                        user otherwise
+
+    Output:
+        binned regions,
+        return bin_dim
+
+    """
+    def check_bin_overlap(bins, tag, loading_bar=False, tol=1e-6):
+
+        print('checking bin overlap for %s..' % tag)
+        iterator = range(len(bins))
+        if loading_bar and tqdm_found:
+            from tqdm import tqdm
+            iterator = tqdm(range(len(bins)))
+
+        # for i, bin1 in enumerate(bins):
+        for i in iterator:
+            bin1 = bins[i]
+            for j, bin2 in enumerate(bins):
+                if i == j:
+                    continue
+                # bin1, bin2 = list(np.round(bin1,8)), list(np.round(bin2,8))
+                reg = rd.inner_region(bin1, bin2, equal=False)
+                if reg != []:
+                    if reg[1]-reg[0] < tol:
+                        continue
+                    print('warning: %s overlap' % tag)
+                    print(i, bin1)
+                    print(j, bin2)
+                    print(reg)
+                    iu.pause()
+
+
+    if (np.diff(A) < 0.0).any():
+        print('warning: x decreasing')
+
+    if dx <= 0:
+        print('warning: dx < 0')
+
+    A = np.append(min(A) - dx, A)
+    A = np.append(A, max(A) + dx)
+
+    dx_lim = safety_factor*dx
+    bin_dim = []
+    for j in range(1,len(A)-1):
+        da1 = A[j] - A[j-1]
+        da2 = A[j+1] - A[j]
+        if da1 > dx_lim:
+            da1 = dx_lim
+        if da2 > dx_lim:
+            da2 = dx_lim
+        bin_dim.append([A[j] - da1/2.0, A[j] + da2/2.0])
+
+    if check_overlap:
+        check_bin_overlap(bin_dim, 'debug', loading_bar=True, tol=1e-6)
+
+    return bin_dim
 
 def calc_overlap(x1, x2, dx, dx_overlap=0.0, dx2=None):
     """
@@ -546,7 +789,7 @@ def est_dx(x, rtn_s=False, IQR_factor=1.5, debug=0):
         return 0
 
 
-    Q1,Q2,Q3,IQR = it.get_outlier_data(dx_range)
+    Q1,Q2,Q3,IQR = iu.get_outlier_data(dx_range)
     dx_range_red = []
 
     # assumes dx_range to have all positive values

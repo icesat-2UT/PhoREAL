@@ -598,7 +598,7 @@ def identifyEPSG(hemi,zone):
         outstring = ''
         print('error')
     
-    outstring = outstring + (str(zone))
+    outstring = outstring + (str(zone).zfill(2))
     
     return outstring
 
@@ -661,7 +661,10 @@ def getLatLon2UTM(*args):
         # endif
         
         # Call transform function
-        xx, yy = transform(epsg_in, epsg_out, lon, lat)
+        if len(lon) > 0 and len(lat) > 0:
+            xx, yy = transform(epsg_in, epsg_out, lon, lat)
+        else:
+            xx, yy = np.array([]), np.array([])
 
     else:
         
@@ -1049,7 +1052,8 @@ def getRaster_legacy(x, y, z, resolution, method, fillValue = -999, time = [], x
 
 
 ##### Function to grid point cloud data
-def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArray = [], yAllArray = []):
+def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArray = [], yAllArray = [],
+                origin=None):
     
     # USER INPUTS
     # ---------------------------
@@ -1125,8 +1129,14 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     # EndIf
             
     # Round all incoming X,Y data
+    # if type(origin) == type(None):
     xRnd = (np.round(x/xResolution)*xResolution).astype(int)
     yRnd = (np.round(y/yResolution)*yResolution).astype(int)
+    # else:
+    #     x_corner, y_corner = origin[0], origin[1]
+    #     xRnd = np.floor((x - x_corner) / xResolution).astype(int)
+    #     yRnd = np.floor((y - y_corner) / yResolution).astype(int)
+    #     # yRnd = np.floor(-(y - y_corner) / res_y).astype(int)
     
     # Get output X,Y grid cells
     if(any(xAllArray) and any(yAllArray)):
@@ -1168,11 +1178,20 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     zValsNew = np.array(groupedData['z_agg'])
     
     # Determine new row, column indices to place rastered Z data into
+    # if discrete_res:
     df_xRnd_min = np.min(groupedData['xRnd'])
     df_yRnd_min = np.min(groupedData['yRnd'])
     colIndsNew = ((np.array(groupedData['xRnd']) - df_xRnd_min)/xResolution).astype(int)
     rowIndsNew = ((np.array(groupedData['yRnd']) - df_yRnd_min)/yResolution).astype(int)
-    
+
+    # else:
+    #     xRndRange = np.arange(min(xRnd), max(xRnd)+1, 1)
+    #     yRndRange = np.arange(min(yRnd), max(yRnd)+1, 1)
+    #     xRnd0 = xRndRange[0] # min(xRnd)
+    #     yRnd0 = yRndRange[0] # min(yRnd)
+    #     colIndsNew = np.array(groupedData['xRnd'] - xRnd0).astype(int)
+    #     rowIndsNew = np.array(groupedData['yRnd'] - yRnd0).astype(int)
+
     # Populate rastered Z data into array
     rasterDataZ[rowIndsNew, colIndsNew] = zValsNew
     rasterDataZ = np.flipud(rasterDataZ)
@@ -1860,9 +1879,372 @@ def get_outlier_data(data):
     IQR = Q3-Q1
     return Q1,Q2,Q3,IQR
 
+def get_root_dir(dir_type=None, username=None, debug=0):
+
+    """
+    This function outputs directories relative to GLAM operatives.
+
+    Input:
+        dir_type - either 'data' or 'user', optional
+        username - the function will attempt to detect the username
+                    of the person that called it, but if you'd like
+                    to manually specify, the option is there
+        debug - optionally prints out the username the function detects
+
+    Output:
+        if dir_type is None:
+            returns [data, user] root directories, relative to user
+        elif dir_type is 'data':
+            returns only data
+        elif dir_type is 'user':
+            returns only user
+
+    Example:
+        import icesatUtils as iu
+        USER_ROOT, DATA_ROOT = iu.get_root_dir()
+        USER_JSIPPS = iu.get_root_dir(dir_type='user', username='jsipps')
+
+    """
+
+    dirs = {'jsipps': ['/LIDAR/server/poseidon_files/USERS/jsipps', '/bigtex_data'],
+            'malonzo': ['N:\\USERS\\mike', 'Z:'],
+            'eguenther': ['/LIDAR/server/USERS/eric', '/laserpewpew'],
+            'jmarkel': ['/LIDAR/server/USERS/jmarkel', '/laserpewpew'],
+            'hleigh': ['L:\\USERS\\holly', 'N:']}
+
+    # get or format username
+    import pwd
+    if type(username) == type(None):
+        username = pwd.getpwuid(os.getuid()).pw_name
+        if debug:
+            print('username: %s' % username)
+    username = username.lower()
+
+    # get or format directory type
+    #   user or data
+    dir_types = {'user': 0, 'data': 1}
+    if type(dir_type) != type(None):
+        if type(dir_type) != str:
+            dir_type = str(dir_type)
+        dir_type = dir_type.lower()
+        if dir_type in dir_types:
+            i = dir_types[dir_type]
+        else:
+            keys = [key for key in dir_types.keys()]
+            raise KeyError(dir_type + ' directory type unknown. Try one of', keys)
+
+    # return directory
+    if username in dirs:
+        if type(dir_type) == type(None):
+            return dirs[username]
+        else:
+            return dirs[username][i]
+
+    else:
+        keys = [key for key in dirs.keys()]
+        raise KeyError('username ' + username + ' not found in', keys)
+
 def reload(module):
     import imp
     imp.reload(module)
+
+
+def get_sc_orient(file, delta_time=None):
+    """
+    Takes in any h5 file, but 03 and 08 should have
+    the orbit_info group. If not, this function raises
+    a KeyError.
+
+    Outputs an array of sc_orient values, dependent on
+    delta_time, unless delta_time is not specified, in
+    which case it just outputs the sc_orient and sc_orient_time
+    datasets, which are typically one element in length.
+    """
+
+    INT_MAX = np.iinfo(int).max
+    group = 'orbit_info'
+    datasets = [group + '/sc_orient', group + '/sc_orient_time']
+
+    found = False
+    with h5py.File(file, 'r') as fp:
+        if datasets[0] in fp and datasets[1] in fp:
+            sc_orient = np.array(fp[datasets[0]]).astype(int)
+            sc_orient_time = np.array(fp[datasets[1]])
+            found = True
+
+    if found:
+        if type(delta_time) != type(None):
+            n = len(delta_time)
+            sc_orient_arr = np.full(n, INT_MAX)
+            for k, t0 in enumerate(sc_orient_time):
+                b = delta_time >= t0
+                sc_orient_arr[b] = sc_orient[k]
+
+            return sc_orient_arr
+
+        else:
+            return sc_orient, sc_orient_time
+
+    else:
+        raise KeyError('could not find [%s or %s]' % (datasets[0], datasets[1]))
+
+
+def get_beam_info(sc_orient_arr, gt):
+    """
+    Takes as input the sc_orient at every sample
+    and a ground track; outputs what beam number
+    and beam type should be at these samples.
+
+    beam_number of -1 is assigned if sc_orient 
+    value is unknown, such as 2 (during yaw-flip)
+    and any other value.
+
+    beam_type is set to unknown is sc_orient
+    value is unknown.
+    """
+
+    n = len(sc_orient_arr)
+    s0 = sc_orient_arr == 0
+    s1 = sc_orient_arr == 1
+
+    beam_type = np.full(n,'unknown')
+    beam_number = np.full(n,-1)
+    if gt == 'gt1r':
+        beam_number[s0] = 2
+        beam_number[s1] = 1
+        beam_type[s0] = 'weak'
+        beam_type[s1] = 'strong'
+
+    elif gt == 'gt2r':
+        beam_number[s0] = 4
+        beam_number[s1] = 3
+        beam_type[s0] = 'weak'
+        beam_type[s1] = 'strong'
+
+    elif gt == 'gt3r':
+        beam_number[s0] = 6
+        beam_number[s1] = 5
+        beam_type[s0] = 'weak'
+        beam_type[s1] = 'strong'
+
+    elif gt == 'gt1l':
+        beam_number[s0] = 1
+        beam_number[s1] = 2
+        beam_type[s0] = 'strong'
+        beam_type[s1] = 'weak'
+
+    elif gt == 'gt2l':
+        beam_number[s0] = 3
+        beam_number[s1] = 4
+        beam_type[s0] = 'strong'
+        beam_type[s1] = 'weak'
+
+    elif gt == 'gt3l':
+        beam_number[s0] = 5
+        beam_number[s1] = 6
+        beam_type[s0] = 'strong'
+        beam_type[s1] = 'weak'
+
+    return beam_number, beam_type
+
+
+def calc_rdm_segment(t, c, segment_id_beg, segment_id_end, segment_id, ph_index_beg, segment_ph_cnt, debug=0):
+
+    """
+    Function to calculate radiometry (rdm)
+
+    Input:
+        t - time or delta_time of ATL03, for a given gt num
+        c - classification of ATL03 for a given gt num
+            ensure that no nans exist
+        segment_id_beg - segment_id_beg from ATL08
+        segment_id_end - segment_id_end from ATL08
+        segment_id - segment_id from ATL03 geolocation/
+        ph_index_beg - ph_index_beg from ATL03 geolocation/
+        segment_ph_cnt - segment_ph_cnt from ATL03 geolocation/
+        debug - val != 0 enables print statements if segments
+                do not match from 03 to 08 (see caveats)
+
+    Output:
+        n_shots_unique - total number of unique ttg per ATL08 100m bin
+        rdm_ground - rdm of ground photons (c==1)
+        rdm_veg - rdm of veg photons (c==2)
+        rdm_canopy - rdm of canopy photons (c==3)
+
+    Example:
+        n_shots_unique, rdm_ground, rdm_veg, rdm_canopy = \
+            calc_rdm(t, c, segment_id_beg, segment_id_end, ph_index_beg, segment_ph_cnt, debug=0)
+
+    Caveats:
+        Ensure that no nans exist in classification c
+
+        rdm_ground/veg/canopy and n_shots_unique are floating point
+        b/c it's possible to have no overlap in 03 and 08 data, in
+        which case the radiometry value is NaN; this is implemented by
+        initializing rdm vectors are NaN. Thus, they are floating-point-
+        valued.
+
+        This functions can handle when 03/08 do not totally overlap,
+        or when there is no overlap. That said, one should proceed with
+        caution knowing 03 and 08 do not overlap at all. NaN values are
+        initialized in rdm vectors based on these cases.
+
+    """
+
+    if np.isnan(c).sum() > 0 and debug:
+        print('warning: NaN values found in c')
+
+    rdm_ground = np.full(segment_id_beg.shape, np.nan)
+    rdm_veg = np.full(segment_id_beg.shape, np.nan)
+    rdm_canopy = np.full(segment_id_beg.shape, np.nan)
+    n_shots_unique = np.full(segment_id_beg.shape, np.nan)
+    
+    n_id = len(segment_id)
+    for s in range(len(segment_id_beg)):
+        _, k0 = iu.getClosest(segment_id, [segment_id_beg[s]])
+        _, k1 = iu.getClosest(segment_id, [segment_id_end[s]])
+        k0, k1 = int(k0), int(k1)
+        
+        warn = False
+        b_edge = False
+        if segment_id[k0] < segment_id_beg[s]:
+            # left side incomplete
+            # cm.pause('beg')
+            k = k0
+            while segment_id[k] < segment_id_beg[s]:
+                k += 1
+                if k >= n_id:
+                    b_edge = True
+                    break
+
+        elif segment_id[k0] > segment_id_beg[s]:
+            # print('warning: 03 seg id beg %d > 08 seg id beg %d' % (segment_id[k0], segment_id_beg[s]))
+            warn = True
+
+        # else:
+            # equal, totally fine
+
+        # if segment_id[k1] != segment_id_end[s]:
+        if segment_id[k1] > segment_id_end[s]:
+            # right side incomplete
+            # cm.pause('end')
+            k = k1
+            while segment_id[k] > segment_id_end[s]:
+                k -= 1
+                if k < 0:
+                    b_edge = True
+                    break
+
+        elif segment_id[k1] < segment_id_end[s]:
+            # print('warning: 03 seg id beg %d < 08 seg id beg %d' % (segment_id[k0], segment_id_beg[s]))
+            warn = True
+
+        # else:
+            # equal, totally fine
+
+        if b_edge and debug:
+            # 08 segment is entirely outside of 03 segment data
+            print('outside')
+            print('03: [%d, %d]' % (segment_id[k0], segment_id[k1]))
+            print('08: [%d, %d]' % (segment_id_beg[s], segment_id_end[s]))
+            # cm.pause()
+            input('enter to continue')
+            continue
+
+        if warn and debug:
+            print('partial')
+            print('03: [%d, %d]' % (segment_id[k0], segment_id[k1]))
+            print('08: [%d, %d]' % (segment_id_beg[s], segment_id_end[s]))
+            # cm.pause()
+            input('enter to continue')
+
+        i0, i1 = ph_index_beg[k0], ph_index_beg[k1] + segment_ph_cnt[k1] - 1
+
+        t_seg = t[i0:i1+1] # inclusive index
+        c_seg = c[i0:i1+1]
+
+        n_shots_total_uq = len(np.unique(t_seg))
+        n_shots_ground = (c_seg == 1).sum()
+        n_shots_veg = (c_seg == 2).sum()
+        n_shots_canopy = (c_seg == 3).sum()
+
+        n_shots_unique[s] = n_shots_total_uq
+        rdm_ground[s] = float(n_shots_ground / n_shots_total_uq)
+        rdm_veg[s] = float(n_shots_veg / n_shots_total_uq)
+        rdm_canopy[s] = float(n_shots_canopy / n_shots_total_uq)
+
+    return n_shots_unique, rdm_ground, rdm_veg, rdm_canopy
+
+
+def unit(v):
+    mag = np.linalg.norm(v)
+    return np.array([vi/mag for vi in v])
+
+def df_to_np(df, *args):
+    rtn = []
+    for var in args:
+        rtn.append(np.array(df[var]))
+    return rtn
+
+def downsample(Fs_ds, t, *data):
+    """
+    Input:
+        Fs_ds - downsampled new frequency
+        t - time-series
+        *data - one or multiple args to be
+                downsampled along with t
+
+    Output:
+        t_ds - downsampled time-series
+        n_ds - len(t_ds)
+        data_out - one or multiple args
+
+    Example:
+        dt_ds = 1.0 # sec
+        Fs_ds = 1.0 / dt_ds
+        t_ds, n_ds, (arg1, arg2, ...) = downsample(Fs_ds, t, arg1, arg2, ...)
+
+    """
+
+    dt_ds = 1.0 / Fs_ds # sec
+    tol = 0.01*dt_ds
+    t_ds = []
+    data_ds = []
+    data_new = []
+    num_y = len(data)
+    for y in data:
+        data_new.append([])
+
+    n = len(t)
+    t_prev = t[0]
+    for j in range(1,n):
+        if abs(t[j] - t_prev) > dt_ds-tol:
+            t_ds.append(t[j])
+            for i in range(num_y):
+                data_new[i].append(data[i][j])
+            t_prev = t[j]
+
+    n_ds = len(t_ds)
+
+    # if rtn_numpy:
+    if 1:
+        t_ds = np.array(t_ds)
+        for i in range(num_y):
+            data_new[i] = np.array(data_new[i])
+
+    data_out = tuple(data_new)
+
+    if len(data_out) > 1:
+        return t_ds, n_ds, data_out
+    else:
+        return t_ds, n_ds, data_out[0]
+
+
+def b_filt(b, *args):
+    arr_new = []
+    for arr in args:
+        arr_new.append(arr[b])
+    return arr_new
 
 
 if __name__ == "__main__":

@@ -336,7 +336,7 @@ def get_atl_alongtrack(df, atl03struct = None):
         df = pd.concat([df,pd.DataFrame(alongTrack,
                                         columns=['alongtrack'])],axis=1)
     else:
-        print('Warning: Overwritting Existing Alongtrack/Crosstrack')
+        print('Warning: Overwriting Existing Alongtrack/Crosstrack')
         df = df.drop(columns = ['crosstrack'])
         df = df.drop(columns = ['alongtrack'])
         df = pd.concat([df,pd.DataFrame(crossTrack,
@@ -675,6 +675,14 @@ def read_pickle(filename):
     data = pickle.load(fp)
     fp.close()
     return data
+
+def convert_df_to_mat(df,outfilename):
+    from scipy import io
+    comps =  outfilename.split('.')
+    if comps[-1] != 'mat':
+        outfilename = outfilename + ".mat"
+    # scipy.io.savemat(outfilename, {'struct':df.to_dict("list")})
+    io.savemat(outfilename, {'struct':df.to_dict("list")})
 
     
 if __name__ == "__main__":    
