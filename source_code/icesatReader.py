@@ -31,6 +31,7 @@ from icesatUtils import wgs84_to_utm_find_and_transform
 from icesatUtils import wgs84_to_epsg_transform
 from icesatUtils import getCoordRotFwd
 from icesatUtils import getNameParts
+from icesatUtils import get_h5_meta
 from icesatIO import readTruthRegionsTxtFile
 from icesatUtils import identify_hemi_zone
 from icesatIO import writeLas
@@ -683,7 +684,43 @@ def convert_df_to_mat(df,outfilename):
         outfilename = outfilename + ".mat"
     # scipy.io.savemat(outfilename, {'struct':df.to_dict("list")})
     io.savemat(outfilename, {'struct':df.to_dict("list")})
+    
+def get_attribute_info(atlfilepath, gt):
+    # add year/doy, sc_orient, beam_number/type to 08 dataframe
+    year, doy = get_h5_meta(atlfilepath, meta='date', rtn_doy=True)
 
+    with h5py.File(atlfilepath, 'r') as fp:
+        try:
+            fp_a = fp[gt].attrs
+            description = (fp_a['Description']).decode()
+            beam_type = (fp_a['atlas_beam_type']).decode()
+            atlas_pce = (fp_a['atlas_pce']).decode()
+            spot_number = (fp_a['atlas_spot_number']).decode()
+            atmosphere_profile = (fp_a['atmosphere_profile']).decode()
+            groundtrack_id = (fp_a['groundtrack_id']).decode().lower()
+            sc_orient = (fp_a['sc_orientation']).decode().lower()
+        except:
+            description = ''
+            beam_type = ''
+            atlas_pce = ''
+            spot_number = ''
+            atmosphere_profile = ''
+            groundtrack_id = ''
+            sc_orient = ''
+    info_dict = {
+        "description" : description,
+        "atlas_beam_type" : beam_type,
+        "atlas_pce" : atlas_pce,
+        "atlas_spot_number" : spot_number,
+        'atmosphere_profile' : atmosphere_profile,
+        "groundtrack_id" : groundtrack_id,
+        "sc_orientation" : sc_orient,
+        "year" : year,
+        "doy" : doy
+
+        }
+    
+    return info_dict
     
 if __name__ == "__main__":    
     if os.name == 'nt':
@@ -719,4 +756,4 @@ if __name__ == "__main__":
                                        fields = ['segment_id'])
     
     print('Convert ATL03 Struct to Legacy ATL03 Struct')
-    atl03legacy, rotationData, headerData = convert_atl03_to_legacy(atl03)
+    # atl03legacy, rotationData, headerData = convert_atl03_to_legacy(atl03)

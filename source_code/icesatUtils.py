@@ -15,7 +15,7 @@ Authors:
 Date: September 20, 2019
 """
 
-# Import modules
+# Import Python modules
 import numpy as np
 import sys
 import os
@@ -28,6 +28,8 @@ import ctypes
 from numpy.ctypeslib import ndpointer 
 import copy
 from osgeo import ogr
+
+# Import ICESat-2 modules
 from gui_addins import (superFilterFile_windows, superFilterFile_linux)
 
 EPSG_ARCTIC = '3413'
@@ -2101,8 +2103,10 @@ def calc_rdm_segment(t, c, segment_id_beg, segment_id_end, segment_id, ph_index_
     
     n_id = len(segment_id)
     for s in range(len(segment_id_beg)):
-        _, k0 = iu.getClosest(segment_id, [segment_id_beg[s]])
-        _, k1 = iu.getClosest(segment_id, [segment_id_end[s]])
+#        _, k0 = iu.getClosest(segment_id, [segment_id_beg[s]])
+#        _, k1 = iu.getClosest(segment_id, [segment_id_end[s]])
+        _, k0 = getClosest(segment_id, [segment_id_beg[s]])
+        _, k1 = getClosest(segment_id, [segment_id_end[s]])
         k0, k1 = int(k0), int(k1)
         
         warn = False
@@ -2209,7 +2213,7 @@ def downsample(Fs_ds, t, *data):
     dt_ds = 1.0 / Fs_ds # sec
     tol = 0.01*dt_ds
     t_ds = []
-    data_ds = []
+    # data_ds = []
     data_new = []
     num_y = len(data)
     for y in data:
@@ -2247,5 +2251,6 @@ def b_filt(b, *args):
     return arr_new
 
 
+
 if __name__ == "__main__":
-    print("Test")
+    print("Test")    

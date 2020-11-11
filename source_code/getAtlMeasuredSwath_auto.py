@@ -21,16 +21,19 @@ import numpy as np
 import time as runTime
 from icesatIO import (readAtl03H5, readAtl08H5, 
                       readAtl03DataMapping, readAtl08DataMapping, 
-                      readTruthRegionsTxtFile, readHeaderMatFile, 
-                      writeLas, writeKml, writeArrayToCSV)
+                      readTruthRegionsTxtFile, 
+                      writeLas, writeKml, writeArrayToCSV, writeLog)
 from icesatUtils import (getNameParts, getAtl08Mapping, getLatLon2UTM, 
                          getCoordRotFwd, getClosest)
-        
 
 class atl03Struct:
         
     # Define class with designated fields
-    def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_time, atl03_signalConf, atl03_classification, atl03_intensity, gtNum, zone, hemi, kmlRegionName, headerFilePath, truthFilePath, atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
+    def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, 
+                 atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_time, atl03_deltaTime,
+                 atl03_signalConf, atl03_classification, atl03_intensity, 
+                 gtNum, zone, hemi,
+                 atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
             
         self.lat = np.c_[atl03_lat]
         self.lon = np.c_[atl03_lon]
@@ -40,15 +43,13 @@ class atl03Struct:
         self.alongTrack = np.c_[atl03_alongTrack]
         self.z = np.c_[atl03_z]
         self.time = np.c_[atl03_time]
+        self.deltaTime = np.c_[atl03_deltaTime]
         self.signalConf = np.c_[atl03_signalConf]
         self.classification = np.c_[atl03_classification]
         self.intensity = np.c_[atl03_intensity]
         self.gtNum = gtNum
         self.zone = zone
         self.hemi = hemi
-        self.kmlRegionName = kmlRegionName
-        self.headerFilePath = headerFilePath
-        self.truthFilePath = truthFilePath
         self.atl03FilePath = atl03FilePath
         self.atl03FileName = atl03FileName
         self.trackDirection = trackDirection
@@ -69,7 +70,13 @@ class atl03Struct:
 class atl08Struct:
         
     # Define class with designated fields
-    def __init__(self, atl08_lat, atl08_lon, atl08_easting, atl08_northing, atl08_crossTrack, atl08_alongTrack, atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, atl08_time, atl08_signalConf, atl08_classification, atl08_intensity, gtNum, zone, hemi, kmlRegionName, headerFilePath, truthFilePath, atl08FilePath, atl08FileName, trackDirection, alt08h5Info, dataIsMapped):
+    def __init__(self, atl08_lat, atl08_lon, atl08_easting, atl08_northing, 
+                 atl08_crossTrack, atl08_alongTrack, 
+                 atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, 
+                 atl08_time, atl08_deltaTime,
+                 atl08_signalConf, atl08_classification, atl08_intensity, 
+                 gtNum, zone, hemi, 
+                 atl08FilePath, atl08FileName, trackDirection, alt08h5Info, dataIsMapped):
             
         self.lat = np.c_[atl08_lat]
         self.lon = np.c_[atl08_lon]
@@ -81,15 +88,13 @@ class atl08Struct:
         self.teBestFit = np.c_[atl08_teBestFit]
         self.teMedian = np.c_[atl08_teMedian]
         self.time = np.c_[atl08_time]
+        self.deltaTime = np.c_[atl08_deltaTime]
         self.signalConf = np.c_[atl08_signalConf]
         self.classification = np.c_[atl08_classification]
         self.intensity = np.c_[atl08_intensity]
         self.gtNum = gtNum
         self.zone = zone
         self.hemi = hemi
-        self.kmlRegionName = kmlRegionName
-        self.headerFilePath = headerFilePath
-        self.truthFilePath = truthFilePath
         self.atl08FilePath = atl08FilePath
         self.atl08FileName = atl08FileName
         self.trackDirection = trackDirection
@@ -119,12 +124,16 @@ class atlRotationStruct:
         self.phi = phi
         
 
-def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePath = False, gtNum = 'gt1r', trimInfo = 'auto', createAtl03LasFile = False, createAtl03KmlFile = False, createAtl08KmlFile = False, createAtl03CsvFile = False, createAtl08CsvFile = False):
+def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, 
+                        outFilePath = False, gtNum = 'gt1r', trimInfo = 'auto', 
+                        createAtl03LasFile = False, createAtl03KmlFile = False, 
+                        createAtl08KmlFile = False, createAtl03CsvFile = False, 
+                        createAtl08CsvFile = False, logFileID = False):
+                        # pklHeaderFile = None, LAS_DIR = None):
     
     # Initialize outputs
     atl03Data = False
     headerData = False
-    coordType = False
     rotationData = False
     
     # Initialize ATL08 data
@@ -141,7 +150,12 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
     atl08_alongTrack = []
     atl08_classification = []
     atl08_intensity = []
-                    
+
+    # pklHeader = False
+    # if type(pklHeaderFile) != type(None):
+    #     pklHeader = True
+    #     if type(LAS_DIR) == type(None):
+    #         raise ValueError('LAS_DIR == None, please input LAS_DIR argument')
     
     # Only execute code if input ATL03 .h5 file and output path declared
     if(atl03FilePath and outFilePath):
@@ -150,14 +164,14 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
         timeStart = runTime.time()
         
         # Print message
-        print('   Ground Track Number: %s' % gtNum)
+        writeLog('   Ground Track Number: %s\n' % gtNum, logFileID)
         
         # Get ATL03 file path/name
         atl03FilePath = os.path.normpath(os.path.abspath(atl03FilePath))
         atl03FileName = os.path.splitext(os.path.basename(atl03FilePath))[0]
         
         # Read ATL03 data from h5 file
-        print('   Reading ATL03 .h5 file: %s' % atl03FilePath)
+        writeLog('   Reading ATL03 .h5 file: %s' % atl03FilePath, logFileID)
         lat_all = readAtl03H5(atl03FilePath, '/heights/lat_ph', gtNum)
         lon_all = readAtl03H5(atl03FilePath, '/heights/lon_ph', gtNum)
         z_all = readAtl03H5(atl03FilePath, '/heights/h_ph', gtNum)
@@ -198,13 +212,13 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             time_all = deltaTime_all - min_delta_time
             
             # Get track direction
-            if(np.abs(lat_all[-1]) > np.abs(lat_all[0])):
+            if(np.abs(lat_all[-1]) >= np.abs(lat_all[0])):
                 trackDirection = 'Ascending'
             else:
                 trackDirection = 'Descending'
             # endIf
             
-            print('   Track Direction: %s' %trackDirection)
+            writeLog('   Track Direction: %s' %trackDirection, logFileID)
             
             # Extract metadata from ATL03 file name
             atl03h5Info = getNameParts(atl03FileName)
@@ -218,7 +232,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 atl08h5Info = getNameParts(atl08FileName)
                 
                 # Read ATL08 data from .h5 file
-                print('   Reading ATL08 .h5 file: %s' % atl08FilePath) 
+                writeLog('   Reading ATL08 .h5 file: %s' % atl08FilePath, logFileID) 
                 atl08_lat = readAtl08H5(atl08FilePath, '/land_segments/latitude', gtNum)
                 atl08_lon = readAtl08H5(atl08FilePath, '/land_segments/longitude', gtNum)
                 atl08_maxCanopy = readAtl08H5(atl08FilePath, '/land_segments/canopy/h_max_canopy_abs', gtNum)
@@ -236,11 +250,11 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                     atl08_time = atl08_deltaTime - min_delta_time
                 
                     # Do ATL08 to ATL03 mapping
-                    print('   Mapping ATL08 to ATL03 Ground Photons...')
+                    writeLog('   Mapping ATL08 to ATL03 Ground Photons...', logFileID)
                     try:
                         classification_all = getAtl08Mapping(atl03_ph_index_beg, atl03_segment_id, atl08_classed_pc_indx, atl08_classed_pc_flag, atl08_segment_id)
                     except:
-                        print('   WARNING: Could not map ATL08 to ATL03 Ground Photons.')
+                        writeLog('   WARNING: Could not map ATL08 to ATL03 Ground Photons.', logFileID)
                         classification_all = atl08_classification
                     # endTry
                     
@@ -255,6 +269,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                     atl03_lon = lon_all[0:data_length]
                     atl03_z = z_all[0:data_length]
                     atl03_time = time_all[0:data_length]
+                    atl03_deltaTime = deltaTime_all[0:data_length]
                     atl03_signalConf = signalConf_all[0:data_length]
                     atl03_classification = classification_all[0:data_length]
                     atl03_intensity = np.zeros(np.size(atl03_lat))
@@ -262,7 +277,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 
                 else:
                 
-                    print('   WARNING: ATL08 file does not contain usable data.')
+                    writeLog('   WARNING: ATL08 file does not contain usable data.', logFileID)
                     
                     atl08FilePath = False
                     
@@ -271,6 +286,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                     atl03_lon = lon_all
                     atl03_z = z_all
                     atl03_time = time_all
+                    atl03_deltaTime = deltaTime_all
                     atl03_signalConf = signalConf_all
                     atl03_classification = np.zeros(np.size(atl03_lat))
                     atl03_intensity = np.zeros(np.size(atl03_lat))
@@ -281,13 +297,14 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             else:
                 
                 # Message to screen
-                print('   Not Mapping ATL08 to ATL03 Ground Photons')
+                writeLog('   Not Mapping ATL08 to ATL03 Ground Photons', logFileID)
                 
                 # Store data
                 atl03_lat = lat_all
                 atl03_lon = lon_all
                 atl03_z = z_all
                 atl03_time = time_all
+                atl03_deltaTime = deltaTime_all
                 atl03_signalConf = signalConf_all
                 atl03_classification = np.zeros(np.size(atl03_lat))
                 atl03_intensity = np.zeros(np.size(atl03_lat))
@@ -313,8 +330,8 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 if('lonlat' in trimType.lower()):
                     lonMin, lonMax = float(trimParts[2]), float(trimParts[3])
                     latMin, latMax = float(trimParts[4]), float(trimParts[5])
-                    print('   Manual Trim Mode (Min Lon: %s, Max Lon: %s)' % (lonMin, lonMax))
-                    print('   Manual Trim Mode (Min Lat: %s, Max Lat: %s)' % (latMin, latMax))
+                    writeLog('   Manual Trim Mode (Min Lon: %s, Max Lon: %s)' % (lonMin, lonMax), logFileID)
+                    writeLog('   Manual Trim Mode (Min Lat: %s, Max Lat: %s)' % (latMin, latMax), logFileID)
                     atl03IndsToKeepLon = (atl03_lon >= lonMin) & (atl03_lon <= lonMax)
                     atl03IndsToKeepLat = (atl03_lat >= latMin) & (atl03_lat <= latMax)
                     atl03IndsToKeep = atl03IndsToKeepLon & atl03IndsToKeepLat
@@ -326,7 +343,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
 
 
                 elif('lat' in trimType.lower()):
-                    print('   Manual Trim Mode (Min Lat: %s, Max Lat: %s)' % (trimMin, trimMax))
+                    writeLog('   Manual Trim Mode (Min Lat: %s, Max Lat: %s)' % (trimMin, trimMax), logFileID)
                     atl03IndsToKeep = (atl03_lat >= trimMin) & (atl03_lat <= trimMax)
                     
                     if(atl08FilePath):
@@ -334,7 +351,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                     # endIf
 
                 elif('lon' in trimType.lower()):
-                    print('   Manual Trim Mode (Min Lon: %s, Max Lon: %s)' % (trimMin, trimMax))
+                    writeLog('   Manual Trim Mode (Min Lon: %s, Max Lon: %s)' % (trimMin, trimMax), logFileID)
                     atl03IndsToKeep = (atl03_lon >= trimMin) & (atl03_lon <= trimMax)
                     
                     if(atl08FilePath):
@@ -343,14 +360,14 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
 
                     
                 elif('time' in trimType.lower()):
-                    print('   Manual Trim Mode (Min Time: %s, Max Time: %s)' % (trimMin, trimMax))
+                    writeLog('   Manual Trim Mode (Min Time: %s, Max Time: %s)' % (trimMin, trimMax), logFileID)
                     atl03IndsToKeep = (atl03_time >= trimMin) & (atl03_time <= trimMax)
                     
                     if(atl08FilePath):
                         atl08IndsToKeep = (atl08_time >= trimMin) & (atl08_time <= trimMax)
                     # endIf
                 else:
-                    print('   Manual Trim Mode is Missing Args, Not Trimming Data')
+                    writeLog('   Manual Trim Mode is Missing Args, Not Trimming Data', logFileID)
                     atl03IndsToKeep = np.ones(np.shape(atl03_lat), dtype = bool)
                     
                     if(atl08FilePath):
@@ -362,11 +379,13 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 if atl03IndsToKeep.sum() == 0:
                     # no data left given manual constraints
                     return atl03Data, atl08Data, headerData, rotationData
+                # endIf
 
                 atl03_lat = atl03_lat[atl03IndsToKeep]
                 atl03_lon = atl03_lon[atl03IndsToKeep]
                 atl03_z = atl03_z[atl03IndsToKeep]
                 atl03_time = atl03_time[atl03IndsToKeep]
+                atl03_deltaTime = atl03_deltaTime[atl03IndsToKeep]
                 atl03_signalConf = atl03_signalConf[atl03IndsToKeep]
                 atl03_classification = atl03_classification[atl03IndsToKeep]
                 atl03_intensity = atl03_intensity[atl03IndsToKeep]
@@ -379,6 +398,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                     atl08_teBestFit = atl08_teBestFit[atl08IndsToKeep]
                     atl08_teMedian = atl08_teMedian[atl08IndsToKeep]
                     atl08_time = atl08_time[atl08IndsToKeep]
+                    atl08_deltaTime = atl08_deltaTime[atl08IndsToKeep]
                     atl08_signalConf = atl08_signalConf[atl08IndsToKeep]
                     atl08_classification = atl08_classification[atl08IndsToKeep]
                     atl08_intensity = atl08_intensity[atl08IndsToKeep]
@@ -386,7 +406,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             
             elif('none' in trimMode.lower()):
                 
-                print('   Trim Mode: None')
+                writeLog('   Trim Mode: None', logFileID)
                 
             # endIf
             
@@ -399,85 +419,82 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 atl08_teBestFit = atl08_teBestFit[indsBelowThresh]
                 atl08_teMedian = atl08_teMedian[indsBelowThresh]
                 atl08_time = atl08_time[indsBelowThresh]
+                atl08_deltaTime = atl08_deltaTime[indsBelowThresh]
                 atl08_signalConf = atl08_signalConf[indsBelowThresh]
                 atl08_classification = atl08_classification[indsBelowThresh]
                 atl08_intensity = atl08_intensity[indsBelowThresh]
             # endIf
             
-            # Determine if ATL03 track goes over a lidar truth region
-            kmlBoundsTextFile = 'kmlBounds.txt'
-            kmlRegionName = False
-            headerFilePath = False
-            truthFilePath = False
-            if(os.path.exists(kmlBoundsTextFile)):
-                
-                # Message to user
-                print('   Finding Truth Region...')
-                
-                try:
-                    
-                    # Read kmlBounds.txt file and get contents
-                    kmlInfo = readTruthRegionsTxtFile(kmlBoundsTextFile)
-                    
-                    # Loop through kmlBounds.txt and find matching TRUTH area
-                    maxCounter = len(kmlInfo.regionName)
-                    counter = 0
-                    while(not kmlRegionName):
-                        latInFile = (atl03_lat >= kmlInfo.latMin[counter]) & (atl03_lat <= kmlInfo.latMax[counter])
-                        lonInFile = (atl03_lon >= kmlInfo.lonMin[counter]) & (atl03_lon <= kmlInfo.lonMax[counter])
-                        trackInRegion = any(latInFile & lonInFile)
-                        if(trackInRegion):
-                            
-                            # Get truth region info
-                            kmlRegionName = kmlInfo.regionName[counter]
-                            headerFilePath = os.path.normpath(kmlInfo.headerFilePath[counter])
-                            truthFilePath = os.path.normpath(kmlInfo.truthFilePath[counter])
-                            kmlLatMin = kmlInfo.latMin[counter]
-                            kmlLatMax = kmlInfo.latMax[counter]
-                            kmlLonMin = kmlInfo.lonMin[counter]
-                            kmlLonMax = kmlInfo.lonMax[counter]
-                            
-                            # Print truth region
-                            print('   Truth File Region: %s' % kmlRegionName)
-                        
-                            # Read truth header .mat file
-                            headerData = readHeaderMatFile(headerFilePath)
-                            coordType = headerData.coordType
-                        
-                        # endIf
-                        
-                        if(counter >= maxCounter):
-                            
-                            # Send message to user
-                            print('   No Truth File Region Found in kmlBounds.txt')
-                            break
-                        
-                        # endIf
-                        
-                        # Increment counter
-                        counter += 1
-                        
-                    # endWhile
-                
-                except:
-                    
-                    # Could not read kmlBounds.txt file
-                    print('   Could not read truth header .mat file. Auto-assigning UTM zone.')
-                
-            # endIf
-            
             # If selected to auto trim data, then trim if truth region exists
             if('auto' in trimMode.lower()):
                 
+                # Message to user
+                writeLog('   Trim Mode: Auto', logFileID)
+                
+                # Read kmlBounds.txt file to get min/max extents to auto trim
+                kmlBoundsTextFile = 'kmlBounds.txt'
+                kmlRegionName = False
+                if(os.path.exists(kmlBoundsTextFile)): # and not pklHeader:
+                    
+                    # Message to user
+                    writeLog('   Finding Truth Region...', logFileID)
+                    
+                    try:
+                        
+                        # Read kmlBounds.txt file and get contents
+                        kmlInfo = readTruthRegionsTxtFile(kmlBoundsTextFile)
+    
+                        # Loop through kmlBounds.txt and find matching TRUTH area
+                        maxCounter = len(kmlInfo.regionName)
+                        counter = 0
+                        while(not kmlRegionName):
+                            
+                            latInFile = (atl03_lat >= kmlInfo.latMin[counter]) & (atl03_lat <= kmlInfo.latMax[counter])
+                            lonInFile = (atl03_lon >= kmlInfo.lonMin[counter]) & (atl03_lon <= kmlInfo.lonMax[counter])
+                            trackInRegion = any(latInFile & lonInFile)
+                            
+                            if(trackInRegion):
+                                
+                                # Get truth region info
+                                kmlRegionName = kmlInfo.regionName[counter]
+                                kmlLatMin = kmlInfo.latMin[counter]
+                                kmlLatMax = kmlInfo.latMax[counter]
+                                kmlLonMin = kmlInfo.lonMin[counter]
+                                kmlLonMax = kmlInfo.lonMax[counter]
+    
+                                # Print truth region
+                                writeLog('   Truth File Region: %s' % kmlRegionName, logFileID)
+    
+                            # endIf
+                            
+                            if(counter >= maxCounter):
+                                
+                                # Send message to user
+                                writeLog('   No Truth File Region Found in kmlBounds.txt', logFileID)
+                                break
+                            
+                            # endIf
+                            
+                            # Increment counter
+                            counter += 1
+                            
+                        # endWhile
+                    
+                    except:
+                        pass
+                    # endTry
+                # endIf
+            
                 if(kmlRegionName):
                     
                     # Trim ATL03 data based on TRUTH region
-                    print('   Auto Trim Mode (Trimming Data Based on Truth Region)...')
+                    writeLog('   Auto-Trimming Data Based on Truth Region...', logFileID)
                     atl03IndsInRegion = (atl03_lat >= kmlLatMin) & (atl03_lat <= kmlLatMax) & (atl03_lon >= kmlLonMin) & (atl03_lon <= kmlLonMax)
                     atl03_lat = atl03_lat[atl03IndsInRegion]
                     atl03_lon = atl03_lon[atl03IndsInRegion]
                     atl03_z = atl03_z[atl03IndsInRegion]
                     atl03_time = atl03_time[atl03IndsInRegion]
+                    atl03_deltaTime = atl03_deltaTime[atl03IndsInRegion]
                     atl03_signalConf = atl03_signalConf[atl03IndsInRegion]
                     atl03_classification = atl03_classification[atl03IndsInRegion]
                     atl03_intensity = atl03_intensity[atl03IndsInRegion]
@@ -491,43 +508,30 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                         atl08_teBestFit = atl08_teBestFit[atl08IndsInRegion]
                         atl08_teMedian = atl08_teMedian[atl08IndsInRegion]
                         atl08_time = atl08_time[atl08IndsInRegion]
+                        atl08_deltaTime = atl08_deltaTime[atl08IndsInRegion]
                         atl08_signalConf = atl08_signalConf[atl08IndsInRegion]
                         atl08_classification = atl08_classification[atl08IndsInRegion]
                         atl08_intensity = atl08_intensity[atl08IndsInRegion]
                     #endIf
-                    
                 # endIf
             # endIf
             
             # Convert lat/lon coordinates to UTM
-            print('   Converting Lat/Lon to UTM...')
-            if(kmlRegionName and coordType == 'UTM'):
+            writeLog('   Converting Lat/Lon to UTM...', logFileID)
                     
-                # Force UTM zone to match region header file
-                zoneToUse = headerData.zone
-                hemiToUse = headerData.hemi
-                atl03_easting, atl03_northing, zone, hemi = getLatLon2UTM(atl03_lon, atl03_lat, zoneToUse, hemiToUse)
-                
-                if(atl08FilePath):
-                    atl08_easting, atl08_northing, atl08_zone, atl08_hemi = getLatLon2UTM(atl08_lon, atl08_lat, zoneToUse, hemiToUse)
-                # endIf
-                
-            else:
-                    
-                # Allow function to determine UTM zone
-                atl03_easting, atl03_northing, zone, hemi = getLatLon2UTM(atl03_lon, atl03_lat) 
-                
-                if(atl08FilePath):
-                    atl08_easting, atl08_northing, atl08_zone, atl08_hemi = getLatLon2UTM(atl08_lon, atl08_lat) 
-                # endIf
-                
+            # Allow function to determine UTM zone for ATL03
+            atl03_easting, atl03_northing, zone, hemi = getLatLon2UTM(atl03_lon, atl03_lat) 
+            
+            # Allow function to determine UTM zone for ATL03
+            if(atl08FilePath):
+                atl08_easting, atl08_northing, atl08_zone, atl08_hemi = getLatLon2UTM(atl08_lon, atl08_lat) 
             # endIf
             
             # Print UTM zone
-            print('   UTM Zone: %s %s' % (zone, hemi))
+            writeLog('   UTM Zone: %s %s' % (zone, hemi), logFileID)
           
             # Transform MEASURED data to CT/AT plane
-            print('   Computing CT/AT Frame Rotation...')
+            writeLog('   Computing CT/AT Frame Rotation...', logFileID)
             desiredAngle = 90
             atl03_crossTrack, atl03_alongTrack, R_mat, xRotPt, yRotPt, phi = getCoordRotFwd(atl03_easting, atl03_northing, [], [], [], desiredAngle)
             
@@ -538,40 +542,44 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             # Store rotation object
             rotationData = atlRotationStruct(R_mat, xRotPt, yRotPt, desiredAngle, phi)
             
+            # Reassign class -1 to 0 (NOTE: this may need to change later)
+            inds_eq_neg1 = atl03_classification == -1
+            atl03_classification[inds_eq_neg1] = 0
+                
             # Store data in class structure
             atl03Data = atl03Struct(atl03_lat, atl03_lon, \
-                                          atl03_easting, atl03_northing, \
-                                          atl03_crossTrack, atl03_alongTrack, \
-                                          atl03_z, \
-                                          atl03_time, \
-                                          atl03_signalConf, atl03_classification, atl03_intensity, \
-                                          gtNum, zone, hemi, \
-                                          kmlRegionName, headerFilePath, truthFilePath, \
-                                          atl03FilePath, atl03FileName, \
-                                          trackDirection, \
-                                          atl03h5Info, \
-                                          dataIsMapped)
+                                    atl03_easting, atl03_northing, \
+                                    atl03_crossTrack, atl03_alongTrack, \
+                                    atl03_z, \
+                                    atl03_time, \
+                                    atl03_deltaTime, \
+                                    atl03_signalConf, atl03_classification, atl03_intensity, \
+                                    gtNum, zone, hemi, \
+                                    atl03FilePath, atl03FileName, \
+                                    trackDirection, \
+                                    atl03h5Info, \
+                                    dataIsMapped)
             
             # Store data in class structure
             if(atl08FilePath):
                 atl08Data = atl08Struct(atl08_lat, atl08_lon, \
-                                              atl08_easting, atl08_northing, \
-                                              atl08_crossTrack, atl08_alongTrack, \
-                                              atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, \
-                                              atl08_time, \
-                                              atl08_signalConf, atl08_classification, atl08_intensity, \
-                                              gtNum, atl08_zone, atl08_hemi, \
-                                              kmlRegionName, headerFilePath, truthFilePath, \
-                                              atl08FilePath, atl08FileName, \
-                                              trackDirection, \
-                                              atl08h5Info, \
-                                              dataIsMapped)
+                                        atl08_easting, atl08_northing, \
+                                        atl08_crossTrack, atl08_alongTrack, \
+                                        atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, \
+                                        atl08_time, \
+                                        atl08_deltaTime, \
+                                        atl08_signalConf, atl08_classification, atl08_intensity, \
+                                        gtNum, atl08_zone, atl08_hemi, \
+                                        atl08FilePath, atl08FileName, \
+                                        trackDirection, \
+                                        atl08h5Info, \
+                                        dataIsMapped)
             # endIf
             
             # Create output ATL03 .las file
             if(createAtl03LasFile): 
                 
-                print('   Writing ATL03 .las file...')
+                writeLog('   Writing ATL03 .las file...', logFileID)
                 outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.las'
                 outPath = os.path.normpath(outFilePath + '/' + outName)
                 
@@ -601,7 +609,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             # Create output ATL03 .kml file
             if(createAtl03KmlFile):
                 
-                print('   Writing ATL03 .kml file...')
+                writeLog('   Writing ATL03 .kml file...', logFileID)
                 outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.kml'
                 outPath = os.path.normpath(outFilePath + '/' + outName)
                 
@@ -631,7 +639,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 
                 if(atl08FilePath):
                 
-                    print('   Writing ATL08 .kml file...')
+                    writeLog('   Writing ATL08 .kml file...', logFileID)
                     outName = atl08Data.atl08FileName + '_' + atl08Data.gtNum + '.kml'
                     outPath = os.path.normpath(outFilePath + '/' + outName)
                     
@@ -661,7 +669,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             # Create output ATL03 .csv file
             if(createAtl03CsvFile):
                 
-                print('   Writing ATL03 .csv file...')
+                writeLog('   Writing ATL03 .csv file...', logFileID)
                 outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.csv'
                 outPath = os.path.normpath(outFilePath + '/' + outName)
                 
@@ -673,25 +681,29 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 # Write .csv file
                 if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
                     
-                    namelist = ['Time (sec)', 'Latitude (deg)', 'Longitude (deg)', \
-                            'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
-                            'Cross-Track (m)', 'Along-Track (m)', \
-                            'Height (m)', \
-                            'Classification', 'Signal Confidence']
+                    namelist = ['Time (sec)', 'Delta Time (sec)', \
+                                'Latitude (deg)', 'Longitude (deg)', \
+                                'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
+                                'Cross-Track (m)', 'Along-Track (m)', \
+                                'Height (m)', \
+                                'Classification', 'Signal Confidence']
                 else:
                     
-                    namelist = ['Time (sec)', 'Latitude (deg)', 'Longitude (deg)', \
-                            'Easting (m)', 'Northing (m)', \
-                            'Cross-Track (m)', 'Along-Track (m)', \
-                            'Height (m)', \
-                            'Classification', 'Signal Confidence']
+                    namelist = ['Time (sec)', 'Delta Time (sec)', \
+                                'Latitude (deg)', 'Longitude (deg)', \
+                                'Easting (m)', 'Northing (m)', \
+                                'Cross-Track (m)', 'Along-Track (m)', \
+                                'Height (m)', \
+                                'Classification', 'Signal Confidence']
                 # endIf
                 
-                datalist = [atl03Data.time, atl03Data.lat, atl03Data.lon, \
+                datalist = [atl03Data.time, atl03Data.deltaTime, \
+                            atl03Data.lat, atl03Data.lon, \
                             atl03Data.easting, atl03Data.northing, \
                             atl03Data.crossTrack, atl03Data.alongTrack,\
                             atl03Data.z, \
                             atl03Data.classification, atl03Data.signalConf] 
+                
                 writeArrayToCSV(outPath, namelist, datalist)
                 
             # endIf
@@ -701,7 +713,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                 
                 if(atl08FilePath):
                     
-                    print('   Writing ATL08 .csv file...')
+                    writeLog('   Writing ATL08 .csv file...', logFileID)
                     outName = atl08Data.atl08FileName + '_' + atl08Data.gtNum + '.csv'
                     outPath = os.path.normpath(outFilePath + '/' + outName)
                     
@@ -713,25 +725,29 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
                     # Write .csv file
                     if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
                         
-                        namelist = ['Time (sec)', 'Latitude (deg)', 'Longitude (deg)', \
-                                'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
-                                'Cross-Track (m)', 'Along-Track (m)', \
-                                'Height (m)', \
-                                'Classification', 'Signal Confidence']
+                        namelist = ['Time (sec)', 'Delta Time (sec)', \
+                                    'Latitude (deg)', 'Longitude (deg)', \
+                                    'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
+                                    'Cross-Track (m)', 'Along-Track (m)', \
+                                    'Max Canopy (m)', \
+                                    'Terrain Best Fit (m)', 'Terrain Median (m)']
                     else:
                         
-                        namelist = ['Time (sec)', 'Latitude (deg)', 'Longitude (deg)', \
-                                'Easting (m)', 'Northing (m)', \
-                                'Cross-Track (m)', 'Along-Track (m)', \
-                                'Height (m)', \
-                                'Classification', 'Signal Confidence']
+                        namelist = ['Time (sec)', 'Delta Time (sec)', \
+                                    'Latitude (deg)', 'Longitude (deg)', \
+                                    'Easting (m)', 'Northing (m)', \
+                                    'Cross-Track (m)', 'Along-Track (m)', \
+                                    'Max Canopy (m)', \
+                                    'Terrain Best Fit (m)', 'Terrain Median (m)']
                     # endIf
                 
-                    datalist = [atl08Data.time, atl08Data.lat, atl08Data.lon, \
+                    datalist = [atl08Data.time, atl08Data.deltaTime, \
+                                atl08Data.lat, atl08Data.lon, \
                                 atl08Data.easting, atl08Data.northing, \
                                 atl08Data.crossTrack, atl08Data.alongTrack,\
                                 atl08Data.maxCanopy, \
                                 atl08Data.teBestFit, atl08Data.teMedian] 
+                    
                     writeArrayToCSV(outPath, namelist, datalist)
                 
                 # endIf
@@ -745,29 +761,29 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, outFilePat
             timeElapsedSec = timeElapsedTotal % 60
             
             # Print completion message
-            print('   Module Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
-            print('\n')
+            writeLog('   Module Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec), logFileID)
+            writeLog('\n', logFileID)
             
         else:
         
-            print('\n')
-            print('   *** Could not process data.')
-            print('   *** ATL03 .h5 file missing these fields:')
+            writeLog('\n', logFileID)
+            writeLog('   *** Could not process data.', logFileID)
+            writeLog('   *** ATL03 .h5 file missing these fields:', logFileID)
             for i in range(0,len(badVars)):
-                print('          %s) %s' %(i+1, badVars[i]))
-            print('\n')
+                writeLog('          %s) %s' %(i+1, badVars[i]), logFileID)
+            writeLog('\n', logFileID)
         
         # endIf
             
     else:
             
         # Message to user
-        print('Input correct ATL03 input .h5 file and/or output path.')
+        writeLog('Input correct ATL03 input .h5 file and/or output path.', logFileID)
             
     # endIf
         
     # Return object
-    return atl03Data, atl08Data, headerData, rotationData
+    return atl03Data, atl08Data, rotationData
 
     
 # Unit test
@@ -800,25 +816,26 @@ if __name__ == "__main__":
     # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190101_python' # SONOMA
     # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190228_python' # SONOMA
     # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test'
-
+    outFilePath = 'C:/Users/malonzo/GLAM/delete'
+    
     # Ground track number to analyze
-    gtNum = 'gt1r'
+    gtNum = 'gt2r'
     
-    if os.name == 'nt':
-        basepath03 = '/laserpewpew/data/release/002/ATL03_r002/Maine'
-    else:
-        basepath03 = '/laserpewpew/data/release/002/ATL03_r002/Maine/'
-        basepath08 = '/laserpewpew/data/release/002/ATL08_r002/Maine/'
-
-    atl03file = 'ATL03_20181114182133_07200102_002_01.h5'
-    atl08file = 'ATL08_20181114182133_07200102_002_01.h5'
-    atl09file = 'ATL09_20181016132105_02740101_002_01.h5'
-    # Inputs
-    
-    outFilePath = '/LIDAR/server/USERS/eric/1_experiment/test'
-
-    atl03FilePath = basepath03 + atl03file
-    atl08FilePath = basepath08 + atl08file
+#    if os.name == 'nt':
+#        basepath03 = '/laserpewpew/data/release/002/ATL03_r002/Maine'
+#    else:
+#        basepath03 = '/laserpewpew/data/release/002/ATL03_r002/Maine/'
+#        basepath08 = '/laserpewpew/data/release/002/ATL08_r002/Maine/'
+#
+#    atl03file = 'ATL03_20181114182133_07200102_002_01.h5'
+#    atl08file = 'ATL08_20181114182133_07200102_002_01.h5'
+#    atl09file = 'ATL09_20181016132105_02740101_002_01.h5'
+#    # Inputs
+#    
+#    outFilePath = '/LIDAR/server/USERS/eric/1_experiment/test'
+#
+#    atl03FilePath = basepath03 + atl03file
+#    atl08FilePath = basepath08 + atl08file
     
     # User options
     trimInfo = 'auto'   # OPTIONS: ('none', 'auto', or 'manual')
@@ -844,8 +861,8 @@ if __name__ == "__main__":
     timeStart = runTime.time()
     
     # Call getAtlMeasuredSwath
-    print('RUNNING getAtlMeasuredSwath...\n')
-    atl03Data, atl08Data, headerData, rotationData = getAtlMeasuredSwath(atl03FilePath, 
+    writeLog('RUNNING getAtlMeasuredSwath...\n')
+    atl03Data, atl08Data, rotationData = getAtlMeasuredSwath(atl03FilePath, 
                                                                          atl08FilePath, 
                                                                          outFilePath, 
                                                                          gtNum, 
@@ -863,82 +880,82 @@ if __name__ == "__main__":
     timeElapsedSec = timeElapsedTotal % 60
         
     # Print completion message
-    print('   Script Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
-    print('\n')
+    writeLog('   Script Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
+    writeLog('\n')
     
-    import matplotlib.pyplot as plt
+#    import matplotlib.pyplot as plt
 
-    print('Test AT')
-    hy = atl03Data.alongTrack[atl03Data.classification == 3]
-    hz = atl03Data.z[atl03Data.classification == 3]
-    cy = atl03Data.alongTrack[atl03Data.classification == 2]
-    cz = atl03Data.z[atl03Data.classification == 2]
-    gy = atl03Data.alongTrack[atl03Data.classification == 1]
-    gz = atl03Data.z[atl03Data.classification == 1]
-    dy = atl03Data.alongTrack[atl03Data.classification == 0]
-    dz = atl03Data.z[atl03Data.classification == 0]
-    uy = atl03Data.alongTrack[atl03Data.classification == -1]
-    uz = atl03Data.z[atl03Data.classification == -1]
-    
-    atl08y = atl08Data.alongTrack
-    atl08mcz = atl08Data.maxCanopy
-    atl08tbfz = atl08Data.teBestFit   
-    atl08tmz = atl08Data.teMedian 
-
-    atl08mcz[atl08mcz > 10000] = np.nan
-    atl08tbfz[atl08tbfz > 10000] = np.nan
-    atl08tmz[atl08tmz > 10000] = np.nan
-    
-    
-
-    
-    f1 = plt.plot()
-    f1 = plt.plot(uy[::100],uz[::100],'.',color='#d7d7d7')
-    f1 = plt.plot(dy[::10],dz[::10],'.',color='#8db4c1')
-    f1 = plt.plot(hy,hz,'.',color='#90f045')
-    f1 = plt.plot(cy,cz,'.',color='#4e7b2a')
-    f1 = plt.plot(gy,gz,'.',color='#d6a327')
-    
-    f1 = plt.plot(atl08y, atl08mcz,'o',color='#33cc33')
-    f1 = plt.plot(atl08y, atl08tbfz,'o',color='#0066ff')
-    f1 = plt.plot(atl08y, atl08tmz,'o',color='#ff3300')
-
-
-
-    print('Test Time')
-    hy = atl03Data.time[atl03Data.classification == 3]
-    hz = atl03Data.z[atl03Data.classification == 3]
-    cy = atl03Data.time[atl03Data.classification == 2]
-    cz = atl03Data.z[atl03Data.classification == 2]
-    gy = atl03Data.time[atl03Data.classification == 1]
-    gz = atl03Data.z[atl03Data.classification == 1]
-    dy = atl03Data.time[atl03Data.classification == 0]
-    dz = atl03Data.z[atl03Data.classification == 0]
-    uy = atl03Data.time[atl03Data.classification == -1]
-    uz = atl03Data.z[atl03Data.classification == -1]
-    
-    atl08y = atl08Data.time
-    atl08mcz = atl08Data.maxCanopy
-    atl08tbfz = atl08Data.teBestFit   
-    atl08tmz = atl08Data.teMedian 
-
-    atl08mcz[atl08mcz > 10000] = np.nan
-    atl08tbfz[atl08tbfz > 10000] = np.nan
-    atl08tmz[atl08tmz > 10000] = np.nan
-    
-    
-
-    
-    f2 = plt.plot()
-    f2 = plt.plot(uy[::100],uz[::100],'.',color='#d7d7d7')
-    f2 = plt.plot(dy[::10],dz[::10],'.',color='#8db4c1')
-    f2 = plt.plot(hy,hz,'.',color='#90f045')
-    f2 = plt.plot(cy,cz,'.',color='#4e7b2a')
-    f2 = plt.plot(gy,gz,'.',color='#d6a327')
-    
-    f2 = plt.plot(atl08y, atl08mcz,'o',color='#ccff33')
-    f2 = plt.plot(atl08y, atl08tbfz,'o',color='#0066ff')
-    f2 = plt.plot(atl08y, atl08tmz,'o',color='#ff3300')    
+#    writeLog('Test AT')
+#    hy = atl03Data.alongTrack[atl03Data.classification == 3]
+#    hz = atl03Data.z[atl03Data.classification == 3]
+#    cy = atl03Data.alongTrack[atl03Data.classification == 2]
+#    cz = atl03Data.z[atl03Data.classification == 2]
+#    gy = atl03Data.alongTrack[atl03Data.classification == 1]
+#    gz = atl03Data.z[atl03Data.classification == 1]
+#    dy = atl03Data.alongTrack[atl03Data.classification == 0]
+#    dz = atl03Data.z[atl03Data.classification == 0]
+#    uy = atl03Data.alongTrack[atl03Data.classification == -1]
+#    uz = atl03Data.z[atl03Data.classification == -1]
+#    
+#    atl08y = atl08Data.alongTrack
+#    atl08mcz = atl08Data.maxCanopy
+#    atl08tbfz = atl08Data.teBestFit   
+#    atl08tmz = atl08Data.teMedian 
+#
+#    atl08mcz[atl08mcz > 10000] = np.nan
+#    atl08tbfz[atl08tbfz > 10000] = np.nan
+#    atl08tmz[atl08tmz > 10000] = np.nan
+#    
+#    
+#
+#    
+#    f1 = plt.plot()
+#    f1 = plt.plot(uy[::100],uz[::100],'.',color='#d7d7d7')
+#    f1 = plt.plot(dy[::10],dz[::10],'.',color='#8db4c1')
+#    f1 = plt.plot(hy,hz,'.',color='#90f045')
+#    f1 = plt.plot(cy,cz,'.',color='#4e7b2a')
+#    f1 = plt.plot(gy,gz,'.',color='#d6a327')
+#    
+#    f1 = plt.plot(atl08y, atl08mcz,'o',color='#33cc33')
+#    f1 = plt.plot(atl08y, atl08tbfz,'o',color='#0066ff')
+#    f1 = plt.plot(atl08y, atl08tmz,'o',color='#ff3300')
+#
+#
+#
+#    writeLog('Test Time')
+#    hy = atl03Data.time[atl03Data.classification == 3]
+#    hz = atl03Data.z[atl03Data.classification == 3]
+#    cy = atl03Data.time[atl03Data.classification == 2]
+#    cz = atl03Data.z[atl03Data.classification == 2]
+#    gy = atl03Data.time[atl03Data.classification == 1]
+#    gz = atl03Data.z[atl03Data.classification == 1]
+#    dy = atl03Data.time[atl03Data.classification == 0]
+#    dz = atl03Data.z[atl03Data.classification == 0]
+#    uy = atl03Data.time[atl03Data.classification == -1]
+#    uz = atl03Data.z[atl03Data.classification == -1]
+#    
+#    atl08y = atl08Data.time
+#    atl08mcz = atl08Data.maxCanopy
+#    atl08tbfz = atl08Data.teBestFit   
+#    atl08tmz = atl08Data.teMedian 
+#
+#    atl08mcz[atl08mcz > 10000] = np.nan
+#    atl08tbfz[atl08tbfz > 10000] = np.nan
+#    atl08tmz[atl08tmz > 10000] = np.nan
+#    
+#    
+#
+#    
+#    f2 = plt.plot()
+#    f2 = plt.plot(uy[::100],uz[::100],'.',color='#d7d7d7')
+#    f2 = plt.plot(dy[::10],dz[::10],'.',color='#8db4c1')
+#    f2 = plt.plot(hy,hz,'.',color='#90f045')
+#    f2 = plt.plot(cy,cz,'.',color='#4e7b2a')
+#    f2 = plt.plot(gy,gz,'.',color='#d6a327')
+#    
+#    f2 = plt.plot(atl08y, atl08mcz,'o',color='#ccff33')
+#    f2 = plt.plot(atl08y, atl08tbfz,'o',color='#0066ff')
+#    f2 = plt.plot(atl08y, atl08tmz,'o',color='#ff3300')    
     
     
     

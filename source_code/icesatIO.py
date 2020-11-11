@@ -15,13 +15,20 @@ Authors:
 Date: September 20, 2019
 """
 
-# Import modules
+# Import Python modules
 import os
 import sys
 import warnings
 import csv
 import numpy as np
 import h5py
+import ntpath
+import glob
+from scipy.io import loadmat
+from osgeo import gdal,osr,ogr
+import socket
+import shutil
+import pandas as pd
 try:
   import laspy
   from laspy.file import File
@@ -29,36 +36,35 @@ except ImportError:
   laspy_func = ['writeLas', 'writeHeaderFile']
   print('warning: module laspy not found')
   print('affected functions:', laspy_func)
-
-from scipy.io import loadmat
+# endTry
 try:
   import simplekml
 except ImportError:
   simplekml_func = ['writeKml']
   print('warning: module simplekml not found')
   print('affected functions:', simplekml_func)
-  
-from osgeo import gdal,osr,ogr
-import socket
-import shutil
-from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
+# endTry
 
+# Import ICESat-2 modules
+from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
+from icesatUtils import (identifyEPSG, getCoordRotFwd, transform, \
+                         getGeoidHeight, getCoordRotRev, ismember)
 
 
 # Object for readKmlBounds function
 class kmlStruct:
         
     # Define class with designated fields
-    def __init__(self, regionName, lonMin, lonMax, latMin, latMax,headerFilePath, truthFilePath):
+    def __init__(self, regionName, lonMin, lonMax, latMin, latMax):
             
         self.regionName = regionName
         self.lonMin = lonMin
         self.lonMax = lonMax
         self.latMin = latMin
         self.latMax = latMax
-        self.headerFilePath = headerFilePath
-        self.truthFilePath = truthFilePath
-
+        
+    # endDef
+# endClass
 
 # Object for readHeaderFile function
 class headerStruct:
@@ -75,7 +81,8 @@ class headerStruct:
         self.ymin = np.c_[ymin]
         self.ymax = np.c_[ymax]
         self.tileName = np.c_[tileName]
-    
+    # endDef
+# endClass
     
 # Object for readLas function
 class lasStruct:
@@ -89,8 +96,9 @@ class lasStruct:
         self.classification = np.c_[classification]
         self.intensity = np.c_[intensity]
         self.headerData = np.c_[headerData]
-        
-        
+    # endDef
+# endClass
+    
 # Object for readGeoidFile function
 class geoidStruct:
         
@@ -100,6 +108,42 @@ class geoidStruct:
         self.lats = lats
         self.lons = lons
         self.geoidalHeights = geoidalHeights
+    # endDef
+# endClass
+        
+# Truth class 
+class atlTruthStruct:
+        
+    # Define class with designated fields
+    def __init__(self, easting, northing, crossTrack, alongTrack, z, 
+                 classification, intensity, zone, hemi):
+            
+        self.easting = np.c_[easting]
+        self.northing = np.c_[northing]
+        self.crossTrack = np.c_[crossTrack]
+        self.alongTrack = np.c_[alongTrack]
+        self.z = np.c_[z]
+        self.classification = np.c_[classification]
+        self.intensity = np.c_[intensity]
+        self.zone = zone
+        self.hemi = hemi
+    # endDef
+    
+    # Define append method
+    def append(self, newDF):
+        
+        self.easting = np.concatenate((self.easting, newDF.easting), axis=0)
+        self.northing = np.concatenate((self.northing, newDF.northing), axis=0)
+        self.crossTrack = np.concatenate((self.crossTrack, newDF.crossTrack), axis=0)
+        self.alongTrack = np.concatenate((self.alongTrack, newDF.alongTrack), axis=0)
+        self.z = np.concatenate((self.z, newDF.z), axis=0)
+        self.classification = np.concatenate((self.classification, newDF.classification), axis=0)
+        self.intensity = np.concatenate((self.intensity, newDF.intensity), axis=0)
+        self.zone = newDF.zone
+        self.hemi = newDF.hemi
+        
+    # endDef
+# endClass
         
         
 ##### Function to read kmlBounds.txt    
@@ -111,8 +155,6 @@ def readTruthRegionsTxtFile(kmlBoundsTextFile):
     lonMax = []
     latMin = []
     latMax = []
-    headerFilePath = []
-    truthFilePath = []
 
     # Open file for reading
     f = open(kmlBoundsTextFile,'r')
@@ -122,12 +164,6 @@ def readTruthRegionsTxtFile(kmlBoundsTextFile):
     
     # Close file for reading
     f.close()
-    
-    # Read lines with path info
-    headerPathLine = allLines[2]
-    headerPath = headerPathLine.split(',')[1].strip()
-    truthPathLine = allLines[3]
-    truthPath = truthPathLine.split(',')[1].strip()
         
     # Read rest of lines, skip first six lines (comments)
     textLines = allLines[6:]
@@ -147,14 +183,12 @@ def readTruthRegionsTxtFile(kmlBoundsTextFile):
             lonMax.append(float(fields[2].strip()))              
             latMin.append(float(fields[3].strip()))           
             latMax.append(float(fields[4].strip()))           
-            headerFilePath.append(headerPath + fields[5].strip())             
-            truthFilePath.append(truthPath + fields[6].strip())
             
         # Endif
     # Endfor
     
     # Call class to populate field names
-    kmlInfo = kmlStruct(regionName, lonMin, lonMax, latMin, latMax, headerFilePath, truthFilePath)
+    kmlInfo = kmlStruct(regionName, lonMin, lonMax, latMin, latMax)
     
     # Return output
     return kmlInfo
@@ -840,9 +874,6 @@ def selectwkt(proj,hemi=None,zone=None):
 
 def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,hemi=None,zone=None):
     
-    import laspy
-    # from laspy.file import File
-
     wkt = selectwkt(proj,hemi,zone)
     
     #Create new VLR
@@ -911,7 +942,6 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,
 ##### Functions to write .kml files
 def writeKml(lat, lon, time, kmlName):
 
-    import simplekml
     # Suppress warnings that may come from simple kml
     if not sys.warnoptions:
         warnings.simplefilter("ignore")
@@ -1590,3 +1620,884 @@ def writeLog(message, fileID=False):
     # endIf
     
 # endDef
+    
+    
+### Function to load .las/.laz file
+def loadLasFile(truthFilePath, atlMeasuredData, rotationData, logFileID=False):
+    
+    # Read .las file
+    lasTruthData = readLas(truthFilePath)
+    
+    # Find EPSG Code from truth file
+    truthHeader = readLasHeader(truthFilePath)
+    epsg_truth = truthHeader['epsg'][0]
+    
+    # Find EPSG Code from input file
+    epsg_atl = identifyEPSG(atlMeasuredData.hemi,atlMeasuredData.zone)
+    
+    # Get easting/northing
+    lasTruthData_x = lasTruthData.x
+    lasTruthData_y = lasTruthData.y
+        
+    # Reproject if necessary
+    if(epsg_truth != epsg_atl):
+        
+        # If EPSG code does not match, reproject to input EPSG code
+        writeLog('   WARNING: Truth EPSG code does not match ICESat-2, reprojecting Truth file...', logFileID)
+        lasTruthData_x, lasTruthData_y = transform(epsg_truth, epsg_atl, lasTruthData.x, lasTruthData.y)
+        
+    # endIf
+    
+    # Rotate TRUTH data to CT/AT plane
+    lasTruthData_x_newRot, lasTruthData_y_newRot, _, _, _, _ = \
+    getCoordRotFwd(lasTruthData_x, lasTruthData_y, 
+                   rotationData.R_mat, rotationData.xRotPt, 
+                   rotationData.yRotPt, rotationData.desiredAngle)
+    
+    # Store data as object
+    atlTruthData = atlTruthStruct(lasTruthData.x, lasTruthData.y, 
+                                  lasTruthData_x_newRot, 
+                                  lasTruthData_y_newRot, 
+                                  lasTruthData.z, 
+                                  lasTruthData.classification, 
+                                  lasTruthData.intensity, 
+                                  atlMeasuredData.zone, 
+                                  atlMeasuredData.hemi)
+    
+    return atlTruthData
+    
+# endDef
+    
+
+### Function to load .tif file
+def loadTifFile(truthFilePath, atlMeasuredData, rotationData, outFilePath, logFileID=False):
+    
+    # Find EPSG Code from tif
+    epsg_tif = readDEMepsg(truthFilePath)
+    
+    # Determine if EPSG Code is the same for the ATL03 Measured
+    epsg_atl = identifyEPSG(atlMeasuredData.hemi,atlMeasuredData.zone)
+    epsg_atl = epsg_atl.split(':')[-1]
+    
+    if(epsg_atl == epsg_tif):
+        
+        # If EPSG code is the same, set tif as a target
+        truthFilePathTif = truthFilePath
+        
+    else:
+        
+        # If EPSG code does not match, use GDAL Warp to create new Tif
+        writeLog('   Tif Projection does not match target, reprojecting Tif', logFileID)
+        file = ntpath.basename(truthFilePath) 
+        originalname = file.split('.')[0]
+        newname = originalname + "_projected.tif"
+        truthFilePathTif = os.path.normpath(os.path.join(outFilePath,newname))
+        srs = ogr.osr.SpatialReference()
+        srs.ImportFromEPSG(np.int(epsg_atl))
+        warpoptions = gdal.WarpOptions(dstSRS = srs)
+        gdal.Warp(truthFilePathTif, truthFilePath, options = warpoptions)
+
+    # endIf
+    
+    # Read Tif file
+    xarr, yarr, zarr, intensity, classification, epsg = formatDEM(truthFilePathTif)           
+    
+    # Run a quick filter to remove points not even remotely close
+    xarr, yarr, zarr, intensity, classification = quickFilter(atlMeasuredData,
+                                                              xarr,
+                                                              yarr,
+                                                              zarr,
+                                                              intensity,
+                                                              classification)
+    
+    # Rotate Data for along-track/cross-track
+    x_newRot, y_newRot, _, _, _, _ = getCoordRotFwd(xarr, yarr, 
+                                                    rotationData.R_mat, 
+                                                    rotationData.xRotPt, 
+                                                    rotationData.yRotPt, 
+                                                    rotationData.desiredAngle)
+    
+    # Store Data as Object
+    atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, 
+                                  zarr, classification, intensity, 
+                                  atlMeasuredData.zone, 
+                                  atlMeasuredData.hemi)
+                
+    return atlTruthData
+        
+# endDef
+   
+    
+### Function to read truth file info
+def loadTruthFile(truthFilePath, atlMeasuredData, rotationData, truthFileType, outFilePath, logFileID=False):
+    
+    # Initialize output
+    atlTruthData = []
+    
+    # Determine which file type to load
+    if(('las' in truthFileType.lower()) or ('laz' in truthFileType.lower())):  
+        # Get .las header info
+        atlTruthData = loadLasFile(truthFilePath, atlMeasuredData, rotationData, logFileID)             
+    elif('tif' in truthFileType):
+        # Load .tif file
+        atlTruthData = loadTifFile(truthFilePath, atlMeasuredData, rotationData, outFilePath, logFileID)
+    # endIf
+    
+    return atlTruthData
+
+# endDef
+    
+
+### Function to find and reproject min/max extents in header data
+def reprojectHeaderData(truthHeaderDF, atlMeasuredData):
+    
+    # Copy dataframe
+    truthHeaderNewDF = truthHeaderDF.copy()
+    
+    # Input EPSG code
+    epsg_atl = identifyEPSG(atlMeasuredData.hemi,atlMeasuredData.zone)
+    
+    # Loop through all truth file EPSG codes
+    for i in range(0,len(truthHeaderDF)):
+        
+        # Reproject EPSG code to match input EPSG if unmatching
+        epsg_truth = truthHeaderDF['epsg'][i]
+        if(epsg_truth!=epsg_atl):
+            
+            # Header extents
+            xmin = truthHeaderDF['xmin'][i]
+            xmax = truthHeaderDF['xmax'][i]
+            ymin = truthHeaderDF['ymin'][i]
+            ymax = truthHeaderDF['ymax'][i]
+            x = [xmin, xmax]
+            y = [ymin, ymax]
+            
+            # Reproject extents to input EPSG code
+            xout, yout = transform(epsg_truth, epsg_atl, x, y)
+            
+            # Store new extents into output dataframe
+            truthHeaderNewDF['xmin'][i] = xout[0]
+            truthHeaderNewDF['xmax'][i] = xout[1]
+            truthHeaderNewDF['ymin'][i] = yout[0]
+            truthHeaderNewDF['ymax'][i] = yout[1]
+            truthHeaderNewDF['utmZone'][i] = atlMeasuredData.zone
+            truthHeaderNewDF['utmHemi'][i] = atlMeasuredData.hemi
+            truthHeaderNewDF['epsg'][i] = epsg_atl
+            
+        # endIf
+    # endFor
+    
+    return truthHeaderNewDF
+
+# endDef
+    
+
+### Function to read header info for LAS files
+def readLasHeader(lasFileInput, outputFilePath = False, logFileID = False):
+    
+    """
+    This function mimics the MATLAB LASreadheader.m function and 
+    retrieves .las file header info (for LAS Formats 1.1 - 1.4).
+    
+    INPUTS:
+        1) lasFileInput - contains path to input .las file(s)
+           This input can be a:
+               - String of 1 file path to a .las file
+               - String of 1 file path to a directory with .las files
+               - String of 1 file path and a * wildcard for .las files
+               - Python list of multiple file paths to .las files
+               
+        2) outputFilePath - option to write las info outputs to .csv file
+           Default is False (no output .csv file)
+           Input is a file name or full path and file name (no extension)
+    
+    OUTPUTS:
+        1) dataOutDF - Pandas dataframe contain las info metadata
+           Contents of dataframe:
+               - fileName = Input .las File Name
+               - version = LAS Version
+               - xmin = Point cloud xmin
+               - xmax = Point cloud xmax
+               - ymin = Point cloud ymin
+               - ymax = Point cloud ymax
+               - zmin = Point cloud zmin
+               - zmax = Point cloud zmax 
+               - nPoints = Point cloud number of points
+               - utmZone = Point cloud UTM Zone
+               - utmHemi = Point cloud UTM Hemi
+               - ellipsoid = Point cloud ellipsoid
+               - coordType = Point cloud Coordinate Type
+               - epsg = EPSG code
+               
+        2) <output>.csv file - Optional, <output> name declared by user
+            
+    """
+    
+    # Import libraries
+    import struct
+    import numpy as np
+    import pandas as pd
+    import glob
+    import os
+
+    # Set input file check
+    inputFileCheck = False
+    
+    # Determine input type
+    if(isinstance(lasFileInput, str)):
+        lasFileInput = os.path.normpath(lasFileInput)
+        if('*' in lasFileInput):
+            # Wilcard case
+            fileExt = lasFileInput[-3:]
+            if('las' in fileExt):
+                lasFiles = glob.glob(lasFileInput, recursive = True) 
+                inputFileCheck = True
+            else:
+                writeLog('ERROR: File search must contain *.las in string.', logFileID)
+            # endIf
+        else:
+            # File/Directory case
+            if(os.path.exists(lasFileInput)):
+                if(os.path.isdir(lasFileInput)):
+                    # Directory case
+                    strSearch = os.path.normpath(lasFileInput + '\\*.las')
+                    lasFiles = glob.glob(strSearch, recursive = True) 
+                    inputFileCheck = True
+                elif(os.path.isfile(lasFileInput)):
+                    # File case
+                    fileExt = lasFileInput[-3:]
+                    if('las' in fileExt):
+                        lasFiles = [lasFileInput]
+                        inputFileCheck = True
+                    else:
+                        writeLog('ERROR: Input file must be .las format', logFileID)
+                    # endIf
+            else:
+                writeLog('ERROR: File/Directory does not exist.', logFileID)
+            # endIf
+        # endIf
+    elif(isinstance(lasFileInput, list)):
+        # List case
+        lasFiles = [os.path.normpath(x) for x in lasFileInput]
+        inputFileCheck = True
+    # endIf
+        
+    # Set dataframe column names
+    columnNames = ['fileName', 'version', 'xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax', 
+                   'nPoints', 'utmZone', 'utmHemi', 'ellipsoid', 'coordType', 'epsg']
+    
+    # Set dataframe
+    dataOutDF = pd.DataFrame(columns=columnNames)
+    
+    if(inputFileCheck):
+        
+        # Loop through all files
+        for numFile in range(0,len(lasFiles)):
+            
+            # Get input file
+            lasFile = lasFiles[numFile]
+        
+            # Get file name from path
+            fileName = lasFile
+            
+            # Initialize output parameters
+            version = np.nan
+            xmin = np.nan
+            xmax = np.nan
+            ymin = np.nan
+            ymax = np.nan
+            zmin = np.nan
+            zmax = np.nan
+            Npoints = np.nan
+            zone = np.nan
+            hemi = 'None'
+            ellipsoid = 'None'
+            coordType = np.nan
+            epsg = 'None'
+            
+            # Open binary .las file for reading
+            with open(lasFile, mode='rb') as file:
+                
+                # Move forward in file from beginning
+                file.seek(24,0)
+                    
+                # Get parameters
+                VersionMajor = struct.unpack('B',file.read(1))[0] # uint8
+                VersionMinor = struct.unpack('B',file.read(1))[0] # uint8
+                
+                # Store LAS version
+                version = 'LAS v' + str(VersionMajor) + '.' + str(VersionMinor)
+                
+                # Move forward in file form beginning
+                file.seek(94,0)
+                
+                # Get parameters
+                headerSize = struct.unpack('H',file.read(2))[0] # uint16
+                OffsetToPointData = struct.unpack('I',file.read(4))[0] # uint32
+                nvlr = struct.unpack('I',file.read(4))[0] # uint32
+                recordFormat = struct.unpack('B',file.read(1))[0] # uint8
+                recordLength = struct.unpack('H',file.read(2))[0] # uint16
+                Npoints = struct.unpack('I',file.read(4))[0] # uint32
+                
+                # Move forward in file from current position
+                file.seek(20, 1)
+                
+                # Get parameters
+                XScaleFactor = struct.unpack('d',file.read(8))[0] # double
+                YScaleFactor = struct.unpack('d',file.read(8))[0] # double
+                ZScaleFactor = struct.unpack('d',file.read(8))[0] # double
+                XOffset = struct.unpack('d',file.read(8))[0] # double
+                YOffset = struct.unpack('d',file.read(8))[0] # double
+                ZOffset = struct.unpack('d',file.read(8))[0] # double
+                xmax = struct.unpack('d',file.read(8))[0] # double
+                xmin = struct.unpack('d',file.read(8))[0] # double
+                ymax = struct.unpack('d',file.read(8))[0] # double
+                ymin = struct.unpack('d',file.read(8))[0] # double
+                zmax = struct.unpack('d',file.read(8))[0] # double
+                zmin = struct.unpack('d',file.read(8))[0] # double
+                    
+                if(np.isin(VersionMinor,[1,2,3])):
+                    
+                    # LAS 1.1 - 1.3 Format
+        
+                    # Move forward in file from beginning
+                    file.seek(headerSize, 0)
+                    
+                    # Initialize arrays
+                    uID = np.zeros((1,16))
+                    desc = np.zeros((1,32))
+                    
+                    for i in range(0,nvlr):
+                        
+                        # Move forward in file from current position
+                        file.seek(2, 1)
+                        
+                        for j in range(0,16):
+                            uID[0,j] = struct.unpack('B',file.read(1))[0] # uint8
+                        # endFor
+                        
+                        # Convert userID to ASCII char
+                        userID = ''.join([chr(int(item)) for item in uID[0]])
+                        
+                        recordID = struct.unpack('H',file.read(2))[0] # uint16
+                        recordLen = struct.unpack('H',file.read(2))[0] # uint16
+                    
+                        for j in range(0,32):
+                            desc[0,j] = struct.unpack('B',file.read(1))[0] # uint8
+                        # endFor
+                    
+                        if('LASF_Projection' in userID):
+                            
+                            if(recordID == 34735):
+                                
+                                sGeoKeys_wKeyDirectoryVersion = struct.unpack('H',file.read(2))[0] # uint16
+                                sGeoKeys_wKeyRevision = struct.unpack('H',file.read(2))[0] # uint16
+                                sGeoKeys_wMinorRevision = struct.unpack('H',file.read(2))[0] # uint16
+                                sGeoKeys_wNumKeys = struct.unpack('H',file.read(2))[0] # uint16
+                                
+                                sGeoKeys_wKeyID = np.zeros((sGeoKeys_wNumKeys,1))
+                                sGeoKeys_wTIFFTagLocation = np.zeros((sGeoKeys_wNumKeys,1))
+                                sGeoKeys_wCount = np.zeros((sGeoKeys_wNumKeys,1))
+                                sGeoKeys_wValue_Offset = np.zeros((sGeoKeys_wNumKeys,1))
+                                
+                                for k in range(0,sGeoKeys_wNumKeys):
+                                    
+                                    sGeoKeys_wKeyID[k,0] = struct.unpack('H',file.read(2))[0] # uint16
+                                    sGeoKeys_wTIFFTagLocation[k,0] = struct.unpack('H',file.read(2))[0] # uint16
+                                    sGeoKeys_wCount[k,0] = struct.unpack('H',file.read(2))[0] # uint16
+                                    sGeoKeys_wValue_Offset[k,0] = struct.unpack('H',file.read(2))[0] # uint16
+                                    
+                                    if(sGeoKeys_wKeyID[k,0] == 1024): # This tells the CS type
+                                        
+                                        if(sGeoKeys_wTIFFTagLocation[k,0] == 0):
+                                            coordType = int(sGeoKeys_wValue_Offset[k,0])
+                                        # endIf
+                                        
+                                    elif(sGeoKeys_wKeyID[k,0] == 3072): # This tells the Projected CS type (UTM)
+                                        
+                                        if(sGeoKeys_wTIFFTagLocation[k,0] == 0):
+                                            projCScode = sGeoKeys_wValue_Offset[k,0]
+                                        else :
+                                            projCScode = sGeoKeys_wTIFFTagLocation[k,0]
+                                        # endIf
+                                        
+                                        # Analyze the major 3 digits
+                                        first3 = np.floor(projCScode/100)
+                                        
+                                        if(first3 == 322):
+                                            ellipsoid = 'WGS72'
+                                            hemi = 'N'
+                                        elif(first3 == 323):
+                                            ellipsoid = 'WGS72'
+                                            hemi = 'S'
+                                        elif(first3 == 324):
+                                            ellipsoid = 'WGS72BE'
+                                            hemi = 'N'
+                                        elif(first3 == 325):
+                                            ellipsoid = 'WGS72BE'
+                                            hemi = 'S'
+                                        elif(first3 == 326):
+                                            ellipsoid = 'WGS84'
+                                            hemi = 'N'
+                                        elif(first3 == 327):
+                                            ellipsoid = 'WGS84'
+                                            hemi = 'S'
+                                        elif(first3 == 267 or first3 == 320):
+                                            ellipsoid = 'NAD27'
+                                            hemi = 'N'
+                                        elif(first3 == 269 or first3 == 321):
+                                            ellipsoid = 'NAD83'
+                                            hemi = 'N'
+                                        # endIf
+                                            
+                                        # Analyze the last 2 digits to get the zone
+                                        zone = str(int(projCScode % 100)).zfill(2)
+                                
+                                    # endIf
+                                # endFor
+                            # endIf
+                        
+                        else:
+                            
+                            # Move to specified point in file
+                            file.seek(recordLen, 1)
+                            
+                        # endIf        
+                    # endFor
+                    
+                else:
+                    
+                    # LAS 1.4 Format
+                    
+                    # Move forward in file from current position
+                    file.seek(20, 1)
+                        
+                    # Get parameters
+                    Npoints = struct.unpack('Q',file.read(8))[0] # double
+                    
+                    # Move forward in file from beginning
+                    file.seek(headerSize, 0);
+                    
+                    # Initialize arrays
+                    uID = np.zeros((1,16))
+                    desc = np.zeros((1,32))
+                    
+                    for i in range(0,nvlr):
+                        
+                        # Move forward in file from current position
+                        file.seek(2, 1)
+                        
+                        for j in range(0,16):
+                            uID[0,j] = struct.unpack('B',file.read(1))[0] # uint8
+                        # endFor
+                        
+                        # Convert userID to ASCII char
+                        userID = ''.join([chr(int(item)) for item in uID[0]])
+                        
+                        recordID = struct.unpack('H',file.read(2))[0] # uint16
+                        recordLen = struct.unpack('H',file.read(2))[0] # uint16
+                        
+                        for j in range(0,32):
+                            desc[0,j] = struct.unpack('B',file.read(1))[0] # uint8
+                        # endFor
+                        
+                        # Convert description to ASCII char
+                        description = ''.join([chr(int(item)) for item in desc[0]])
+                        
+                        wkt = np.zeros((1,recordLen))
+                        for j in range(0,recordLen):
+                            wkt[0,j] = struct.unpack('B',file.read(1))[0] # uint8
+                        # endFor
+                        
+                        # Convert wkt to ASCII char
+                        wktAll = ''.join([chr(int(item)) for item in wkt[0]])
+                        
+                        # Get ellipsoid
+                        ellipsoid = (findStr(wktAll,'PROJCS["','/ UTM zone')).strip()
+                        ellipsoid = ''.join(ellipsoid.split())
+                        
+                        # Get UTM Zone/Hemi
+                        utmInfo = (findStr(wktAll,'/ UTM zone','",GEOGCS["WGS')).strip()
+                        zone = str(int(utmInfo[0:-1])).zfill(2)
+                        hemi = utmInfo[-1:]
+                        
+                        # Set coord type
+                        coordType = 1
+                        
+                    # endFor
+                # endIf
+            # endWith
+            
+            # Define EPSG code
+            if(hemi == 'N'):
+                epsg = 'epsg:326'
+            elif(hemi == 'S'):
+                epsg = 'epsg:327'
+            # endIf
+            epsg = epsg + zone
+            
+            # Set output array
+            dataOut = [fileName, version, xmin, xmax, ymin, ymax, zmin, zmax,
+                       Npoints, zone, hemi, ellipsoid, coordType, epsg]
+            
+            # Set dataframe
+            dataOutDFsingle = pd.DataFrame(data=dataOut).T
+            dataOutDFsingle.columns = columnNames
+            
+            # Append dataframe
+            dataOutDF = dataOutDF.append(dataOutDFsingle, ignore_index=True)
+        
+        # endFor
+        
+        # Write output file if requested
+        if(outputFilePath):
+            try:
+                if(os.path.exists(outputFilePath)):
+                    writeLog('   Updating output header file: %s' %outputFilePath, logFileID)
+                    dataOutDF.to_csv(outputFilePath, mode='a', header=False, index=False)
+                else:
+                    writeLog('   Writing output header file: %s' %outputFilePath, logFileID)
+                    dataOutDF.to_csv(outputFilePath, index=False)
+                # endIf
+            except:
+                writeLog('   WARNING: Could not write output .csv file with las headers.', logFileID)
+            # endTry
+        # endIf
+    # endIf
+    
+    return dataOutDF
+
+# endDef
+    
+### Function to read header info
+def getTruthHeaders(truthFilePath, truthFileType, logFileID=False):
+    
+    # Initialize output
+    truthHeaderDF = []
+    writeNew = True
+    appendNew = False
+        
+    # Create header file output name
+    headerFileName = 'phoReal_headers.csv'
+    truthFileDir = ntpath.dirname(truthFilePath[0])
+    headerFilePath = os.path.normpath(truthFileDir + '\\' + headerFileName)
+    
+    # Message to user
+    writeLog('   Reading header info for all truth files in: %s' %truthFileDir, logFileID)
+
+    # Check if header file exists
+    if(os.path.exists(headerFilePath)):
+        writeLog('   Previous header file exists', logFileID)
+        stored_truthHeaderDF = pd.read_csv(headerFilePath)
+        stored_truthHeaderDF['utmZone'] = stored_truthHeaderDF['utmZone'].astype(str)
+        stored_truthFilePath = (stored_truthHeaderDF['fileName']).to_list()
+        stored_filesTrue = np.isin(truthFilePath, stored_truthFilePath)
+        stored_filesSame = all(stored_filesTrue)
+        
+        # Determine if files are the same
+        if(stored_filesSame):
+            if(len(truthFilePath)==len(stored_truthFilePath)):
+                writeLog('   Stored header file is up-to-date, using this file', logFileID)
+                truthHeaderDF = stored_truthHeaderDF
+            elif(len(truthFilePath)<len(stored_truthFilePath)):
+                writeLog('   Stored header file is ahead of truth directory, using only truth files', logFileID)
+                indsTrue = np.isin(stored_truthFilePath, truthFilePath)
+                truthHeaderDF = stored_truthHeaderDF[indsTrue]
+                truthHeaderDF.reset_index(inplace=True)
+            # endIf
+            writeNew = False
+        else:
+            writeLog('   Stored header file is not up-to-date, updating...', logFileID)
+            newInds = stored_filesTrue==False
+            truthFilePath = (np.array(truthFilePath)[newInds]).tolist()
+            appendNew = True
+        # endIf
+    # endIf
+    
+    if(writeNew):
+        if(('las' in truthFileType.lower()) or ('laz' in truthFileType.lower())):  
+            # Get .las header info
+            truthHeaderNewDF = readLasHeader(truthFilePath, headerFilePath)              
+        elif('tif' in truthFileType):
+            # Load .tif file
+            truthHeaderNewDF = 1
+        # endIf
+        
+        # Append dataframes together if necessary
+        if(appendNew):
+            frames = [stored_truthHeaderDF, truthHeaderNewDF]
+            truthHeaderDF = pd.concat(frames, ignore_index=True)
+        else:
+            truthHeaderDF = truthHeaderNewDF
+        # endIf
+        
+    # endIf
+    
+    # Write a blank line for readability
+    writeLog('', logFileID)
+    
+    return truthHeaderDF
+
+# endDef
+    
+### Function to apply geoid model to truth buffer
+def applyGeoidCorrection(atlTruthData, truthHeaderNewDF, logFileID=False):
+
+    # Apply geoid model Z corrections if necessary
+    regionName = truthHeaderNewDF['fileName'][0]
+    
+    # Initialize geoidFile variable
+    geoidFile = False
+    
+    # Determine geoid model to use
+    if('sonoma' in regionName.lower() or 'indiana' in regionName.lower()):     
+        geoidFile = 'geoid12b_latlon.mat'
+    elif('finland' in regionName.lower()):
+        geoidFile = 'geoidFin2005N00_latlon.mat'
+    elif('rangiora' in regionName.lower() or 'wellington' in regionName.lower()):
+        geoidFile = 'geoidNZ_latlon.mat'
+    elif('fthood' in regionName.lower()):
+        geoidFile = 'geoid_egm2008.mat'
+    # endif
+    
+    if(geoidFile):
+    
+        # Print status message
+        writeLog('', logFileID)
+        writeLog('   STATUS: Applying Truth Z Correction for %s (Geoid File = %s).' % (regionName, geoidFile), logFileID)
+            
+        # Load Geoid file
+        geoidData = readGeoidFile(geoidFile)
+
+        # Get geoidal heights and add to orthometric heights
+        atlTruthData = getGeoidHeight(geoidData,atlTruthData)
+        
+    # EndIf
+    
+    return atlTruthData
+
+# endDef
+    
+### Function to find text between matching strings
+def findStr(textIn,textLeft,textRight):
+
+    textOut = textIn[textIn.index(textLeft)+len(textLeft):textIn.index(textRight)]
+    
+    return textOut
+
+# endDef
+
+### Function to do quick filter operation
+def quickFilter(atlMeasuredData, xarr, yarr, zarr, intensity, classification):
+
+    # Get buffered data
+    buffer = 100
+    xmin = np.min(atlMeasuredData.easting.flatten()) - buffer
+    xmax = np.max(atlMeasuredData.easting.flatten()) + buffer
+    ymin = np.min(atlMeasuredData.northing.flatten()) - buffer
+    ymax = np.max(atlMeasuredData.northing.flatten()) + buffer
+    
+    # Get indices outside of buffer
+    quickfilter = np.where((xarr > xmin) & (xarr < xmax) & (yarr > ymin) & (yarr < ymax))
+    
+    # Filter data outside of buffer
+    xarr = xarr[quickfilter]
+    yarr = yarr[quickfilter]
+    zarr = zarr[quickfilter]
+    intensity = intensity[quickfilter]
+    classification = classification[quickfilter]
+    
+    # Filter out bad Z values in DTM
+    zGoodInds = zarr>0
+    xarr = xarr[zGoodInds]
+    yarr = yarr[zGoodInds]
+    zarr = zarr[zGoodInds]
+    classification = classification[zGoodInds]
+    intensity = intensity[zGoodInds]
+    
+    return xarr, yarr, zarr, intensity, classification
+
+# endDef
+    
+### Fuction to create truth buffer around ground track
+def makeBuffer(atlTruthData, atlMeasuredData, rotationData, buffer):
+    
+    # Get MEASURED rotated buffer bounds data
+    xRotL = atlMeasuredData.crossTrack - buffer
+    xRotR = atlMeasuredData.crossTrack + buffer
+    yRot = atlMeasuredData.alongTrack
+
+    # Rotate TRUTH lasData to CT/AT plane
+    xRotLasData, yRotLasData,  _, _, _, _ = getCoordRotFwd(atlTruthData.easting, 
+                                                           atlTruthData.northing, 
+                                                           rotationData.R_mat, 
+                                                           rotationData.xRotPt, 
+                                                           rotationData.yRotPt, 
+                                                           rotationData.desiredAngle)
+
+    # Find TRUTH lasData points inside TRUTH buffer
+    yRotLocalInds = (yRot >= yRotLasData.min()) & (yRot <= yRotLasData.max()) 
+    xRotLocalL = xRotL[yRotLocalInds]
+    xRotLocalR = xRotR[yRotLocalInds]
+    xyBufferInds = (xRotLasData >= xRotLocalL.min()) & (xRotLasData <= xRotLocalR.max())
+    
+    # Extract TRUTH lasData points inside TRUTH buffer
+    subData_easting = atlTruthData.easting[xyBufferInds]
+    subData_northing = atlTruthData.northing[xyBufferInds]
+    subData_crossTrack = atlTruthData.crossTrack[xyBufferInds]
+    subData_alongTrack = atlTruthData.alongTrack[xyBufferInds]
+    subData_z = atlTruthData.z[xyBufferInds]
+    subData_classification = atlTruthData.classification[xyBufferInds]
+    subData_intensity = atlTruthData.intensity[xyBufferInds]
+
+    # Store data as object
+    atlTruthDataBuffer = atlTruthStruct(subData_easting, subData_northing, 
+                                        subData_crossTrack, subData_alongTrack,
+                                        subData_z, 
+                                        subData_classification, 
+                                        subData_intensity, 
+                                        atlTruthData.zone, 
+                                        atlTruthData.hemi)
+
+    return atlTruthDataBuffer
+            
+# endDef
+    
+### Function to find which truth tiles ICESat-2 crosses over
+def findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buffer):
+       
+    # Get MEASURED rotated buffer bounds data
+    xRotL = atlMeasuredData.crossTrack - buffer
+    xRotR = atlMeasuredData.crossTrack + buffer
+    yRot  = atlMeasuredData.alongTrack
+    
+    # Get MEASURED buffer bounds data in easting/northing plane
+    xL, yL,  _, _, _ = getCoordRotRev(xRotL, yRot, rotationData.R_mat, rotationData.xRotPt, rotationData.yRotPt)
+    xR, yR,  _, _, _ = getCoordRotRev(xRotR, yRot, rotationData.R_mat, rotationData.xRotPt, rotationData.yRotPt)
+    
+    # Rotate truth header file min/max x,y points to CT/AT plane
+    xMinyMinHeaderRotX, _,  _, _, _, _ = getCoordRotFwd(((truthHeaderNewDF['xmin']).to_numpy()).astype('float'), 
+                                                        ((truthHeaderNewDF['ymin']).to_numpy()).astype('float'), 
+                                                        rotationData.R_mat, 
+                                                        rotationData.xRotPt, 
+                                                        rotationData.yRotPt, 
+                                                        rotationData.desiredAngle)
+    
+    xMinyMaxHeaderRotX, _,  _, _, _, _ = getCoordRotFwd(((truthHeaderNewDF['xmin']).to_numpy()).astype('float'), 
+                                                        ((truthHeaderNewDF['ymax']).to_numpy()).astype('float'), 
+                                                        rotationData.R_mat, 
+                                                        rotationData.xRotPt, 
+                                                        rotationData.yRotPt, 
+                                                        rotationData.desiredAngle)
+    xMaxyMinHeaderRotX, _,  _, _, _, _ = getCoordRotFwd(((truthHeaderNewDF['xmax']).to_numpy()).astype('float'), 
+                                                        ((truthHeaderNewDF['ymin']).to_numpy()).astype('float'), 
+                                                        rotationData.R_mat, 
+                                                        rotationData.xRotPt, 
+                                                        rotationData.yRotPt, 
+                                                        rotationData.desiredAngle)
+    xMaxyMaxHeaderRotX, _,  _, _, _, _ = getCoordRotFwd(((truthHeaderNewDF['xmax']).to_numpy()).astype('float'), 
+                                                        ((truthHeaderNewDF['ymax']).to_numpy()).astype('float'), 
+                                                        rotationData.R_mat, 
+                                                        rotationData.xRotPt, 
+                                                        rotationData.yRotPt, 
+                                                        rotationData.desiredAngle)
+    
+    # Find min/max x/y header points inside min/max x buffer points
+    xMinyMinXPtsInBuffer = (xMinyMinHeaderRotX >= xRotL.min()) & \
+    (xMinyMinHeaderRotX <= xRotR.max())
+    xMinyMaxXPtsInBuffer = (xMinyMaxHeaderRotX >= xRotL.min()) & \
+    (xMinyMaxHeaderRotX <= xRotR.max())
+    xMaxyMinXPtsInBuffer = (xMaxyMinHeaderRotX >= xRotL.min()) & \
+    (xMaxyMinHeaderRotX <= xRotR.max())
+    xMaxyMaxXPtsInBuffer = (xMaxyMaxHeaderRotX >= xRotL.min()) & \
+    (xMaxyMaxHeaderRotX <= xRotR.max())
+    
+    # Get header points inside MEASURED buffer points
+    xHeaderPtsInBuffer = np.c_[xMinyMinXPtsInBuffer | xMinyMaxXPtsInBuffer| xMaxyMinXPtsInBuffer | xMaxyMaxXPtsInBuffer]
+    
+    # Find min/max x buffer points inside min/max x/y header points
+    xyMinMaxHeaderRot = np.column_stack((xMinyMinHeaderRotX,xMinyMaxHeaderRotX,xMaxyMinHeaderRotX,xMaxyMaxHeaderRotX))
+    xyMinHeaderRot = np.c_[np.amin(xyMinMaxHeaderRot,axis=1)]
+    xyMaxHeaderRot = np.c_[np.amax(xyMinMaxHeaderRot,axis=1)]
+    xMinBufferPtsInFile = (xRotL.min() >= xyMinHeaderRot) & (xRotL.min() <= xyMaxHeaderRot)
+    xMaxBufferPtsInFile = (xRotR.max() >= xyMinHeaderRot) & (xRotR.max() <= xyMaxHeaderRot)
+    
+    # Get MEASURED buffer points inside header points
+    xBufferPtsInHeader = xMinBufferPtsInFile | xMaxBufferPtsInFile
+    
+    # Get any points where buffer points are inside header and vice versa
+    xPtsInFile = np.ravel(np.logical_or(xHeaderPtsInBuffer, xBufferPtsInHeader))
+        
+    # Get matching truth file names and x/y min/max points
+    matchingFilesPre = ((truthHeaderNewDF['fileName'][xPtsInFile]).to_numpy()).astype('str')
+    matchingHeaderXmin = ((truthHeaderNewDF['xmin'][xPtsInFile]).to_numpy()).astype('float')
+    matchingHeaderXmax = ((truthHeaderNewDF['xmax'][xPtsInFile]).to_numpy()).astype('float')
+    matchingHeaderYmin = ((truthHeaderNewDF['ymin'][xPtsInFile]).to_numpy()).astype('float')
+    matchingHeaderYmax = ((truthHeaderNewDF['ymax'][xPtsInFile]).to_numpy()).astype('float')
+    
+    # Get all MEASURED x,y buffer points
+    xAll = np.concatenate((xL, xR))
+    yAll = np.concatenate((yL, yR))
+    
+    matchTF = []
+    if(len(matchingFilesPre)>0):
+        for i in range(0,len(matchingFilesPre)):
+            
+            # Determine TRUTH files where MEASURED data actually crosses over
+            xPtsInFile = (xAll >= matchingHeaderXmin[i]) & (xAll <= matchingHeaderXmax[i])
+            yPtsInFile = (yAll >= matchingHeaderYmin[i]) & (yAll <= matchingHeaderYmax[i])
+            anyPtsInFile = any(xPtsInFile & yPtsInFile)
+    
+            # If a TRUTH file is a match, use it
+            if(anyPtsInFile):
+                matchTF.append(True)
+            else:
+                matchTF.append(False)
+            # endIf
+            
+        # endFor
+    # endIf
+    
+    if(len(matchTF)>0):
+        matchTF = np.array(matchTF)
+        matchingFiles = matchingFilesPre[matchTF]
+    else:
+        matchingFiles = []
+    # endIf
+    
+    return matchingFiles
+
+# endDef
+    
+### Function to get truth file paths from GUI input
+def getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False):
+    
+    # Initialize output
+    truthFilePaths = []
+    
+    # Get truth file paths based on file, files, or directory
+    if(('las' in truthFileType.lower()) or ('tif' in truthFileType.lower())):
+        if(isinstance(truthSwathDir, str)):
+            if(os.path.exists(truthSwathDir)):
+                if(os.path.isfile(truthSwathDir)):
+                    # Get truth file name and extension
+                    truthFilePaths = [truthSwathDir]
+                else:
+                    # Get full paths to input files
+                    strSearch = os.path.normpath(truthSwathDir + '\\*' + truthFileType)
+                    truthFilePaths = glob.glob(strSearch, recursive = True)   
+                # endIf
+            else:
+                # Send error message
+                writeLog('   Truth file/dir does not exist.', logFileID)      
+            # endIf
+        elif(isinstance(truthSwathDir, list)):
+            truthFilePaths = truthSwathDir
+        # endIf
+    else:
+        writeLog('   Incorrect file type for truth file.', logFileID)
+    # endIf
+
+    return truthFilePaths
+
+# endDef 
