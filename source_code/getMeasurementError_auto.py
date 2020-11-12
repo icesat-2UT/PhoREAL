@@ -16,7 +16,8 @@ import sys
 import warnings
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from getAtlTruthSwath_auto import getAtlTruthSwath
-from icesatIO import writeLas
+from icesatIO import (writeLas, writeLog, getTruthFilePaths, getTruthHeaders,
+                      loadTruthFile)
 from icesatUtils import (ismember, getRaster, getIntersection2d, getCoordRotRev)
 from icesatPlot import (plotContour, plotZY, plotZT)
 
@@ -61,16 +62,18 @@ class atlCorrectionsStruct:
         self.mae = correctionsMAE
         self.rmse = correctionsRMSE
         self.me = correctionsME
-        
-        
-def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots):
-    
+
+
+def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath, 
+                        useMeasSigConf, filterData, offsets, createMeasCorrFile, 
+                        makePlots, showPlots, logFileID = False):
+
     # Start timer
     timeStart = runTime.time()
     
     # Get and print ground track number
     gtNum = atlMeasuredData.gtNum
-    print('   Ground Track Number: %s' % gtNum)
+    writeLog('   Ground Track Number: %s' % gtNum, logFileID)
 
     # Turn off runtime warnings (from np.nanmean)
     if not sys.warnoptions:
@@ -106,7 +109,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     # Filter Ground data from ATL08 if available
     if(useMeasSigConf):
     
-        print('   Using Signal Confidence for Measurement Offset Computation')
+        writeLog('   Using Signal Confidence %s for Measurement Offset Computation' %filterData, logFileID)
         
         # Filter MEASURED data points based on signal confidence
         measGroundInds = ismember(atlMeasuredDataReduced.signalConf,filterData)[0]
@@ -122,7 +125,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     
     else:
     
-        print('   Using Ground Truth for Measurement Offset Computation')
+        writeLog('   Using Ground Truth for Measurement Offset Computation', logFileID)
         
         # Filter ground MEASURED data points
         icesatGroundIndex = 1
@@ -156,7 +159,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             # x = max([x, lim[0]])
             # y = min([lim[1], y])
             return x, y
-        
+
         # Get array offsets
         crossTrackMinBound = (np.fix(crossTrackBounds[0]/rasterResolutions[0])*rasterResolutions[0]).astype(int)
         crossTrackMaxBound = (np.fix((crossTrackBounds[-1])/rasterResolutions[0])*rasterResolutions[0]).astype(int)
@@ -215,14 +218,14 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             # endIf
             
             # Print message to screen
-            print('')
-            print('   Test Case %d of %d' %(i+1, totRasterResolutions))
+            writeLog('', logFileID)
+            writeLog('   Test Case %d of %d' %(i+1, totRasterResolutions), logFileID)
             if not (crossTrackEdgeError == 0 and alongTrackEdgeError == 0):
-                print('   Relocated search center to [%s, %s]' % (crossTrackEdgeError, alongTrackEdgeError))
+                writeLog('   Relocated search center to [%s, %s]' % (crossTrackEdgeError, alongTrackEdgeError), logFileID)
 
-            print('   Raster Resolution = %s m' % rasterResolution)
-            print('   Cross Track Offsets = [%s, %s]' %(crossTrackOffsets[0], crossTrackOffsets[-1]))
-            print('   Along Track Offsets = [%s, %s]' %(alongTrackOffsets[0], alongTrackOffsets[-1]))
+            writeLog('   Raster Resolution = %s m' % rasterResolution, logFileID)
+            writeLog('   Cross Track Offsets = [%s, %s] (Adjusted to align with %s m resolution)' %(crossTrackOffsets[0], crossTrackOffsets[-1], rasterResolution), logFileID)
+            writeLog('   Along Track Offsets = [%s, %s] (Adjusted to align with %s m resolution)' %(alongTrackOffsets[0], alongTrackOffsets[-1], rasterResolution), logFileID)
             
             # Make Offsets Int's and flip along-track offsets array so larger numbers at top
             crossTrackOffsets = crossTrackOffsets.astype(int)
@@ -236,15 +239,15 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             # Rasterize MEASURED data
             gridMethod = 'Mean'
             fillValue = np.nan
-            print('   Gridding Measured Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod))
+            writeLog('   Gridding Measured Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
             measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
             
             # Rasterize TRUTH data
-            print('   Gridding Truth Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod))
+            writeLog('   Gridding Truth Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
             truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
             
             # Find offsets with minimum MAE
-            print('   Finding Offsets with Minimum MAE...')
+            writeLog('   Finding Offsets with Minimum MAE...', logFileID)
             
             # Store MEASURED data into array variables
             measRasterXRot = np.c_[np.ravel(measRasterRot.x)]
@@ -385,7 +388,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             minRow = np.where(resultsMAE == np.nanmin(resultsMAE))[0]
             minCol = np.where(resultsMAE == np.nanmin(resultsMAE))[1]
             if minRow == [] or minCol == []:
-                print('Error: Gridding all NaN, ensure truth/meas files are correct')
+                writeLog('Error: Gridding all NaN, ensure truth/meas files are correct', logFileID)
                 return []
 
             # Check that estimate is not close to an edge
@@ -401,13 +404,13 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
 
                 numErr += 1
                 if numErr == 5:
-                    print('   Error: Could not determine valid estimate, consider increasing search bounds')
+                    writeLog('   Error: Could not determine valid estimate, consider increasing search bounds', logFileID)
                     return []
 
                 else:
                     crossTrackEdgeError += vec_diff[0] #p[0]
                     alongTrackEdgeError += vec_diff[1] #p[1]
-                    print('   Warning: Estimate on edge [%4.1f, %4.1f] m, relocating search and re-running test case %d...' % (p[0], p[1], i+1))
+                    writeLog('   Warning: Estimate on edge [%4.1f, %4.1f] m, relocating search and re-running test case %d...' % (p[0], p[1], i+1), logFileID)
                     continue # do not update i
 
             # Set edge error to zero if inBounds, this way
@@ -433,11 +436,11 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             correctionsNorthing -= yRotPt
             
             # Print results to screen
-            print('   Cross-Track Correction = %d m (Easting = %0.1f m)'  % (correctionsCrossTrack, correctionsEasting))
-            print('   Along-Track Correction = %d m (Northing = %0.1f m)' % (correctionsAlongTrack, correctionsNorthing))
-            print('   Vertical Correction = %0.1f m' % correctionsVertical)
-            print('   MAE = %0.2f m' % correctionsMAE)
-            print('   RMSE = %0.2f m' % correctionsRMSE)
+            writeLog('   Cross-Track Correction = %d m (Easting = %0.1f m)'  % (correctionsCrossTrack, correctionsEasting), logFileID)
+            writeLog('   Along-Track Correction = %d m (Northing = %0.1f m)' % (correctionsAlongTrack, correctionsNorthing), logFileID)
+            writeLog('   Vertical Correction = %0.1f m' % correctionsVertical, logFileID)
+            writeLog('   MAE = %0.2f m' % correctionsMAE, logFileID)
+            writeLog('   RMSE = %0.2f m' % correctionsRMSE, logFileID)
             
             # Store data in class structure
             atlCorrections = atlCorrectionsStruct(correctionsCrossTrack, correctionsAlongTrack, \
@@ -480,6 +483,25 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             # Get Z Error raster (MEASURED - TRUTH)
             zErrorCommonFinal = measRasterZCommonFinal - truthRasterZCommonFinal
             
+            # Find Z values that are not NaN in both MEASURED and TRUTH data
+            measNotNan = np.logical_not(np.isnan(measRasterZCommonFinal))
+            truthNotNan = np.logical_not(np.isnan(truthRasterZCommonFinal))
+            allNotNan = measNotNan & truthNotNan
+            
+            # Filter out non-NaN values in TRUTH data
+            truthRasterXRotCommonFinal = truthRasterXRotCommonFinal[allNotNan]
+            truthRasterYRotCommonFinal = truthRasterYRotCommonFinal[allNotNan]
+            truthRasterZCommonFinal = truthRasterZCommonFinal[allNotNan]
+            
+            # Filter out non-NaN values in MEASURED data
+            measRasterXRotCommonFinal = measRasterXRotCommonFinal[allNotNan]
+            measRasterYRotCommonFinal = measRasterYRotCommonFinal[allNotNan]
+            measRasterZCommonFinal = measRasterZCommonFinal[allNotNan]
+            measRasterTCommonFinal = measRasterTCommonFinal[allNotNan]
+              
+            # Filter out non-NaN values in error data
+            zErrorCommonFinal = zErrorCommonFinal[allNotNan]
+            
             # Get 100 m segment Z Mean Error data
             errorResolution = 100
             gridMethod = 'Mean'
@@ -510,14 +532,21 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             if(makePlots):
                 
                 # Make contour plot
-                print('   Making Plots...')
-                plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, i)
+                writeLog('   Making Plots...', logFileID)
+                plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, 
+                            atlMeasuredData, atlCorrections, rasterResolution, showPlots, 
+                            outFilePath, i)
             
                 # Make ZY scatter plots
-                plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, i)
+                plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, 
+                       truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, 
+                       segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, 
+                       useMeasSigConf, filterData, showPlots, outFilePath, i)
                 
                 # Make ZT scatter plots
-                plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, i)
+                plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, 
+                       atlMeasuredData, atlCorrections, rasterResolution, 
+                       useMeasSigConf, filterData, showPlots, outFilePath, i)
     
             # endIf 
 
@@ -528,7 +557,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     else:
             
         # Hard-coded offsets case
-        print('   Using preset values...')
+        writeLog('   Using preset values...', logFileID)
         
         # Set cross-track/along-track offsets
         correctionsCrossTrack = crossTrackBounds
@@ -553,7 +582,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
         rasterResolution = rasterResolutions[-1]
         gridMethod = 'Mean'
         fillValue = -999
-        print('   Gridding Measured Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod))
+        writeLog('   Gridding Measured Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
         
         # Add in corrections
         measXRot += correctionsCrossTrack
@@ -573,7 +602,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
         truthZReduced = truthZ[truthInOffsetsInds]
             
         # Rasterize TRUTH data
-        print('   Gridding Truth Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod))
+        writeLog('   Gridding Truth Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
         truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
         
         # Remove NaN data (-999) in MEASURED raster
@@ -660,16 +689,21 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
         if(makePlots):
             
             # Make contour plot
-            print('   Making Plots...')
+            writeLog('   Making Plots...', logFileID)
         
             # Plot counter
             i = 0
         
             # Make ZY scatter plots
-            plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, i)
+            plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal,
+                   truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, 
+                   segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, 
+                   useMeasSigConf, filterData, showPlots, outFilePath, i)
             
             # Make ZT scatter plots
-            plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, atlMeasuredData, atlCorrections, rasterResolution, showPlots, outFilePath, i)
+            plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, 
+                   atlMeasuredData, atlCorrections, rasterResolution, 
+                   useMeasSigConf, filterData, showPlots, outFilePath, i)
 
         # endIf 
             
@@ -707,8 +741,8 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
                  zDirTxt + '{0:0.1f}'.format(abs(atlCorrections.z[0]))
                  
         # Get output path name
-        print('')
-        print('   Writing measured corrected .las file...')
+        writeLog('', logFileID)
+        writeLog('   Writing measured corrected .las file...', logFileID)
         outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_SHIFTED_' + enuTxt + '.las'
         outPath = os.path.normpath(outFilePath + '/' + outName)
         
@@ -729,8 +763,9 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     timeElapsedSec = timeElapsedTotal % 60
     
     # Print completion message
-    print('   Module Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
-    print('\n')
+    writeLog('', logFileID)
+    writeLog('   Module Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec), logFileID)
+    writeLog('\n', logFileID)
     
     # Return output data
     return atlCorrections
@@ -770,7 +805,7 @@ if __name__ == "__main__":
     
     atl03FilePath = 'Z:/data/release/002/ATL03_r002/ATL03_20190928175636_00280506_002_01_sreq_3181.h5' # WSMR
     atl08FilePath = []
-    outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_wsmr_20190928_test'
+    outFilePath = 'C:/Users/malonzo/GLAM/delete'
     
 #    atl03FilePath = 'z:/data/release/002/ATL03_r002/ATL03_20181018202814_03090102_002_01.h5' # N Carolina 20181018 r002
 #    atl08FilePath = []
@@ -808,6 +843,7 @@ if __name__ == "__main__":
 #    truthSwathDir = 'N:/USERS/mike/iceSat2/atl03_validation/r002_ncarolina_20181018/ATL03_20181018202814_03090102_002_01_gt1r_REFERENCE_50L50Rm_buffer.las'
     # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/wsmr_ATL03_20191031162419_05310506_R002_01_sub_344_gt2r_TRUTH_150L150Rm_buffer.las'
     # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short.las'
+    truthFileType = '.las'
     createTruthFile = False      # Option to create output truth .las file
     
     ##### End Inputs for getAtlTruthSwath
@@ -838,11 +874,24 @@ if __name__ == "__main__":
     # Call getAtlMeasuredSwath
     print('RUNNING getAtlMeasuredSwath...\n')
     atl03Data, atl08Data, headerData, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, gtNum, trimInfo, createAtl03LasFile, createAtl03KmlFile, createAtl08KmlFile, createAtl03CsvFile, createAtl08CsvFile)
-        
+          
+    # Get input truth file(s)
+    truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False)
+              
+    # Get truth file header info
+    if(not(useExistingTruth)):
+        truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID=False)
+    else:
+        truthHeaderDF = False
+    # endIf
+    
     # Call getAtlTruthSwath
     print('RUNNING getAtlTruthSwath...\n')
-    atlTruthData = getAtlTruthSwath(atl03Data, headerData, rotationData, useExistingTruth, truthSwathDir, buffer, outFilePath, createTruthFile)
-        
+    atlTruthData = getAtlTruthSwath(atl03Data, rotationData, 
+                                    truthHeaderDF, truthFilePaths,
+                                    buffer, outFilePath, createTruthFile, 
+                                    truthFileType, useExistingTruth, logFileID=False)
+    
     # Call getMeasurementError
     print('RUNNING getMeasurementError...\n')
     atlCorrections = getMeasurementError(atl03Data, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots)

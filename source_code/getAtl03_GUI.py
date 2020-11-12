@@ -45,7 +45,7 @@ from getMeasurementError_auto import getMeasurementError, offsetsStruct
 from icesatPlot import (getPlot, getPlot_atl08, getPlot_truth, 
                         getPlot_measCorr, getPklPlot, addStatsToPlot)
 from icesatIO import (createHTMLChart, writeLog, write_mat, getTruthFilePaths,
-                      loadTruthFile, getTruthHeaders)
+                      getTruthHeaders)
 from icesatUtils import (superFilter, getNameParts)
 from icesatBin_skinny import get_bin_df
 
@@ -64,7 +64,7 @@ print('\n')
 window = tk.Tk()
 
 # GUI title
-phoRealVersion = 'v3.18'
+phoRealVersion = 'v3.19'
 window.title('PhoREAL %s - Applied Research Labs (The University of Texas at Austin)' %phoRealVersion)
 
 # GUI size
@@ -115,12 +115,17 @@ cwd = os.path.normpath(os.getcwd())
 ###############################################################################
 
 # Define global variables
-global atl03FileExists, atl08FileExists, outPathExists, truthDataExists, atl03DF_all
+global atl03FileExists, atl08FileExists, outPathExists, truthDataExists, \
+       atl03DF_all, truthFilePaths, truthFileType
+       
+# Initialize parameters
 atl03FileExists = False
 atl08FileExists = False
 outPathExists = True
 truthDataExists = False
 atl03DF_all = []
+truthFilePaths = []
+truthFileType = []
 
 ### Panel label
 measLabelframe = tk.LabelFrame(tab1, width=545, height=450, text='Get ICESat-2 Data Input', font=('Arial Bold', 14))
@@ -507,22 +512,65 @@ useTruthSection_checkBox.place(x=1110, y=10)
 # Browse Truth Data Directory File Button Callback
 def browseTruthDir():
     
-    global truthDataExists
+    global truthDataExists, truthFilePaths, truthFileType
     
+    # Get GUI input parameters
     currentData = truthDataDir_textBox.get()
-    useTruth = useExistingTruthChkState.get()
+    truthFileTypeValue = truthFileTypeBox.get()
+    inpIsDir = False
     
-    if(useTruth):
-        truthData = os.path.normpath(filedialog.askopenfilename(title = 'Select Reference File', filetypes = [('reference files','*.las *.laz *.tif')]))
-        truthDataExists = os.path.exists(truthData)
+    # Set listbox options depending on user input
+    if('file' in truthFileTypeValue.lower()):
+        # Option for reference file(s)
+        if('(s)' in truthFileTypeValue.lower()):
+            # Option for las/tif reference files
+            if('las' in truthFileTypeValue.lower()):
+                helpStr = 'Select Reference .las File(s)'
+                extStr = '*.las'
+                truthFileType = '.las'
+            else:
+                helpStr = 'Select Reference .tif File(s)'
+                extStr = '*.tif'
+                truthFileType = '.tif'
+            # endIf
+            truthData = filedialog.askopenfilenames(title = helpStr, filetypes = [(extStr, extStr)])
+            truthDataExists = True
+        else:
+            # Option for las/tif buffer reference file 
+            if('las' in truthFileTypeValue.lower()):
+                helpStr = 'Select Reference Buffer .las File'
+                extStr = '*.las'
+                truthFileType = '.las'
+            else:
+                helpStr = 'Select Reference Buffer .tif File'
+                extStr = '*.tif'
+                truthFileType = '.tif'
+            # endIf
+            truthData = os.path.normpath(filedialog.askopenfilename(title = helpStr, filetypes = [(extStr, extStr)]))
+            truthDataExists = os.path.exists(truthData)
+        # endIf
     else:
-        truthData = os.path.normpath(filedialog.askdirectory(title = 'Select Reference Directory'))
+        # Reference directory option
+        if('las' in truthFileTypeValue.lower()):
+            helpStr = 'Select Reference Directory with .las File(s)'
+            truthFileType = '.las'
+        else:
+            helpStr = 'Select Reference Directory with .tif File(s)'
+            truthFileType = '.tif'
+        # endIf
+        truthData = os.path.normpath(filedialog.askdirectory(title = helpStr))
         truthDataExists = os.path.isdir(truthData)
+        inpIsDir = True
     # endIf
     
     if(truthDataExists and truthData!='.'):
+        truthFilePaths = getTruthFilePaths(truthData, truthFileType, logFileID=False)
         truthDataDir_textBox.delete(0,len(currentData))
-        truthDataDir_textBox.insert(0,truthData) 
+        if(inpIsDir):
+            truthDataDir_textBox.insert(0,truthData)
+        else:
+            truthDataDir_textBox.insert(0,truthFilePaths)
+        # endIf
     else:
         truthDataExists = False
     # endIf
@@ -530,20 +578,30 @@ def browseTruthDir():
     
 # Use Existing Truth button callback
 def checkUseExistingTruth():
+    
+    global truthFilePaths
+    
+    # Set values in listbox
     useTruth = useExistingTruthChkState.get()
     if(useTruth):
         truthBuffer_textBox.config(state = 'disabled')
-        truthDir_lbl.config(text = 'Reference File Name:')
+        truthFileTypeBox['values'] = ['.las File','.tif File']
     else:
         truthBuffer_textBox.config(state = 'normal')
-        truthDir_lbl.config(text = 'Reference Directory:')
+        truthFileTypeBox['values'] = ['.las File(s)','.las Directory','.tif File(s)','.tif Directory']
     # endIf
+    truthFileTypeBox.current(0)
+    
+    # Clear reference entry box
+    truthDataDir_textBox.delete(0,'end')
+    truthDataDir_textBox.insert(0,'')
+    truthFilePaths = []
 # endDef
 
 ### Use Existing Truth Check Box
 useExistingTruthChkState = tk.BooleanVar()
-useExistingTruthChkState.set(True)
-useExistingTruth_checkBox = tk.Checkbutton(truthLabelframe, text = 'Use Existing Data', font=('Arial', 12), var = useExistingTruthChkState, command = checkUseExistingTruth) 
+useExistingTruthChkState.set(False)
+useExistingTruth_checkBox = tk.Checkbutton(truthLabelframe, text = 'Use Existing Buffer', font=('Arial', 12), var = useExistingTruthChkState, command = checkUseExistingTruth) 
 useExistingTruth_checkBox.place(x=10, y=10)
 
 ### Truth Buffer Size Entry Box
@@ -556,8 +614,8 @@ truthBuffer_textBox.config(state = 'disabled')
 
 ### Create Output Truth File Check Box
 createTruthFileChkState = tk.BooleanVar()
-createTruthFileChkState.set(False)
-createTruthFile_checkBox = tk.Checkbutton(truthLabelframe, text = 'Create Reference File', font=('Arial', 12), var = createTruthFileChkState) 
+createTruthFileChkState.set(True)
+createTruthFile_checkBox = tk.Checkbutton(truthLabelframe, text = 'Save Reference File', font=('Arial', 12), var = createTruthFileChkState) 
 createTruthFile_checkBox.place(x=350, y=10)
 
 # Browse Truth Data Directory File Button Callback
@@ -577,22 +635,51 @@ def checkTruthDir():
     # endIf
 # endDef
     
+# Function to not allow editing in text box
+def ctrlEvent(event):
+    if(12==event.state and event.keysym=='c'):
+        return
+    else:
+        return "break"
+    # endIf
+# endDef
+    
 ### Truth Data Directory Entry Box
-truthDir_lbl = tk.Label(truthLabelframe, text='Reference File Name:', font=('Arial', 12), anchor = 'w', justify='left')
-truthDir_lbl.place(x=10, y=50)
 truthDataDir_textBox = tk.Entry(truthLabelframe, width=43)
 truthDataDir_textBox.place(x=170, y=55)
-truthDataDir_textBox.bind('<Return>', (lambda event: checkTruthDir()))
-truthDataDir_textBox.bind('<Tab>', (lambda event: checkTruthDir()))
+#truthDataDir_textBox.bind('<Return>', (lambda event: checkTruthDir()))
+#truthDataDir_textBox.bind('<Tab>', (lambda event: checkTruthDir()))
+truthDataDir_textBox.bind("<Key>", lambda e: ctrlEvent(e))
 
 ### Truth Data Dir Browse Button
 truthDataDirBrowseButton = tk.Button(truthLabelframe, text='Browse', font=('Arial Bold', 12), command=browseTruthDir) 
 truthDataDirBrowseButton.place(x=450, y=50)
 
+# Function to clear listbox contents when selected
+def selectTruthFileType(event):
+    
+    global truthFilePaths
+    
+    truthDataDir_textBox.delete(0,'end')
+    truthDataDir_textBox.insert(0,'')
+    truthFilePaths = []
+    
+# endDef
+    
+# Truth file Type listbox
+lbl = tk.Label(truthLabelframe, text='Type:', font=('Arial', 12), anchor = 'w', justify='left')
+lbl.place(x=12, y=53)
+truthFileTypeBox = ttk.Combobox(truthLabelframe, width=12)
+truthFileTypeBox.place(x= 60, y = 55)
+truthFileTypes = ['.las File(s)','.las Directory','.tif File(s)','.tif Directory']
+truthFileTypeBox['values'] = truthFileTypes
+truthFileTypeBox.bind("<<ComboboxSelected>>", selectTruthFileType)
+
 # Set Truth section to disabled (default mode)
 for child in truthLabelframe.winfo_children():
     child.configure(state='disable')
 # endFor
+    
 
 ###############################################################################
 #
@@ -606,9 +693,8 @@ measErrorLabelframe.place(x=580, y=140)
 
 # Use Measurement Error section callback
 def useMeasErrorSectionCallback():
-    useTruthSection = useTruthSectionChkState.get()
     useMeasErrorSection = useMeasErrorSectionChkState.get()
-    if(useTruthSection and useMeasErrorSection):
+    if(useMeasErrorSection):
         for child in measErrorLabelframe.winfo_children():
             child.configure(state='normal')
         # endFor
@@ -617,6 +703,12 @@ def useMeasErrorSectionCallback():
         useGroundIndexConfCallback()
         if(not atl08FileExists):
             useGroundIndex_checkBox.config(state = 'disabled')
+        # endIf
+        
+        # Enable truth section
+        if(not(useTruthSectionChkState.get())):
+            useTruthSectionChkState.set(True)
+            useTruthSectionCallback()
         # endIf
     else:
         for child in measErrorLabelframe.winfo_children():
@@ -637,14 +729,14 @@ lbl = tk.Label(measErrorLabelframe, text='Cross-Track Bounds (m):', font=('Arial
 lbl.place(x=10, y=10)
 crossTrackBounds_textBox = tk.Entry(measErrorLabelframe, width=10)
 crossTrackBounds_textBox.place(x=195, y=15)
-crossTrackBounds_textBox.insert(0,'-48, 48')
+crossTrackBounds_textBox.insert(0,'-50, 50')
 
 ### Along-Track Bounds Entry Box
 lbl = tk.Label(measErrorLabelframe, text='Along-Track Bounds (m):', font=('Arial', 12), anchor = 'w', justify='left')
 lbl.place(x=270, y=10)
 alongTrackBounds_textBox = tk.Entry(measErrorLabelframe, width=10)
 alongTrackBounds_textBox.place(x=455, y=15)
-alongTrackBounds_textBox.insert(0,'-48, 48')
+alongTrackBounds_textBox.insert(0,'-50, 50')
 
 ### Multi-Resolutional Stepdown Entry Box
 lbl = tk.Label(measErrorLabelframe, text='Grid Resolution(s) (m):', font=('Arial', 12), anchor = 'w', justify='left')
@@ -733,7 +825,7 @@ lbl.place(x=285, y=150)
 ### Create Measured Corrected File Check Box
 createMeasCorrFileChkState = tk.BooleanVar()
 createMeasCorrFileChkState.set(True)
-createMeasCorrFile_checkBox = tk.Checkbutton(measErrorLabelframe, text = 'Create Shifted ICESat-2 File', font=('Arial', 12), var=createMeasCorrFileChkState) 
+createMeasCorrFile_checkBox = tk.Checkbutton(measErrorLabelframe, text = 'Save Shifted ICESat-2 File', font=('Arial', 12), var=createMeasCorrFileChkState) 
 createMeasCorrFile_checkBox.place(x=10, y=185)
 
 ### Make Plots Check Box
@@ -782,7 +874,10 @@ def runAtl03():
     checkATL08()
     
     # Check Truth Directory
-    checkTruthDir()
+    # checkTruthDir()
+    if(truthDataDir_textBox.get()==''):
+       truthDataExists = False
+    # endIf
     
     # Check output file path
     outFilePath = outPath_textBox.get().strip()
@@ -812,8 +907,11 @@ def runAtl03():
         RunButton.config(state=tk.DISABLED)
         
         # Open .log file for writing
-        logFileName = 'phoReal_logFile.txt'
+        logFileName = 'temp.txt'
         logFilePath = os.path.normpath(outFilePath + '/' + logFileName)
+        if(os.path.exists(logFilePath)):
+            os.remove(logFilePath)
+        # endIf
         try:
             logFileID = open(logFilePath, 'w')
         except:
@@ -846,7 +944,7 @@ def runAtl03():
             # Get Truth Data inputs
             if(useTruthSection):
                 useExistingTruth = useExistingTruthChkState.get()
-                truthSwathDir = truthDataDir_textBox.get().strip()
+                # truthSwathDir = truthDataDir_textBox.get().strip()
                 bufferInput = truthBuffer_textBox.get().strip()
                 if('' == bufferInput):
                     buffer = 0
@@ -904,7 +1002,20 @@ def runAtl03():
             createATL08KmlFile = createATL08KmlChkState.get()
             createATL08CsvFile = createATL08CsvChkState.get()
                 
-            # Loop through all gt nums
+            # Read truth data once before looping over other GT nums
+            if(useTruthSection and truthDataExists and not(useExistingTruth)):
+                
+                # Get truth file header info
+                writeLog('Reading Reference Data...\n', logFileID)
+                truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID)
+            
+            elif(useTruthSection and truthDataExists and useExistingTruth):
+                
+                truthHeaderDF = False
+                        
+            # endIf
+                
+            # Loop through all GT nums
             rotationData = False
             for i in range(0,len(gtNums)):
                 
@@ -956,41 +1067,16 @@ def runAtl03():
                 # endIf
 
                 if(useTruthSection and truthDataExists):
-                                
-                    ### MAKE GUI INPUT!!!!
-                    truthFileType = '.las'
-                
-                    # Get input truth file(s)
-                    truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID)
                         
-                    # Read existing truth swath file or create new one
-                    if(useExistingTruth):
+                    writeLog('Getting Reference Data...\n', logFileID)
                         
-                        # Get truth swath .las file
-                        truthFilePath = truthFilePaths[0]
-                        
-                        # Get truth file header info
-                        print('   Reading in truth swath file: %s\n' %truthFilePath)
-                        atlTruthDataSingle = loadTruthFile(truthFilePath, atl03DataSingle, rotationData, 
-                                                     truthFileType, outFilePath, logFileID)
-                        
-                    else:
-                              
-                        # Get truth file header info
-                        truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID)
-                        
-                        # Call getAtlTruthSwath
-                        print('Getting Reference Data...\n')
-                        atlTruthDataSingle = getAtlTruthSwath(atl03DataSingle, rotationData, truthHeaderDF, 
-                                                        buffer, outFilePath, createTruthFile, 
-                                                        truthFileType, logFileID)
-                            
-                    # endIf
-                
-                
-                
+                    # Call getAtlTruthSwath
+                    atlTruthDataSingle = getAtlTruthSwath(atl03DataSingle, rotationData, truthHeaderDF, 
+                                                          truthFilePaths, buffer, outFilePath, createTruthFile, 
+                                                          truthFileType, useExistingTruth, logFileID)
+
                     # Run superfilter on data
-                    writeLog('   Running superfilter on data...', logFileID)
+                    writeLog('   Filtering truth data...', logFileID)
                     atlTruthDataFilteredSingle, _ = superFilter(atl03DataSingle, atlTruthDataSingle, xBuf = 1, classCode = [])
                     writeLog('\n', logFileID)
             
@@ -1058,7 +1144,7 @@ def runAtl03():
                                 'crossTrackCorrection','alongTrackCorrection']
                     
                     # Write output .mat file
-                    print('   Writing output .mat file...')
+                    writeLog('Writing output .mat file...\n', logFileID)
                     write_mat(matFilePath, matData, matNames)
                 # endIf
         
@@ -1154,12 +1240,12 @@ def runAtl03():
                 segmentByBox['values'] = segmentByTuple
                 segmentByBox.current(0)
                 
-                # Set Add Stats listbox in Stats Section
-                addStatsTuple = ('Ground Min','Ground Max','Ground Median','Ground Mean','Ground Mean + 3*Std','Ground Mean - 3*Std',
-                        'All Canopy Min','All Canopy Max','All Canopy Median','All Canopy Mean','All Canopy Mean + 3*Std','All Canopy Mean - 3*Std',
-                        'All Height Min','All Height Max','All Height Median','All Height Mean','All Height Mean + 3*Std','All Height Mean - 3*Std')
-                addStatsBox['values'] = addStatsTuple
-                addStatsBox.current(0)
+#                # Set Add Stats listbox in Stats Section
+#                addStatsTuple = ('Ground Min','Ground Max','Ground Median','Ground Mean','Ground Mean + 3*Std','Ground Mean - 3*Std',
+#                        'All Canopy Min','All Canopy Max','All Canopy Median','All Canopy Mean','All Canopy Mean + 3*Std','All Canopy Mean - 3*Std',
+#                        'All Height Min','All Height Max','All Height Median','All Height Mean','All Height Mean + 3*Std','All Height Mean - 3*Std')
+#                addStatsBox['values'] = addStatsTuple
+#                addStatsBox.current(0)
                 
                 # Set increment units in Stats section
                 currentData = incrementBox.get()
@@ -1202,6 +1288,14 @@ def runAtl03():
           
         # Close .log file
         logFileID.close()
+        
+        # Rename .log file
+        logNameNew = os.path.splitext(os.path.basename(atl03FilePath))[0] + '_log.txt'
+        logFilePathNew = os.path.normpath(outFilePath + '\\' + logNameNew)
+        if(os.path.exists(logFilePathNew)):
+            os.remove(logFilePathNew)
+        # endIf
+        os.rename(logFilePath, logFilePathNew)
         
     else:
         
@@ -1640,6 +1734,10 @@ def computeStats():
             
             try:
             
+                # Set Add Stats listbox in Stats Section
+                addStatsBox.set('')
+                window.update()
+                
                 # Bin data into dataframe
                 atl03DF_binned = get_bin_df(atl03DF, segmentKey, increment, agg_list)
                     
@@ -1656,6 +1754,13 @@ def computeStats():
                 # Update status bar
                 statsStatusBar['value'] = 100
                 statuslbl.config(text='Complete')
+                
+                # Set Add Stats listbox in Stats Section
+                addStatsTuple = ('Ground Min','Ground Max','Ground Median','Ground Mean','Ground Mean + 3*Std','Ground Mean - 3*Std',
+                        'All Canopy Min','All Canopy Max','All Canopy Median','All Canopy Mean','All Canopy Mean + 3*Std','All Canopy Mean - 3*Std',
+                        'All Height Min','All Height Max','All Height Median','All Height Mean','All Height Mean + 3*Std','All Height Mean - 3*Std')
+                addStatsBox['values'] = addStatsTuple
+                addStatsBox.current(0)
     
                 # Update window
                 window.update()
@@ -1990,15 +2095,17 @@ measCorrText = ['Shifted ICESat-2 data can be plotted for:\n'\
 lbl = tk.Label(dataLayersLabelframe, text=measCorrText[0], font=('Arial', 12), anchor = 'w', justify='left')
 lbl.place(x=10, y=170)
 
-plotList_measCorr = ('time', 'latitude', 'longitude', \
-                  'easting', 'northing', \
-                  'crossTrack', 'alongTrack', \
-                  'z', 'class', 'confidence')
+plotList_measCorr = ('time', 'deltaTime', \
+                     'latitude', 'longitude', \
+                     'easting', 'northing', \
+                     'crossTrack', 'alongTrack', \
+                     'z', 'class', 'confidence')
 
-plotList_measCorrNames = ('Shifted ATL03 Time', 'Shifted ATL03 Lat', 'Shifted ATL03 Lon', \
-                       'Shifted ATL03 Easting', 'Shifted ATL03 Northing', \
-                       'Shifted ATL03 Cross-Track', 'Shifted ATL03 Along-Track', \
-                       'Shifted ATL03 Height', 'Shifted ATL03 Class', 'Shifted ATL03 Conf') 
+plotList_measCorrNames = ('Shifted ATL03 Time', 'Shifted ATL03 Delta Time',\
+                          'Shifted ATL03 Lat', 'Shifted ATL03 Lon', \
+                          'Shifted ATL03 Easting', 'Shifted ATL03 Northing', \
+                          'Shifted ATL03 Cross-Track', 'Shifted ATL03 Along-Track', \
+                          'Shifted ATL03 Height', 'Shifted ATL03 Class', 'Shifted ATL03 Conf') 
 
 # Plot Corrected Measured Button Callback
 def plotMeasCorr():
@@ -2014,8 +2121,8 @@ def plotMeasCorr():
         yVarNum = yValsBox.current()
         
         # x,y param names
-        xParam = plotList_truth[xVarNum-1]
-        yParam = plotList_truth[yVarNum-1]
+        xParam = plotList_truth[xVarNum]
+        yParam = plotList_truth[yVarNum]
         
         if('time' in xParam or 'time' in yParam):
             messagebox.showinfo('Error','Corrected measured data cannot plot time.')
@@ -2215,7 +2322,7 @@ phoreal_help_info1 = \
 '+ Use Existing Data: Option to use existing or new reference data\n' \
 '+ Buffer Size: For creating new reference data (ARL Only)\n' \
 '+ Reference File Name: Path to reference file (.las, .laz, or .tif files)\n' \
-'+ Create Reference File: Option to create output reference file'
+'+ Save Reference File: Option to create output reference file'
 
 
 lbl = tk.Label(helpLabelframe1, text=phoreal_help_info1, font=('Arial', 12), anchor = 'w', justify='left')
@@ -2243,7 +2350,7 @@ phoreal_help_info2 = \
 '+ Use Reference Ground Index: Option to use reference ground index value\n' \
 '   to filter reference data (Requires ATL08 file)\n' \
 '     - Reference ground index value (Texpert ground class = 2)\n' \
-'+ Create Shifted ICESat-2 File: Option to create corrected file\n' \
+'+ Save Shifted ICESat-2 File: Option to create corrected file\n' \
 '+ Make Output Plots: Option to create output plots'
 
 lbl = tk.Label(helpLabelframe2, text=phoreal_help_info2, font=('Arial', 12), anchor = 'w', justify='left')

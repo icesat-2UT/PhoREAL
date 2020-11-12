@@ -761,6 +761,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
             timeElapsedSec = timeElapsedTotal % 60
             
             # Print completion message
+            writeLog('', logFileID)
             writeLog('   Module Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec), logFileID)
             writeLog('\n', logFileID)
             

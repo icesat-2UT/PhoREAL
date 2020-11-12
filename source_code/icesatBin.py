@@ -186,63 +186,62 @@ def get_target_keys(key_df, df, field, res = -1):
 def agg_keys(key_df, df, agg_list, key = 'bin_id'):
     for i in agg_list:
         agg = i.split(',')
-        if len(agg) == 4:
-            if 'perfect' in agg[2]:
-                c = 'perfect_class'
-            else:
-                c = 'classification'
-    
-            class_str = agg[4]
-            class_list = class_str.strip('][').split(',')
-            if 'median' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                                                 np.median,agg[2],agg[1], 
-                                                 key_field = key,
-                                                 classfield = c)
-            elif 'count' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             np.size,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'count_unique' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             np.size,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'range' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             np.ptp,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'max100' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             get_max100,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'max98' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             get_max98,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'max75' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             get_max75,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'max50' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             get_max50,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'max25' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                            get_max25,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'min' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             get_min,agg[2],agg[1], key_field = key,
-                                                 classfield = c)
-            elif 'mode' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                              get_mode,agg[2],agg[1], key_field = key,
-                                                  classfield = c)        
-            elif 'std' in agg[3]:
-                key_df = calculate_seg_meteric(df, key_df, class_list, 
-                             get_std,agg[2],agg[1], key_field = key,
-                                                 classfield = c) 
+        if 'perfect' in agg[2]:
+            c = 'perfect_class'
+        else:
+            c = 'classification'
+
+        class_str = agg[4]
+        class_list = class_str.strip('][').split(',')
+        if 'median' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                                             np.median,agg[2],agg[1], 
+                                             key_field = key,
+                                             classfield = c)
+        elif 'count' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         np.size,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'count_unique' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         np.size,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'range' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         np.ptp,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max100' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max100,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max98' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max98,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max75' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max75,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max50' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max50,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max25' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                        get_max25,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'min' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_min,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'mode' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                          get_mode,agg[2],agg[1], key_field = key,
+                                              classfield = c)        
+        elif 'std' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_std,agg[2],agg[1], key_field = key,
+                                             classfield = c) 
     return key_df
 
 def orient_df(df, field):
@@ -394,11 +393,14 @@ def interpolate_domain(atl08_at, atl08_domain, key_df_at):
     interp_domain = intep_func(key_df_at)
     return interp_domain
 
-
+def compute_relative_canopy_height(canopy, ground):
+    rh = canopy - ground
+    rh[rh < 0] = 0
+    return rh
 
 def create_atl08_bin(atl03, atl08, res_at = 30):
     #Create Key DF based on ATL08
-    atl03_df = orient_df(atl08.df, 'alongtrack')
+    atl03_df = orient_df(atl03.df, 'alongtrack')
     atl08_df = orient_df(atl08.df, 'alongtrack')
     
     key_df = create_key_df(atl08_df, 'alongtrack', res_at)
@@ -408,13 +410,13 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
                'longitude','segment_id_beg','segment_id_end']
     
     for domain in domain_list:
-        domain_interp = interpolate_domain(atl08.df.alongtrack, 
-                                           atl08.df[domain], key_df.bin_id)
+        domain_interp = interpolate_domain(atl08_df.alongtrack, 
+                                           atl08_df[domain], key_df.bin_id)
         key_df = pd.concat([key_df,pd.DataFrame(domain_interp,
                                                 columns=[domain])],axis=1)
 
     key_id = key_df.bin_id
-    atl08_id = atl08.df.alongtrack
+    atl08_id = atl08_df.alongtrack
     
     minInd = indexMatch(atl08_id,key_id)
     res = 50
@@ -440,9 +442,9 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     #Compute the ATL03 
     
     agg_list = ['atl03,atl03_ground_median,h_ph,median,[1]',
-            'atl03,atl03_canopy_max98,h_ph,get_max98,[2,3]']
+            'atl03,atl03_canopy_h,h_ph,get_max98,[2,3]']
     
-    target_key, include = get_target_keys(key_df, atl03.df, 'alongtrack')
+    target_key, include = get_target_keys(key_df, atl03_df, 'alongtrack')
     atl03_df = atl03_df.reset_index(drop = True)
     atl03_df = pd.concat([atl03_df,pd.DataFrame(target_key,columns=['bin_id'])],axis=1)
     atl03_df = pd.concat([atl03_df,pd.DataFrame(include,columns=['include'])],axis=1)
@@ -452,23 +454,63 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     
     df_bin_03 = agg_keys(key_df, atl03_df, agg_list, key = 'bin_id')
     
+    atl03_canopy_rh =\
+        compute_relative_canopy_height(df_bin_03.atl03_canopy_h, 
+                                       df_bin_03.atl03_ground_median)
+        
+    df_bin_03['atl03_canopy_rh'] = atl03_canopy_rh
+
+    atl03_df = pd.concat([atl03_df,pd.DataFrame(target_key,columns=['bin_id'])],axis=1)
+
+    
     df_bin_03.drop(df_bin_03.columns.difference(['bin_id','atl03_ground_median',
-                                         'atl03_canopy_max98']),1,inplace=True)
+                                         'atl03_canopy_h','atl03_canopy_rh']),
+                   1,inplace=True)
+    
+    
     
     df_bin = pd.merge(df_bin_08, df_bin_03, on="bin_id",how='left')    
     
+    df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id', 'res'])
+    
     return df_bin
+    
     
 
 if __name__ == "__main__":
-    # Stuff to load a df for an example
     if os.name == 'nt':
-        example_file = 'Y:/USERS/eric/1_experiment/thin_file_gui/test.pkl'
+        basepath = 'Y:/USERS/eric/2_production/'
     else:
-        # example_file = '/LIDAR/server/poseidon_files/USERS/eric/' +\
-        #     '1_experiment/thin_file_gui/test.pkl'
-        example_file = '/LIDAR/server/poseidon_files/USERS/eric/' +\
-            'for_mike/skinnyDF.pickle'
+        basepath = '/LIDAR/server/USERS/eric/2_production/'
+
+    atl03file = 'ATL03_20181021130238_03500103_002_01.h5'
+    atl08file = 'ATL08_20181021130238_03500103_002_01.h5'
+    
+    atl03filepath = basepath + atl03file
+    atl08filepath = basepath + atl08file
+    gt = 'gt1r'    
+
+    from icesatReader import get_atl03_struct
+    from icesatReader import get_atl08_struct
+    
+    
+    print('ATL03 Heights')
+    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+    
+    print('ATL08 Land Segments')
+    atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+    
+    
+    df_bin = create_atl08_bin(atl03, atl08, res_at = 30)
+    
+    # Stuff to load a df for an example
+    # if os.name == 'nt':
+    #     example_file = 'Y:/USERS/eric/1_experiment/thin_file_gui/test.pkl'
+    # else:
+    #     # example_file = '/LIDAR/server/poseidon_files/USERS/eric/' +\
+    #     #     '1_experiment/thin_file_gui/test.pkl'
+    #     example_file = '/LIDAR/server/poseidon_files/USERS/eric/' +\
+    #         'for_mike/skinnyDF.pickle'
 
     # df = pd.read_pickle(example_file)
     

@@ -1276,9 +1276,11 @@ def getH5Keys(h5_file,group = None, out_txt = None, verbose = False, matchText =
         
     return global_list
 
-def sortAtlMeasured(atlMeasuredData):
+def sortAtlMeasured(atlMeasuredData, verbose=False):
     
-    print("Sorting ATL Measured Data...", end = " ")
+    if(verbose):
+        print("Sorting ATL Measured Data...", end = " ")
+    # endIf
     sort_index = np.argsort(atlMeasuredData.alongTrack, axis = 0)
     atlMeasuredData.alongTrack = atlMeasuredData.alongTrack[sort_index[:,0]]
     atlMeasuredData.crossTrack = atlMeasuredData.crossTrack[sort_index[:,0]]
@@ -1292,12 +1294,15 @@ def sortAtlMeasured(atlMeasuredData):
     atlMeasuredData.classification[sort_index[:,0]]
     atlMeasuredData.signalConf = atlMeasuredData.signalConf[sort_index[:,0]]
    
-    
-    print("Complete")
+    if(verbose):
+        print("Complete")
+    # endIf
     return atlMeasuredData
     
-def sortAtlTruth(atlTruthData):
-    print("Sorting ATL Truth Data...", end = " ")   
+def sortAtlTruth(atlTruthData, verbose=False):
+    if(verbose):
+        print("Sorting ATL Truth Data...", end = " ")  
+    # endIf
     sort_index = np.argsort(atlTruthData.alongTrack, axis = 0)
     atlTruthData.alongTrack = atlTruthData.alongTrack[sort_index[:,0]]
     atlTruthData.crossTrack = atlTruthData.crossTrack[sort_index[:,0]]
@@ -1307,11 +1312,15 @@ def sortAtlTruth(atlTruthData):
     atlTruthData.intensity = atlTruthData.intensity[sort_index[:,0]]
     atlTruthData.classification = atlTruthData.classification[sort_index[:,0]]
 
-    print("Complete")
+    if(verbose):
+        print("Complete")
+    # endIF
     return atlTruthData
 
-def indexMatch(measuredArray,truthArray):
-    print("Match corresponding indices...", end = " ")
+def indexMatch(measuredArray,truthArray,verbose=False):
+    if(verbose):
+        print("Match corresponding indices...", end = " ")
+    # endIf
     A = np.array(measuredArray)
     B = np.array(truthArray)
     C = np.empty((len(B)))
@@ -1329,12 +1338,16 @@ def indexMatch(measuredArray,truthArray):
             ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
             ctypes.c_size_t]
     fun(A, A.size, B, C, B.size)
-    print("Complete")
+    if(verbose):
+        print("Complete")
+    # endIf
     return np.array(C).astype(int)
 
     
-def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = []):
-    print("Applying Superfilter")
+def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = [], verbose=False):
+    if(verbose):
+        print("Applying Superfilter")
+    # endIf
     #Sort Measured
     atlMeasuredData = copy.deepcopy(atlMeasuredData_in)    
     atlTruthData = copy.deepcopy(atlTruthData_in)    
@@ -1381,7 +1394,9 @@ def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = []):
         atlTruthData.z = atlTruthData.z[filter_data]
         atlTruthData.intensity = atlTruthData.intensity[filter_data]
         atlTruthData.classification = atlTruthData.classification[filter_data]  
-    print("Superfilter complete")
+    if(verbose):
+        print("Superfilter complete")
+    # endIf
     #Return truthdata
     return atlTruthData, atlMeasuredData
 
