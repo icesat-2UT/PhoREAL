@@ -20,7 +20,7 @@ the Linux command line
 Update (November 17, 2020): PhoREAL v3.22 released
 https://utexas.box.com/v/DownloadPhoREALGUI
 
-![PhoREALScreenshot](/images/PhoREAL_screenshot.png)
+![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.22.png)
 
 <h4>Copyright 2020 Applied Research Laboratories, University of Texas at Austin
 
