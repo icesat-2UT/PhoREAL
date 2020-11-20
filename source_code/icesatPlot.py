@@ -614,14 +614,23 @@ def getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle, atl03Data, 
     # Show plot
     fig1.show()
     
+# endDef
     
 # Function to plot ATL08 data from getAtlMeasuredSwath_auto.py
 def getPlot_atl08(xData, yData, xLabel, yLabel, title, yName):
+
+    # Get figure window
+    figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
 
     # Open figure window
     plt.ion()
     figNum = plt.gcf().number
     fig1 = plt.figure(figNum)
+    if(len(figsExist)>0):
+        ax = plt.gca()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+    # endIf
     
     if('canopy' in yName.lower()):
         matchStr = 'ATL08 Max Canopy'
@@ -646,6 +655,11 @@ def getPlot_atl08(xData, yData, xLabel, yLabel, title, yName):
     plt.title(title)
     plt.draw()
     fig1.show()
+    if(len(figsExist)>0):
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+    # endIf
+# endDef
 
 
 # Function to plot Truth data from getAtlTruthSwath_auto.py
@@ -653,11 +667,19 @@ def getPlot_truth(xData, yData, xLabel, yLabel, title, yName):
     
     # Define plot colors
     myColor = [0.3, 0.3, 0.3]
-
+    
+    # Get figure window
+    figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
+        
     # Open figure window
     plt.ion()
     figNum = plt.gcf().number
     fig1 = plt.figure(figNum)
+    if(len(figsExist)>0):
+        ax = plt.gca()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+    # endIf
 
     # Plot all data
     # plt.scatter(xData, yData, color=myColor, label=yName, s=1.0, zorder=0)
@@ -669,6 +691,11 @@ def getPlot_truth(xData, yData, xLabel, yLabel, title, yName):
     plt.grid(b = True, which = 'major', axis = 'both')
     plt.draw()
     fig1.show()
+    if(len(figsExist)>0):
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+    # endIf
+# endDef
     
     
 # Function to plot Corrected Measured data from getMeasurementError_auto.py
@@ -677,10 +704,18 @@ def getPlot_measCorr(xData, yData, xLabel, yLabel, title, yName):
     # Define plot colors
     myColor = [1.0, 0.65, 0.0]
 
+    # Get figure window
+    figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
+        
     # Open figure window
     plt.ion()
     figNum = plt.gcf().number
     fig1 = plt.figure(figNum)
+    if(len(figsExist)>0):
+        ax = plt.gca()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+    # endIf
 
     # Plot all data
     plt.scatter(xData, yData, color=myColor, label=yName, s=0.7)
@@ -691,7 +726,12 @@ def getPlot_measCorr(xData, yData, xLabel, yLabel, title, yName):
     plt.grid(b = True, which = 'major', axis = 'both')
     plt.draw()
     fig1.show()
-    
+    if(len(figsExist)>0):
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+    # endIf
+            
+# endDef
     
 # Plot pickle file
 def getPklPlot(pklFile):
@@ -755,8 +795,14 @@ def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,statsDF):
         plt.ion()
         
         # Get figure window
+        figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
         figNum = plt.gcf().number
         fig = plt.figure(figNum)
+        if(len(figsExist)>0):
+            ax = plt.gca()
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+        # endIf
 
         # Define face color scheme
         myBrown = [204/255, 102/255, 0/255]
@@ -779,31 +825,45 @@ def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,statsDF):
         # Get matching x parameter from dataframe
         if(xParam=='Segment ID'):
             statsDF_xName = 'seg_start_segment_id_interp'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_segment_id_interp'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         elif(xParam=='deltaTime'):
             statsDF_xName = 'seg_start_delta_time_interp (sec)'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_delta_time_interp (sec)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         elif(xParam=='time'):
             statsDF_xName = 'seg_start_time_interp (sec)'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_time_interp (sec)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         elif(xParam=='lat'):
             statsDF_xName = 'seg_start_lat_interp (deg)'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_lat_interp (deg)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         elif(xParam=='lon'):
             statsDF_xName = 'seg_start_lon_interp (deg)'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_lon_interp (deg)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         elif(xParam=='easting'):
             statsDF_xName = 'seg_start_easting_interp (m)'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_easting_interp (m)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         elif(xParam=='northing'):
             statsDF_xName = 'seg_start_northing_interp (m)'
-            xData = (statsDF[statsDF_xName]).to_numpy()
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_northing_interp (m)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         else:
             xDataGood = False
         # endIf
 
         # Get y axis parameter
-        if(yVar!='z'):
+        if('z' not in yVar):
             yDataGood = False
         # endIf
         
@@ -911,19 +971,41 @@ def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,statsDF):
         # Determine whether to plot data or flag error
         if(xDataGood and yDataGood and yBinGood):  
             
-            # Plot data
-            plt.scatter(xData, yData, 
-                    edgecolors=binEdgeColor, facecolors=binFaceColor, 
-                    label=yParam, zorder = 1)
+            # Append arrays and sort
+            col1_inds = (np.arange(0,len(xData_start)*2,2)).astype('float')
+            col2_inds = (np.arange(1,len(xData_start)*2,2)).astype('float')
+            allDataCol0 = np.concatenate([col1_inds, col2_inds], axis=0)
+            allDataCol1 = np.concatenate([xData_start, xData_end], axis=0)
+            allDataCol2 = np.concatenate([yData, yData], axis=0)
+            allData = np.column_stack([allDataCol0, allDataCol1, allDataCol2])
+            allData_sorted = allData[np.argsort(allData[:, 0])]
+
+            # Get x,y stats data to plot
+            xDataPlot = allData_sorted[:,1]
+            yDataPlot = allData_sorted[:,2]
+            
+            # Plot stats line data
+            plt.plot(xDataPlot, yDataPlot, 
+                    color=binEdgeColor,
+                    zorder = 1)
+            
+            # Plot stats point data
+            plt.scatter(xDataPlot, yDataPlot, 
+                        edgecolors=binEdgeColor, facecolors=binFaceColor, 
+                        label=yParam, zorder = 2)
             
             # Update plot
             plt.legend(loc = 'upper left')
             plt.draw()
             fig.show()
+            if(len(figsExist)>0):
+                ax.set_xlim(xlim)
+                ax.set_ylim(ylim)
+            # endIf
         elif(not xDataGood):
             messagebox.showinfo('Error','Cannot plot stats for x-axis data.')
         elif(not yDataGood):
-            messagebox.showinfo('Error','Can only plot stats for HAE Height on y-axis.')
+            messagebox.showinfo('Error','Can only plot stats for Height on y-axis.')
         # endIf
 
     else:

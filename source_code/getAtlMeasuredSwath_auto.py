@@ -22,15 +22,17 @@ import time as runTime
 from icesatIO import (readAtl03H5, readAtl08H5, 
                       readAtl03DataMapping, readAtl08DataMapping, 
                       readTruthRegionsTxtFile, 
-                      writeLas, writeKml, writeArrayToCSV, writeLog)
+                      writeLas, writeKml, writeArrayToCSV, writeLog,
+                      GtToBeamNum, GtToBeamSW)
 from icesatUtils import (getNameParts, getAtl08Mapping, getLatLon2UTM, 
-                         getCoordRotFwd, getClosest)
+                         getCoordRotFwd, getClosest, interp_vals)
 
 class atl03Struct:
         
     # Define class with designated fields
     def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, 
-                 atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_time, atl03_deltaTime,
+                 atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_zMsl, 
+                 atl03_time, atl03_deltaTime,
                  atl03_signalConf, atl03_classification, atl03_intensity, 
                  gtNum, zone, hemi,
                  atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
@@ -42,6 +44,7 @@ class atl03Struct:
         self.crossTrack = np.c_[atl03_crossTrack]
         self.alongTrack = np.c_[atl03_alongTrack]
         self.z = np.c_[atl03_z]
+        self.zMsl = np.c_[atl03_zMsl]
         self.time = np.c_[atl03_time]
         self.deltaTime = np.c_[atl03_deltaTime]
         self.signalConf = np.c_[atl03_signalConf]
@@ -132,7 +135,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                         # pklHeaderFile = None, LAS_DIR = None):
     
     # Initialize outputs
-    atl03Data = False
+    atl03Data = []
     headerData = False
     rotationData = False
     
@@ -163,8 +166,12 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
         # Start timer
         timeStart = runTime.time()
         
-        # Print message
-        writeLog('   Ground Track Number: %s\n' % gtNum, logFileID)
+        # Get beam # and S/W
+        beamNum = GtToBeamNum(atl03FilePath, gtNum)
+        beamSW = GtToBeamSW(atl03FilePath, gtNum)
+                
+        # Print message   
+        writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamSW), logFileID)
         
         # Get ATL03 file path/name
         atl03FilePath = os.path.normpath(os.path.abspath(atl03FilePath))
@@ -177,6 +184,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
         z_all = readAtl03H5(atl03FilePath, '/heights/h_ph', gtNum)
         deltaTime_all = readAtl03H5(atl03FilePath, '/heights/delta_time', gtNum)
         signalConf_all = readAtl03H5(atl03FilePath, '/heights/signal_conf_ph', gtNum)
+        zGeoidal = readAtl03H5(atl03FilePath, '/geophys_corr/geoid', gtNum)
+        zGeoidal_deltaTime = readAtl03H5(atl03FilePath, '/geophys_corr/delta_time', gtNum)
+        zGeoidal_all = interp_vals(zGeoidal_deltaTime, zGeoidal, deltaTime_all,)
+        zMsl_all = z_all - zGeoidal_all
         atl03_ph_index_beg, atl03_segment_id = readAtl03DataMapping(atl03FilePath, gtNum)
         
         badVars = []
@@ -268,6 +279,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     atl03_lat = lat_all[0:data_length]
                     atl03_lon = lon_all[0:data_length]
                     atl03_z = z_all[0:data_length]
+                    atl03_zMsl = zMsl_all[0:data_length]
                     atl03_time = time_all[0:data_length]
                     atl03_deltaTime = deltaTime_all[0:data_length]
                     atl03_signalConf = signalConf_all[0:data_length]
@@ -285,6 +297,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     atl03_lat = lat_all
                     atl03_lon = lon_all
                     atl03_z = z_all
+                    atl03_zMsl = zMsl_all
                     atl03_time = time_all
                     atl03_deltaTime = deltaTime_all
                     atl03_signalConf = signalConf_all
@@ -303,6 +316,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl03_lat = lat_all
                 atl03_lon = lon_all
                 atl03_z = z_all
+                atl03_zMsl = zMsl_all
                 atl03_time = time_all
                 atl03_deltaTime = deltaTime_all
                 atl03_signalConf = signalConf_all
@@ -384,6 +398,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl03_lat = atl03_lat[atl03IndsToKeep]
                 atl03_lon = atl03_lon[atl03IndsToKeep]
                 atl03_z = atl03_z[atl03IndsToKeep]
+                atl03_zMsl = atl03_zMsl[atl03IndsToKeep]
                 atl03_time = atl03_time[atl03IndsToKeep]
                 atl03_deltaTime = atl03_deltaTime[atl03IndsToKeep]
                 atl03_signalConf = atl03_signalConf[atl03IndsToKeep]
@@ -437,7 +452,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 if(os.path.exists(kmlBoundsTextFile)): # and not pklHeader:
                     
                     # Message to user
-                    writeLog('   Finding Truth Region...', logFileID)
+                    writeLog('   Finding Reference Region...', logFileID)
                     
                     try:
                         
@@ -463,14 +478,14 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                 kmlLonMax = kmlInfo.lonMax[counter]
     
                                 # Print truth region
-                                writeLog('   Truth File Region: %s' % kmlRegionName, logFileID)
+                                writeLog('   Reference File Region: %s' % kmlRegionName, logFileID)
     
                             # endIf
                             
                             if(counter >= maxCounter):
                                 
                                 # Send message to user
-                                writeLog('   No Truth File Region Found in kmlBounds.txt', logFileID)
+                                writeLog('   No Reference File Region Found in kmlBounds.txt', logFileID)
                                 break
                             
                             # endIf
@@ -488,11 +503,12 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 if(kmlRegionName):
                     
                     # Trim ATL03 data based on TRUTH region
-                    writeLog('   Auto-Trimming Data Based on Truth Region...', logFileID)
+                    writeLog('   Auto-Trimming Data Based on Reference Region...', logFileID)
                     atl03IndsInRegion = (atl03_lat >= kmlLatMin) & (atl03_lat <= kmlLatMax) & (atl03_lon >= kmlLonMin) & (atl03_lon <= kmlLonMax)
                     atl03_lat = atl03_lat[atl03IndsInRegion]
                     atl03_lon = atl03_lon[atl03IndsInRegion]
                     atl03_z = atl03_z[atl03IndsInRegion]
+                    atl03_zMsl = atl03_zMsl[atl03IndsInRegion]
                     atl03_time = atl03_time[atl03IndsInRegion]
                     atl03_deltaTime = atl03_deltaTime[atl03IndsInRegion]
                     atl03_signalConf = atl03_signalConf[atl03IndsInRegion]
@@ -551,6 +567,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                     atl03_easting, atl03_northing, \
                                     atl03_crossTrack, atl03_alongTrack, \
                                     atl03_z, \
+                                    atl03_zMsl,
                                     atl03_time, \
                                     atl03_deltaTime, \
                                     atl03_signalConf, atl03_classification, atl03_intensity, \
@@ -685,7 +702,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                 'Latitude (deg)', 'Longitude (deg)', \
                                 'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
                                 'Cross-Track (m)', 'Along-Track (m)', \
-                                'Height (m)', \
+                                'Height (m HAE)', 'Height (m MSL)', \
                                 'Classification', 'Signal Confidence']
                 else:
                     
@@ -693,7 +710,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                 'Latitude (deg)', 'Longitude (deg)', \
                                 'Easting (m)', 'Northing (m)', \
                                 'Cross-Track (m)', 'Along-Track (m)', \
-                                'Height (m)', \
+                                'Height (m HAE)', 'Height (m MSL)', \
                                 'Classification', 'Signal Confidence']
                 # endIf
                 
@@ -701,7 +718,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                             atl03Data.lat, atl03Data.lon, \
                             atl03Data.easting, atl03Data.northing, \
                             atl03Data.crossTrack, atl03Data.alongTrack,\
-                            atl03Data.z, \
+                            atl03Data.z, atl03Data.zMsl, \
                             atl03Data.classification, atl03Data.signalConf] 
                 
                 writeArrayToCSV(outPath, namelist, datalist)

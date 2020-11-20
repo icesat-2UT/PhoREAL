@@ -13,10 +13,10 @@ import ntpath
 
 # Import ICESat-2 modules
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
-from icesatIO import (atlTruthStruct, writeLas, writeTif, writeLog, \
+from icesatIO import (atlTruthStruct, writeLas, writeLog, \
                       getTruthFilePaths, getTruthHeaders, \
                       reprojectHeaderData, findMatchingTruthFiles, \
-                      loadTruthFile, makeBuffer, applyGeoidCorrection)
+                      loadTruthFile, makeBuffer, GtToBeamNum, GtToBeamSW)
 
 
 # Get ATL Truth Swath
@@ -27,8 +27,14 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
     # Start timer
     timeStart = runTime.time()
     
+    # Initialize data
+    atlTruthData = []
+    
     # Print message
-    writeLog('   Ground Track Number: %s\n' % atlMeasuredData.gtNum, logFileID)   
+    gtNum = atlMeasuredData.gtNum
+    beamNum = GtToBeamNum(atlMeasuredData.atl03FilePath, gtNum)
+    beamSW = GtToBeamSW(atlMeasuredData.atl03FilePath, gtNum)
+    writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamSW), logFileID)
         
     if(useExistingTruth):
                         
@@ -36,24 +42,24 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
         truthFilePath = truthFilePaths[0]
         
         # Get truth file header info
-        writeLog('   Reading in truth swath file: %s\n' %truthFilePath, logFileID)
+        writeLog('   Reading in reference buffer file: %s\n' %truthFilePath, logFileID)
         atlTruthData = loadTruthFile(truthFilePath, atlMeasuredData, rotationData, 
                                      truthFileType, outFilePath, logFileID)
                         
     else:
         
         # Reproject unmatching ESPG files to match ICESat-2 EPSG code
-        truthHeaderNewDF = reprojectHeaderData(truthHeaderDF, atlMeasuredData)
+        truthHeaderNewDF = reprojectHeaderData(truthHeaderDF, atlMeasuredData, logFileID)
         
         # Find truth files that intersect ICESat-2 track
-        writeLog('   Determining which truth files intersect ground track...', logFileID)
+        writeLog('   Determining which reference files intersect ground track...', logFileID)
         matchingTruthFiles = findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buffer)
         
         # Read truth files that intersect ICESat-2 track
         if(len(matchingTruthFiles)>0):
         
             # Print messages
-            writeLog('   Ground track crosses over %d (out of %d) truth files' %(len(matchingTruthFiles), len(truthHeaderDF)), logFileID)
+            writeLog('   Ground track crosses over %d (out of %d) reference files' %(len(matchingTruthFiles), len(truthHeaderDF)), logFileID)
             writeLog('   Reading from directory: %s' %ntpath.dirname(matchingTruthFiles[0]), logFileID)
             writeLog('', logFileID)
             writeLog('   Reading File:', logFileID)
@@ -77,27 +83,28 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
                 atlTruthDataSingle = loadTruthFile(truthFilePath, atlMeasuredData, rotationData, truthFileType, outFilePath, logFileID)
                   
                 # Get truth file buffer
-                writeLog('      Buffering data...', logFileID)
-                atlTruthDataBuffer = makeBuffer(atlTruthDataSingle, atlMeasuredData, rotationData, buffer)
+                if(bool(atlTruthDataSingle)):
+                    
+                    writeLog('      Buffering data...', logFileID)
+                    atlTruthDataBuffer = makeBuffer(atlTruthDataSingle, atlMeasuredData, rotationData, buffer)
                 
-                # Append truth files
-                atlTruthData.append(atlTruthDataBuffer)
+                    # Append truth files
+                    atlTruthData.append(atlTruthDataBuffer)
+    
+                    # Increment counter
+                    fileNum += 1
                 
-                # Increment counter
-                fileNum += 1
+                # endIf
                 
             # endFor
-            
-#            # Apply geoid corrections if necessary
-#            atlTruthData = applyGeoidCorrection(atlTruthData, truthHeaderNewDF, logFileID)
         
         else:
             
             # No data to process
-            atlTruthData = False
+            atlTruthData = []
             
             writeLog('', logFileID)
-            writeLog('   WARNING: No matching Truth files intersect ground track.', logFileID)
+            writeLog('   WARNING: No matching reference files intersect ground track.', logFileID)
             
         # endIf
     # endIf
@@ -107,7 +114,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
     
     # Inform user if data is empty
     if(atlTruthEmpty):
-        writeLog('ERROR: Truth data is empty.', logFileID)
+        writeLog('ERROR: Reference data is empty.', logFileID)
     # endIf
     
     # Create output file
@@ -117,7 +124,9 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
         if(useExistingTruth):
             outName = os.path.basename(truthFilePath)
         else:
-            outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_REFERENCE_' + str(buffer) + 'L' + str(buffer) + 'Rm_buffer.las'
+            outName = atlMeasuredData.atl03FileName + '_' + \
+                      atlMeasuredData.gtNum + '_REFERENCE_' + str(buffer) + \
+                      'L' + str(buffer) + 'Rm_buffer.las'
         # endIf
         
         # Set full output file name and path
@@ -130,7 +139,6 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
         
         # Write to file
         writeLog('', logFileID) 
-#        if('las' in truthFileType.lower()):
         writeLog('   Writing reference .las file...', logFileID)
         writeLas(np.ravel(atlTruthData.easting),
                  np.ravel(atlTruthData.northing),
@@ -139,14 +147,6 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
                  np.ravel(atlTruthData.classification),
                  np.ravel(atlTruthData.intensity),
                  None, atlTruthData.hemi,atlTruthData.zone)
-#        else:
-#            writeLog('   Writing reference .tif file...', logFileID)
-#            writeTif(np.ravel(atlTruthData.easting),
-#                     np.ravel(atlTruthData.northing),
-#                     np.ravel(atlTruthData.z),
-#                     atlTruthData.epsg, outPath,
-#                     None,None,None,None,None)
-        # endIf
     # endIf
     
     # End timer

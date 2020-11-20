@@ -17,7 +17,7 @@ import warnings
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from getAtlTruthSwath_auto import getAtlTruthSwath
 from icesatIO import (writeLas, writeLog, getTruthFilePaths, getTruthHeaders,
-                      loadTruthFile)
+                      GtToBeamNum, GtToBeamSW)
 from icesatUtils import (ismember, getRaster, getIntersection2d, getCoordRotRev)
 from icesatPlot import (plotContour, plotZY, plotZT)
 
@@ -25,19 +25,22 @@ from icesatPlot import (plotContour, plotZY, plotZT)
 class offsetsStruct:
     
     # Define class with designated fields
-    def __init__(self, crossTrackBounds, alongTrackBounds, rasterResolutions, useVerticalShift, verticalShift):
+    def __init__(self, crossTrackBounds, alongTrackBounds, rasterResolutions, 
+                 useVerticalShift, verticalShift):
         
         self.crossTrackBounds = crossTrackBounds
         self.alongTrackBounds = alongTrackBounds
         self.rasterResolutions = rasterResolutions
         self.useVerticalShift = useVerticalShift
         self.verticalShift = verticalShift
-
+    # endDef
+# endClass
 
 class atlMeasuredDataReducedStruct:
     
     # Define class with designated fields
-    def __init__(self, easting, northing, z, crossTrack, alongTrack, time, classification, signalConf):
+    def __init__(self, easting, northing, z, crossTrack, alongTrack, 
+                 time, classification, signalConf):
         
         self.easting = easting
         self.northing = northing
@@ -47,12 +50,17 @@ class atlMeasuredDataReducedStruct:
         self.time = time
         self.classification = classification
         self.signalConf = signalConf
-
+    # endDef
+# endClass
 
 class atlCorrectionsStruct:
     
     # Define class with designated fields
-    def __init__(self, correctionsCrossTrack, correctionsAlongTrack, correctionsEasting, correctionsNorthing, correctionsVertical, correctionsMAE, correctionsRMSE, correctionsME):
+    def __init__(self, correctionsCrossTrack, correctionsAlongTrack, 
+                 correctionsEasting, correctionsNorthing, correctionsVertical, 
+                 correctionsMAE, correctionsRMSE, correctionsME, 
+                 measRasterYCommonFinal, measRasterZCommonFinal,
+                 truthRasterYCommonFinal, truthRasterZCommonFinal):
         
         self.crossTrack = correctionsCrossTrack
         self.alongTrack = correctionsAlongTrack
@@ -62,9 +70,16 @@ class atlCorrectionsStruct:
         self.mae = correctionsMAE
         self.rmse = correctionsRMSE
         self.me = correctionsME
+        self.measX_raster = measRasterYCommonFinal
+        self.measY_raster = measRasterZCommonFinal
+        self.truthX_raster = truthRasterYCommonFinal
+        self.truthY_raster = truthRasterZCommonFinal
+    # endDef
+# endClass
 
 
-def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath, 
+def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType, 
+                        rotationData, outFilePath, 
                         useMeasSigConf, filterData, offsets, createMeasCorrFile, 
                         makePlots, showPlots, logFileID = False):
 
@@ -73,7 +88,9 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     
     # Get and print ground track number
     gtNum = atlMeasuredData.gtNum
-    writeLog('   Ground Track Number: %s' % gtNum, logFileID)
+    beamNum = GtToBeamNum(atlMeasuredData.atl03FilePath, gtNum)
+    beamSW = GtToBeamSW(atlMeasuredData.atl03FilePath, gtNum)
+    writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamSW), logFileID)
 
     # Turn off runtime warnings (from np.nanmean)
     if not sys.warnoptions:
@@ -89,7 +106,15 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     measInTruthInds = (atlMeasuredData.alongTrack >= atlTruthData.alongTrack.min()) & (atlMeasuredData.alongTrack <= atlTruthData.alongTrack.max())
     atlMeasuredDataReducedX = atlMeasuredData.easting[measInTruthInds]
     atlMeasuredDataReducedY = atlMeasuredData.northing[measInTruthInds]
-    atlMeasuredDataReducedZ = atlMeasuredData.z[measInTruthInds]
+    if('hae' in refHeightType.lower()):
+        # Use ellipsoidal heights (HAE - Height Above Ellipsoid)
+        writeLog('   Comparing Reference Heights to ICESat-2 Ellipsoidal (HAE) Heights', logFileID)
+        atlMeasuredDataReducedZ = atlMeasuredData.z[measInTruthInds]
+    else:
+        # User orthometric heights (MSL - Mean Sea Level)
+        writeLog('   Comparing Reference Heights to ICESat-2 Orthometric (MSL) Heights', logFileID)
+        atlMeasuredDataReducedZ = atlMeasuredData.zMsl[measInTruthInds]
+    # endIf
     atlMeasuredDataReducedXrot = atlMeasuredData.crossTrack[measInTruthInds]
     atlMeasuredDataReducedYrot = atlMeasuredData.alongTrack[measInTruthInds]
     atlMeasuredDataReducedTime = atlMeasuredData.time[measInTruthInds]
@@ -109,7 +134,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     # Filter Ground data from ATL08 if available
     if(useMeasSigConf):
     
-        writeLog('   Using Signal Confidence %s for Measurement Offset Computation' %filterData, logFileID)
+        writeLog('   Using Signal Confidence %s for ICESat-2 Offset Computation' %filterData, logFileID)
         
         # Filter MEASURED data points based on signal confidence
         measGroundInds = ismember(atlMeasuredDataReduced.signalConf,filterData)[0]
@@ -125,7 +150,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
     
     else:
     
-        writeLog('   Using Ground Truth for Measurement Offset Computation', logFileID)
+        writeLog('   Using Ground Truth for ICESat-2 Offset Computation', logFileID)
         
         # Filter ground MEASURED data points
         icesatGroundIndex = 1
@@ -239,11 +264,11 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             # Rasterize MEASURED data
             gridMethod = 'Mean'
             fillValue = np.nan
-            writeLog('   Gridding Measured Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+            writeLog('   Gridding ICESat-2 Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
             measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
             
             # Rasterize TRUTH data
-            writeLog('   Gridding Truth Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+            writeLog('   Gridding Reference Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
             truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
             
             # Find offsets with minimum MAE
@@ -388,7 +413,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             minRow = np.where(resultsMAE == np.nanmin(resultsMAE))[0]
             minCol = np.where(resultsMAE == np.nanmin(resultsMAE))[1]
             if minRow == [] or minCol == []:
-                writeLog('Error: Gridding all NaN, ensure truth/meas files are correct', logFileID)
+                writeLog('Error: Gridding all NaN, ensure ICESat-2/Reference files are correct', logFileID)
                 return []
 
             # Check that estimate is not close to an edge
@@ -442,21 +467,15 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             writeLog('   MAE = %0.2f m' % correctionsMAE, logFileID)
             writeLog('   RMSE = %0.2f m' % correctionsRMSE, logFileID)
             
-            # Store data in class structure
-            atlCorrections = atlCorrectionsStruct(correctionsCrossTrack, correctionsAlongTrack, \
-                                                  correctionsEasting, correctionsNorthing, \
-                                                  correctionsVertical, \
-                                                  correctionsMAE, correctionsRMSE, correctionsME)
-            
             # Get final MEASURED raster data
-            measRasterXRotFinal= measRasterXRot + atlCorrections.crossTrack
-            measRasterYRotFinal = measRasterYRot + atlCorrections.alongTrack
-            measRasterZFinal = measRasterZ + atlCorrections.z
+            measRasterXRotFinal= measRasterXRot + correctionsCrossTrack
+            measRasterYRotFinal = measRasterYRot + correctionsAlongTrack
+            measRasterZFinal = measRasterZ + correctionsVertical
             measRasterTFinal = measRasterT
     
             # Get amount to shift X,Y indices
-            moveIndsX = (atlCorrections.crossTrack/rasterResolution).astype(int)
-            moveIndsY = (atlCorrections.alongTrack/rasterResolution).astype(int)
+            moveIndsX = (correctionsCrossTrack/rasterResolution).astype(int)
+            moveIndsY = (correctionsAlongTrack/rasterResolution).astype(int)
             
             # Get new TRUTH data from shifted X,Y indices
             truthColsCurrent = truthColsInit + moveIndsX
@@ -475,9 +494,9 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             truthRasterZCommonFinal = np.c_[np.ravel(truthRasterRot.grid[truthRowsCurrent, truthColsCurrent])]
                     
             # Get final common MEASURED data
-            measRasterXRotCommonFinal = measRasterXRot_common[indsToKeep] + atlCorrections.crossTrack
-            measRasterYRotCommonFinal = measRasterYRot_common[indsToKeep] + atlCorrections.alongTrack
-            measRasterZCommonFinal = measRasterZ_common[indsToKeep] + atlCorrections.z
+            measRasterXRotCommonFinal = measRasterXRot_common[indsToKeep] + correctionsCrossTrack
+            measRasterYRotCommonFinal = measRasterYRot_common[indsToKeep] + correctionsAlongTrack
+            measRasterZCommonFinal = measRasterZ_common[indsToKeep] + correctionsVertical
             measRasterTCommonFinal = measRasterT_common[indsToKeep]
             
             # Get Z Error raster (MEASURED - TRUTH)
@@ -528,6 +547,15 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
             _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
             _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
     
+            # Store data in class structure
+            atlCorrections = atlCorrectionsStruct(correctionsCrossTrack, correctionsAlongTrack, \
+                                                  correctionsEasting, correctionsNorthing, \
+                                                  correctionsVertical, \
+                                                  correctionsMAE, correctionsRMSE, correctionsME, \
+                                                  measRasterYCommonFinal, \
+                                                  measRasterZCommonFinal, \
+                                                  truthRasterYCommonFinal, \
+                                                  truthRasterZCommonFinal)
             # Make plots
             if(makePlots):
                 
@@ -582,7 +610,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
         rasterResolution = rasterResolutions[-1]
         gridMethod = 'Mean'
         fillValue = -999
-        writeLog('   Gridding Measured Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+        writeLog('   Gridding ICESat-2 Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
         
         # Add in corrections
         measXRot += correctionsCrossTrack
@@ -593,16 +621,19 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
         measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
         
         # Reduce TRUTH data to width of cross-track offsets
-        measWidth = (np.ceil( ( measXRot.max() - measXRot.min() ) / 2.0 )).astype(int)
-        minTruthBound = (crossTrackBounds - measWidth).astype(int) - 5
-        maxTruthBound = (crossTrackBounds + measWidth).astype(int) + 5
-        truthInOffsetsInds = (truthXRot >= minTruthBound) & (truthXRot <= maxTruthBound)
-        truthXRotReduced = truthXRot[truthInOffsetsInds]
-        truthYRotReduced = truthYRot[truthInOffsetsInds]
-        truthZReduced = truthZ[truthInOffsetsInds]
+#        measWidth = (np.ceil( ( measXRot.max() - measXRot.min() ) / 2.0 )).astype(int)
+#        minTruthBound = (crossTrackBounds - measWidth).astype(int) - 5
+#        maxTruthBound = (crossTrackBounds + measWidth).astype(int) + 5
+#        truthInOffsetsInds = (truthXRot >= minTruthBound) & (truthXRot <= maxTruthBound)
+#        truthXRotReduced = truthXRot[truthInOffsetsInds]
+#        truthYRotReduced = truthYRot[truthInOffsetsInds]
+#        truthZReduced = truthZ[truthInOffsetsInds]
+        truthXRotReduced = truthXRot
+        truthYRotReduced = truthYRot
+        truthZReduced = truthZ
             
         # Rasterize TRUTH data
-        writeLog('   Gridding Truth Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+        writeLog('   Gridding Reference Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
         truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
         
         # Remove NaN data (-999) in MEASURED raster
@@ -683,7 +714,11 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
         atlCorrections = atlCorrectionsStruct(correctionsCrossTrack, correctionsAlongTrack, \
                                               correctionsEasting, correctionsNorthing, \
                                               correctionsVertical, \
-                                              correctionsMAE, correctionsRMSE, correctionsME)
+                                              correctionsMAE, correctionsRMSE, correctionsME, \
+                                              measRasterYCommonFinal, \
+                                              measRasterZCommonFinal, \
+                                              truthRasterYCommonFinal, \
+                                              truthRasterZCommonFinal)
                         
         # Make plots
         if(makePlots):
@@ -742,7 +777,7 @@ def getMeasurementError(atlMeasuredData, atlTruthData, rotationData, outFilePath
                  
         # Get output path name
         writeLog('', logFileID)
-        writeLog('   Writing measured corrected .las file...', logFileID)
+        writeLog('   Writing ICESat-2 shifted .las file...', logFileID)
         outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_SHIFTED_' + enuTxt + '.las'
         outPath = os.path.normpath(outFilePath + '/' + outName)
         
@@ -854,6 +889,7 @@ if __name__ == "__main__":
     offsetsCrossTrackBounds = np.array([-50,50])      # Cross-track limits to search for geolocation error
     offsetsAlongTrackBounds = np.array([-50,50])      # Along-track limits to search for geolocation error
     offsetsRasterResolutions = np.array([8, 4, 2, 1])  # Multi-resolutional step-down raster resolutions (in meters)
+    refHeightType = 'HAE'              # 'HAE' or 'MSL'
     offsetsUseVerticalShift = False    # Option to use a vertical shift
     offsetsVerticalShift = 0           # Vertical shift to use if above set to True (in meters)
     useMeasSigConf = True             # Use measured signal confidence (or use ground truth)
@@ -894,7 +930,10 @@ if __name__ == "__main__":
     
     # Call getMeasurementError
     print('RUNNING getMeasurementError...\n')
-    atlCorrections = getMeasurementError(atl03Data, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots)
+    atlCorrections = getMeasurementError(atl03Data, atlTruthData, refHeightType, 
+                                         rotationData, outFilePath, useMeasSigConf, 
+                                         filterData, offsets, createMeasCorrFile, 
+                                         makePlots, showPlots, logFileID=False)
 
     # End timer
     timeEnd = runTime.time()

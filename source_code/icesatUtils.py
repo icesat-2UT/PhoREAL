@@ -71,7 +71,8 @@ class GridStruct:
         self.y = y
         self.grid = grid
         self.t = time
-        
+    # endDef
+# endClass
         
 ##### Function for reading parts of an .h5 file name
 def getNameParts(h5FileName):
@@ -134,6 +135,7 @@ def getNameParts(h5FileName):
     # Return class
     return fileInfo
 
+# endDef
 
 ##### Function to represent 2 numbers as 1 unique number
 def cantorPairing(arrayIn):
@@ -566,23 +568,13 @@ def find_utm_zone_arr(lon, lat, mode=True, module=None, m=None):
 
 # Transform GCS/PCS based on EPSG and x/y. 
 def transform(epsg_in, epsg_out, x, y, use_old_version=False):
-    # import warnings
-    # warnings.filterwarnings("ignore", category=FutureWarning)
 
-    version = proj.__version__
-    if int(version[0]) < 2 or use_old_version:
-        # before version 2
-        crs_in = proj.Proj(init = epsg_in)
-        crs_out = proj.Proj(init = epsg_out)
-        xx, yy = proj.transform(crs_in, crs_out, x, y)
-        return xx, yy
-
-    else:
-        # version 2 and above
-        # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
-        transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
-        xx, yy = transformer.transform(x, y)
-        return xx,yy
+    # Using pyproj version 2 and above
+    # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
+    transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
+    xx, yy = transformer.transform(x, y)
+    return xx,yy
+    # endIf
 
 # Transform from lon/lat to given EPSG. 
 def wgs84_to_epsg_transform(epsg_out, lon, lat):
@@ -890,6 +882,7 @@ def getGeoidHeight(geoidData,atlTruthData):
     latsIn, lonsIn = getUTM2LatLon(x,y,zone,hemi)
         
     # Interpolate to find geoidal heights
+    geoidData.lons[0][geoidData.lons[0] > 180.] = geoidData.lons[0] - 360
     f = interpolate.interp2d(geoidData.lons, geoidData.lats, geoidData.geoidalHeights, kind='linear')
     geoidalHeights = interpolate.dfitpack.bispeu(f.tck[0], f.tck[1], f.tck[2], f.tck[3], f.tck[4], lonsIn, latsIn)[0]
     geoidalHeights = np.c_[geoidalHeights]
@@ -1075,6 +1068,14 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     # time = secondary array (like z) to perform operation on in each grid cell
     # xAllArray = force output X grid cells (use np.arange(start, stop + 1, step))
     # yAllArray = force output Y grid cells (use np.arange(start, stop + 1, step))
+    #
+    # OUTPUTS
+    # -------------
+    # output.x = x (2D raster)
+    # output.y = y (2D raster)
+    # output.grid = grid (2D raster)
+    # output.t = time (2D raster)
+    
     
     # Get X,Y resolution
     if isinstance(resolution,np.integer):
@@ -2264,7 +2265,30 @@ def b_filt(b, *args):
     for arr in args:
         arr_new.append(arr[b])
     return arr_new
+# endDef
+    
+# Function to interpolate and get Z MSL (orthometric heights) from Z HAE (ellipsoidal heights)
+def interp_vals(input_x, input_y, interp_x, removeThresh=False):
+    
+    # Remove y values > 1e30
+    if(removeThresh):
+        indsUnderThresh = input_y <= removeThresh
+        input_x = input_x[indsUnderThresh]
+        input_y = input_y[indsUnderThresh]
+    # endIf
+    
+    # Remove x duplicate values for scipy interp
+    indsUnique = np.unique(input_x, return_index=True)[1]
+    input_x = input_x[indsUnique]
+    input_y = input_y[indsUnique]
+    
+    # Interpolate delta_time
+    f1 = interpolate.interp1d(input_x, input_y, kind='linear', fill_value='extrapolate')
+    interp_y = f1(interp_x)
+    
+    return interp_y
 
+# endDef
 
 
 if __name__ == "__main__":

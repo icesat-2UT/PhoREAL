@@ -49,7 +49,7 @@ except ImportError:
 # Import ICESat-2 modules
 from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
 from icesatUtils import (identifyEPSG, getCoordRotFwd, transform, \
-                         getGeoidHeight, getCoordRotRev, superFilter)
+                         getGeoidHeight, getCoordRotRev, superFilter, getRaster)
 
 
 # Object for readKmlBounds function
@@ -117,7 +117,7 @@ class atlTruthStruct:
         
     # Define class with designated fields
     def __init__(self, easting, northing, crossTrack, alongTrack, z, 
-                 classification, intensity, zone, hemi, epsg=None):
+                 classification, intensity, zone, hemi, epsg=False):
             
         self.easting = np.c_[easting]
         self.northing = np.c_[northing]
@@ -950,29 +950,81 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,
 # endDef
     
 ### Function to write .las file (1.4 format)
-def writeTif(xx,yy,zz,epsg,output_file,classification=None,intensity=None,signalConf=None,hemi=None,zone=None):
+def writeTif(xx,yy,zz,epsg,outputFile,formatArray=False,
+             classification=False,intensity=False,signalConf=False,
+             hemi=False,zone=False):
+    
+    # INPUTS:
+    # xx - 2D numpy raster or list of x values (if list, then set formatArray=True)
+    # yy - 2D numpy raster or list of y values (if list, then set formatArray=True)
+    # zz - 2D numpy raster or list of z values (if list, then set formatArray=True)
+    # outputFile - path to output .tif file
+    # formatArray - if xx, yy, zz are lists, then use this to format them into rasters
+    # classification - currently unused field 
+    # signalConf - currently unused field 
+    # hemi - currently unused field 
+    # zone - currently unused field 
+    
+    xx = xx[0:10000]
+    yy = yy[0:10000]
+    zz = zz[0:10000]
+    
+    if(formatArray):
+        
+        # Get mean x resolution
+        xIn = np.round(xx,0)
+        xUnique = np.unique(xIn)
+        xDiff = np.diff(xUnique)
+        xRes = np.round(np.mean(xDiff),0)
+        
+        # Get mean y resolution
+        yIn = np.round(yy,0)
+        yUnique = np.unique(yIn)
+        yDiff = np.diff(yUnique)
+        yRes = np.round(np.mean(yDiff),0)
+        
+        # Set total resolution
+        resolution = max([xRes,yRes])
+        
+        # Get raster
+        rasterOutput = getRaster(xx, yy, zz, 
+                                 resolution, 'Mean', 
+                                 fillValue = np.nan, 
+                                 time = [], 
+                                 xAllArray = [], 
+                                 yAllArray = [],
+                                 origin=None)
+        
+        # Store output
+        xx = rasterOutput.x
+        yy = rasterOutput.y
+        zz = rasterOutput.grid
+        
+    # endIf
     
     #  Initialize the Image Size
-    image_size = (len(xx),len(yy))
+    imageSize = (np.shape(xx))
     
     # Set geotransform
-    nx = image_size[0]
-    ny = image_size[1]
-    xmin, ymin, xmax, ymax = [min(xx), min(yy), max(xx), max(yy)]
-    xres = (xmax - xmin) / float(nx)
-    yres = (ymax - ymin) / float(ny)
-    geotransform = (xmin, xres, 0, ymax, 0, -yres)
+    nx = imageSize[1]
+    ny = imageSize[0]
+    xmin = np.min(np.ndarray.flatten(xx))
+    ymin = np.min(np.ndarray.flatten(yy))
+    xmax = np.max(np.ndarray.flatten(xx))
+    ymax = np.max(np.ndarray.flatten(yy)) 
+    xres = (xmax - xmin) / (nx - 1)
+    yres = (ymax - ymin) / (ny - 1)
+    geotransform = (xmin, xmax, xres, ymax, ymin, -yres)
     
     # Create single-band raster file
-    dst_ds = gdal.GetDriverByName('GTiff').Create(output_file, ny, nx, 1, gdal.GDT_Byte)
-
+    dst_ds = gdal.GetDriverByName('GTiff').Create(outputFile, ny, nx, 1, gdal.GDT_Byte)
     dst_ds.SetGeoTransform(geotransform)    # specify coords
     srs = osr.SpatialReference()            # establish encoding
-    epsgNum = epsg.split(':')[0]            # get EPSG code
-    srs.ImportFromEPSG(epsgNum)             # write EPSG code into file
+    epsgNum = epsg.split(':')[1]            # get EPSG code
+    srs.ImportFromEPSG(epsgNum)             # set EPSG code into file
     dst_ds.SetProjection(srs.ExportToWkt()) # export coords to file
     dst_ds.GetRasterBand(1).WriteArray(zz)  # write Z values to the raster
-    dst_ds.FlushCache()                     # write to disk
+    dst_ds.FlushCache()                     # write file to disk
     dst_ds = None
             
 # endDef
@@ -1253,6 +1305,7 @@ def getDEMArrays(file):
 def readDEMepsg(file):
     ds = gdal.Open(file)
     proj = osr.SpatialReference(wkt=ds.GetProjection())
+    proj.AutoIdentifyEPSG()
     epsg = proj.GetAttrValue('AUTHORITY',1)
     return epsg
 # endDef
@@ -1683,30 +1736,38 @@ def loadLasFile(truthFilePath, atlMeasuredData, rotationData, logFileID=False):
     lasTruthData_y = lasTruthData.y
         
     # Reproject if necessary
-    if(epsg_truth != epsg_atl):
+    if(epsg_truth == 'None'):
         
-        # If EPSG code does not match, reproject to input EPSG code
-        writeLog('      *Reference file EPSG code does not match ICESat-2, reprojecting reference file...', logFileID)
-        lasTruthData_x, lasTruthData_y = transform(epsg_truth, epsg_atl, lasTruthData.x, lasTruthData.y)
+        writeLog('      *WARNING: Invalid reference EPSG code, skipping file.', logFileID)
+        atlTruthData = False
         
+    else:
+        
+        if(epsg_truth != epsg_atl):
+            
+            # If EPSG code does not match, reproject to input EPSG code
+            writeLog('      *Reference file EPSG code does not match ICESat-2, reprojecting reference file...', logFileID)
+            lasTruthData_x, lasTruthData_y = transform(epsg_truth, epsg_atl, lasTruthData.x, lasTruthData.y)
+            
+        # endIf
+        
+        # Rotate TRUTH data to CT/AT plane
+        lasTruthData_x_newRot, lasTruthData_y_newRot, _, _, _, _ = \
+        getCoordRotFwd(lasTruthData_x, lasTruthData_y, 
+                       rotationData.R_mat, rotationData.xRotPt, 
+                       rotationData.yRotPt, rotationData.desiredAngle)
+        
+        # Store data as object
+        atlTruthData = atlTruthStruct(lasTruthData_x, lasTruthData_y, 
+                                      lasTruthData_x_newRot, 
+                                      lasTruthData_y_newRot, 
+                                      lasTruthData.z, 
+                                      lasTruthData.classification, 
+                                      lasTruthData.intensity, 
+                                      atlMeasuredData.zone, 
+                                      atlMeasuredData.hemi,
+                                      epsg_atl)
     # endIf
-    
-    # Rotate TRUTH data to CT/AT plane
-    lasTruthData_x_newRot, lasTruthData_y_newRot, _, _, _, _ = \
-    getCoordRotFwd(lasTruthData_x, lasTruthData_y, 
-                   rotationData.R_mat, rotationData.xRotPt, 
-                   rotationData.yRotPt, rotationData.desiredAngle)
-    
-    # Store data as object
-    atlTruthData = atlTruthStruct(lasTruthData.x, lasTruthData.y, 
-                                  lasTruthData_x_newRot, 
-                                  lasTruthData_y_newRot, 
-                                  lasTruthData.z, 
-                                  lasTruthData.classification, 
-                                  lasTruthData.intensity, 
-                                  atlMeasuredData.zone, 
-                                  atlMeasuredData.hemi,
-                                  epsg_atl)
     
     return atlTruthData
     
@@ -1733,44 +1794,54 @@ def loadTifFile(truthFilePath, atlMeasuredData, rotationData, outFilePath, logFi
     xarr = xarr0
     yarr = yarr0
     
-    if(epsg_truth != epsg_atl):
+    # Reproject if necessary
+    if(epsg_truth == 'None'):
         
-        # If EPSG code does not match, use GDAL Warp to create new Tif
-        writeLog('      *Reference file EPSG code does not match ICESat-2, reprojecting reference file...', logFileID)
-        xarr, yarr = transform(epsg_truth, epsg_atl, xarr0, yarr0)
-
-#        originalname = os.path.splitext(file)[0]
-#        newname = originalname + "_projected.tif"
-#        truthFilePathTif = os.path.normpath(os.path.join(outFilePath,newname))
-#        srs = ogr.osr.SpatialReference()
-#        srs.ImportFromEPSG(np.int(epsg_atl))
-#        warpoptions = gdal.WarpOptions(dstSRS = srs)
-#        gdal.Warp(truthFilePathTif, truthFilePath, options = warpoptions)
-
-    # endIf          
+        writeLog('      *WARNING: Invalid reference EPSG code, skipping file.', logFileID)
+        atlTruthData = False
+        
+    else:
+        
+        if(epsg_truth != epsg_atl):
+            
+            # If EPSG code does not match, use GDAL Warp to create new Tif
+            writeLog('      *Reference file EPSG code does not match ICESat-2, reprojecting reference file...', logFileID)
+            xarr, yarr = transform(epsg_truth, epsg_atl, xarr0, yarr0)
     
-#    # Run a quick filter to remove points not even remotely close
-#    xarr, yarr, zarr, intensity, classification = quickFilter(atlMeasuredData,
-#                                                              xarr,
-#                                                              yarr,
-#                                                              zarr,
-#                                                              intensity,
-#                                                              classification)
+    #        originalname = os.path.splitext(file)[0]
+    #        newname = originalname + "_projected.tif"
+    #        truthFilePathTif = os.path.normpath(os.path.join(outFilePath,newname))
+    #        srs = ogr.osr.SpatialReference()
+    #        srs.ImportFromEPSG(np.int(epsg_atl))
+    #        warpoptions = gdal.WarpOptions(dstSRS = srs)
+    #        gdal.Warp(truthFilePathTif, truthFilePath, options = warpoptions)
     
-    # Rotate Data for along-track/cross-track
-    x_newRot, y_newRot, _, _, _, _ = getCoordRotFwd(xarr, yarr, 
-                                                    rotationData.R_mat, 
-                                                    rotationData.xRotPt, 
-                                                    rotationData.yRotPt, 
-                                                    rotationData.desiredAngle)
-    
-    # Store Data as Object
-    atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, 
-                                  zarr, classification, intensity, 
-                                  atlMeasuredData.zone, 
-                                  atlMeasuredData.hemi,
-                                  epsg_atl)
-                
+        # endIf          
+        
+    #    # Run a quick filter to remove points not even remotely close
+    #    xarr, yarr, zarr, intensity, classification = quickFilter(atlMeasuredData,
+    #                                                              xarr,
+    #                                                              yarr,
+    #                                                              zarr,
+    #                                                              intensity,
+    #                                                              classification)
+        
+        # Rotate Data for along-track/cross-track
+        x_newRot, y_newRot, _, _, _, _ = getCoordRotFwd(xarr, yarr, 
+                                                        rotationData.R_mat, 
+                                                        rotationData.xRotPt, 
+                                                        rotationData.yRotPt, 
+                                                        rotationData.desiredAngle)
+        
+        # Store Data as Object
+        atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, 
+                                      zarr, classification, intensity, 
+                                      atlMeasuredData.zone, 
+                                      atlMeasuredData.hemi,
+                                      epsg_atl)
+          
+    # endIf
+      
     return atlTruthData
         
 # endDef
@@ -1795,7 +1866,7 @@ def loadTruthFile(truthFilePath, atlMeasuredData, rotationData, truthFileType, o
 # endDef
     
 ### Function to find and reproject min/max extents in header data
-def reprojectHeaderData(truthHeaderDF, atlMeasuredData):
+def reprojectHeaderData(truthHeaderDF, atlMeasuredData, logFileID=False):
     
     # Copy dataframe
     truthHeaderNewDF = truthHeaderDF.copy()
@@ -1819,14 +1890,28 @@ def reprojectHeaderData(truthHeaderDF, atlMeasuredData):
             y = [ymin, ymax]
             
             # Reproject extents to input EPSG code
-            xout, yout = transform(epsg_truth, epsg_atl, x, y)
+            try:
+                xout, yout = transform(epsg_truth, epsg_atl, x, y)
+                
+                # Store new extents into output dataframe
+                truthHeaderNewDF['xmin'][i] = xout[0]
+                truthHeaderNewDF['xmax'][i] = xout[1]
+                truthHeaderNewDF['ymin'][i] = yout[0]
+                truthHeaderNewDF['ymax'][i] = yout[1]
+                truthHeaderNewDF['epsg'][i] = epsg_atl
             
-            # Store new extents into output dataframe
-            truthHeaderNewDF['xmin'][i] = xout[0]
-            truthHeaderNewDF['xmax'][i] = xout[1]
-            truthHeaderNewDF['ymin'][i] = yout[0]
-            truthHeaderNewDF['ymax'][i] = yout[1]
-            truthHeaderNewDF['epsg'][i] = epsg_atl
+            except:
+                
+                # Store new extents into output dataframe
+                writeLog('WARNING: Cannot reproject data, skipping file: %s' %truthHeaderNewDF['fileName'][i], logFileID)
+                truthHeaderNewDF['xmin'][i] = 'None'
+                truthHeaderNewDF['xmax'][i] = 'None'
+                truthHeaderNewDF['ymin'][i] = 'None'
+                truthHeaderNewDF['ymax'][i] = 'None'
+                truthHeaderNewDF['epsg'][i] = 'None'
+            
+            # endTry
+                
             
         # endIf
     # endFor
@@ -2167,13 +2252,22 @@ def readLasHeader(lasFileInput, outputFilePath = False, logFileID = False):
                                     sGeoKeys_wCount[k,0] = struct.unpack('H',file.read(2))[0] # uint16
                                     sGeoKeys_wValue_Offset[k,0] = struct.unpack('H',file.read(2))[0] # uint16
                                     
-                                    if(sGeoKeys_wKeyID[k,0] == 1024): # This tells the CS type
+                                    if(sGeoKeys_wKeyID[k,0] == 1024): # Lat/Lon file
                                         
                                         if(sGeoKeys_wTIFFTagLocation[k,0] == 0):
+                                            
                                             coordType = int(sGeoKeys_wValue_Offset[k,0])
+                                            keyId = struct.unpack('H',file.read(2))[0] # uint16
+                                            tagLoc = struct.unpack('H',file.read(2))[0] # uint16
+                                            nCount = struct.unpack('H',file.read(2))[0] # uint16
+                                            geoCScode = struct.unpack('H',file.read(2))[0] # uint16
+                                            
+                                            # Get EPSG code
+                                            epsg = 'epsg:' + str(int(geoCScode))
+                                        
                                         # endIf
                                         
-                                    elif(sGeoKeys_wKeyID[k,0] == 3072): # This tells the Projected CS type (UTM)
+                                    elif(sGeoKeys_wKeyID[k,0] == 3072): # UTM file
                                         
                                         if(sGeoKeys_wTIFFTagLocation[k,0] == 0):
                                             projCScode = sGeoKeys_wValue_Offset[k,0]
@@ -2345,9 +2439,6 @@ def getTruthHeaders(truthFilePath, truthFileType, logFileID=False):
     headerFileName = 'phoReal_headers.csv'
     truthFileDir = ntpath.dirname(truthFilePath[0])
     headerFilePath = os.path.normpath(truthFileDir + '\\' + headerFileName)
-    
-    # Message to user
-    writeLog('   Reading header info for all truth files in: %s' %truthFileDir, logFileID)
 
     # Check if header file exists
     if(os.path.exists(headerFilePath)):
@@ -2363,7 +2454,7 @@ def getTruthHeaders(truthFilePath, truthFileType, logFileID=False):
                 writeLog('   Stored header file is up-to-date, using this file', logFileID)
                 truthHeaderDF = stored_truthHeaderDF
             elif(len(truthFilePath)<len(stored_truthFilePath)):
-                writeLog('   Stored header file is ahead of truth directory, using only truth files selected', logFileID)
+                writeLog('   Stored header file is ahead of reference directory, using only reference files selected', logFileID)
                 indsTrue = np.isin(stored_truthFilePath, truthFilePath)
                 truthHeaderDF = stored_truthHeaderDF[indsTrue]
                 truthHeaderDF.reset_index(inplace=True)
@@ -2378,6 +2469,11 @@ def getTruthHeaders(truthFilePath, truthFileType, logFileID=False):
     # endIf
     
     if(writeNew):
+        
+        # Message to user
+        numFiles = len(truthFilePath)
+        writeLog('   Reading header info for all %d reference files in: %s' %(numFiles, truthFileDir), logFileID)
+    
         if(('las' in truthFileType.lower()) or ('laz' in truthFileType.lower())):  
             # Get .las header info
             truthHeaderNewDF = readLasHeader(truthFilePath, headerFilePath, logFileID)              
@@ -2497,7 +2593,8 @@ def makeBuffer(atlTruthData, atlMeasuredData, rotationData, buffer):
                                         atlTruthDataFiltered.classification, 
                                         atlTruthDataFiltered.intensity, 
                                         atlTruthDataFiltered.zone, 
-                                        atlTruthDataFiltered.hemi)
+                                        atlTruthDataFiltered.hemi,
+                                        atlTruthDataFiltered.epsg)
     
     return atlTruthDataBuffer
             
@@ -2543,7 +2640,8 @@ def makeBuffer_legacy(atlTruthData, atlMeasuredData, rotationData, buffer):
                                         subData_classification, 
                                         subData_intensity, 
                                         atlTruthData.zone, 
-                                        atlTruthData.hemi)
+                                        atlTruthData.hemi,
+                                        atlTruthData.epsg)
     
     return atlTruthDataBuffer
             
@@ -2685,13 +2783,13 @@ def getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False):
                 # endIf
             else:
                 # Send error message
-                writeLog('   Truth file/dir does not exist.', logFileID)      
+                writeLog('   Reference file/dir does not exist.', logFileID)      
             # endIf
         elif(isinstance(truthSwathDir, list)):
             truthFilePaths = [os.path.normpath(x) for x in truthSwathDir]
         # endIf
     else:
-        writeLog('   Incorrect file type for truth file.', logFileID)
+        writeLog('   Incorrect file type for reference file.', logFileID)
     # endIf
 
     return truthFilePaths
@@ -2699,6 +2797,63 @@ def getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False):
 # endDef 
     
 # UNIT TEST
+
+
+'''
+beamNumToGT will convert a spot beam number into a groundtrack
+Spot beams will be either strings in range 1-6, e.g., "1","2","3","4","5,"6"
+Input: ATL03 file, beam num string
+Output: a GT that beamnumber is assoicated with as a string
+'''
+def beamNumToGT(atlfilepath, beamNum):
+    gt_out = []
+    gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
+    fp = h5py.File(atlfilepath,'r')
+    for gt in gt_list:
+        fp_a = fp[gt].attrs
+        spot_number = (fp_a['atlas_spot_number']).decode()
+        if(any(np.isin(beamNum,spot_number))):
+            gt_out.append(gt.upper())
+    return gt_out
+# endDef
+    
+def GtToBeamNum(atlfilepath, GT):
+    fp = h5py.File(atlfilepath,'r')
+    gt = GT.lower()
+    fp_a = fp[gt].attrs
+    beamNum = (fp_a['atlas_spot_number']).decode()
+    
+    return beamNum
+# endDef
+    
+
+'''
+swbeamToGT will ID which groundtrack by using a beam group (1,2,3) and a 
+strongbeam or weakbeam.
+Input: ATL03 file, group num string ('1','2','3') and beam type ('strong','weak')
+Output: a GT that beamnumber is assoicated with as a string
+'''
+def swbeamToGT(atlfilepath, groupNum, sw):
+    gt_out = []
+    gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
+    fp = h5py.File(atlfilepath,'r')
+    for gt in gt_list:
+        fp_a = fp[gt].attrs
+        beam_type = (fp_a['atlas_beam_type']).decode()
+        if(any(np.isin(sw,beam_type) & np.isin(groupNum, gt[2]))):
+            gt_out.append(gt.upper())
+    return gt_out
+# endDef
+    
+def GtToBeamSW(atlfilepath, GT):
+    fp = h5py.File(atlfilepath,'r')
+    gt = GT.lower()
+    fp_a = fp[gt].attrs
+    beamSW = (fp_a['atlas_beam_type']).decode()
+    
+    return beamSW
+# endDef
+
 if __name__ == "__main__":
     print("Test")
     

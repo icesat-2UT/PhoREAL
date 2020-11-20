@@ -84,14 +84,14 @@ def get_min(series):
 
 def get_len(series):
     try:
-        length = int(len(series))
+        length = len(series)
     except:
         length = np.nan
     return length
 
 def get_len_unique(series):
     try:
-        length = int(len(np.unique(series)))
+        length = len(np.unique(series))
     except:
         length = np.nan
     return length
@@ -146,7 +146,7 @@ def create_key_df(df, field, res):
     key_df = pd.concat([key_df,pd.DataFrame(
         res_field,columns=['res'])],axis=1)
     key_df = pd.concat([key_df,pd.DataFrame(
-        beg,columns=['bin_id'])],axis=1)
+        mid,columns=['bin_id'])],axis=1)
     return key_df
 
 def get_target_keys(key_df, df, field, res = -1):
@@ -158,16 +158,10 @@ def get_target_keys(key_df, df, field, res = -1):
     else:
         res = key_df.res[0]
     # res = 1
-    beg = np.array(df[field])
+    mid = np.array(df[field])
 
     target_mid = np.array(key_df.mid_id)
-    if 'seg' in field:
-        beg = beg[~np.isnan(beg)].astype(int)
-        mid = beg + ((res)/2)
-    else:
-        beg = beg[~np.isnan(beg)].astype(float)
-        mid = beg + ((res)/2)
- 
+
     minInd = indexMatch(target_mid, mid)
     
     datalen = len(target_mid)
@@ -204,7 +198,7 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
                                              classfield = c)
         elif 'count_unique' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
-                         np.size,agg[2],agg[1], key_field = key,
+                         get_len_unique,agg[2],agg[1], key_field = key,
                                              classfield = c)
         elif 'range' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
@@ -242,6 +236,29 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                          get_std,agg[2],agg[1], key_field = key,
                                              classfield = c) 
+        elif 'rh_canopy' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, [1], 
+                         np.median,'h_ph','ground', key_field = key,
+                                             classfield = c) 
+            key_df = calculate_seg_meteric(df, key_df, [2,3], 
+                         np.median,'h_ph','canopy', key_field = key,
+                                             classfield = c) 
+            key_df[agg[1]] = key_df.canopy - key_df.ground
+            key_df[agg[1]][key_df[agg[1]] < 0] = 0
+            key_df[agg[1]][key_df[agg[1]] > 130] = np.nan
+            key_df = key_df.drop(columns=['ground','canopy'])
+        elif 'radiometry' in agg[3]:
+            
+            key_df = calculate_seg_meteric(df, key_df, [-1,0,1,2,3], 
+                         get_len_unique,agg[2],'unique_time', key_field = key,
+                                             classfield = c) 
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         np.size,agg[2],'target_time', key_field = key,
+                                             classfield = c) 
+            t = np.asarray(key_df.target_time)
+            a = np.asarray(key_df.unique_time)
+            key_df[agg[1]] = np.divide(t,a,out=np.zeros_like(t),where=a!=0)
+            key_df = key_df.drop(columns=['unique_time','target_time'])
     return key_df
 
 def orient_df(df, field):
@@ -501,37 +518,8 @@ if __name__ == "__main__":
     atl08 = get_atl08_struct(atl08filepath, gt, atl03)
     
     
-    df_bin = create_atl08_bin(atl03, atl08, res_at = 30)
+    upsampled_atl08_bin = create_atl08_bin(atl03, atl08, res_at = 30)
     
-    # Stuff to load a df for an example
-    # if os.name == 'nt':
-    #     example_file = 'Y:/USERS/eric/1_experiment/thin_file_gui/test.pkl'
-    # else:
-    #     # example_file = '/LIDAR/server/poseidon_files/USERS/eric/' +\
-    #     #     '1_experiment/thin_file_gui/test.pkl'
-    #     example_file = '/LIDAR/server/poseidon_files/USERS/eric/' +\
-    #         'for_mike/skinnyDF.pickle'
+    agg_list = ['atl03,atl03_min,h_ph,min,[1]']
 
-    # df = pd.read_pickle(example_file)
-    
-    # df = pd.DataFrame(df[0])
-    
-    # '''
-    # Define your agg_list.  It is a list of strings on how to aggregate.
-    # The strings should be arranged so that:
-    #     1. The type of file (ATL03, ATL08, Truth, Skinny)
-    #     2. The name of the output field
-    #     3. The field to aggregate on
-    #     4. The operation to use
-    #     5. The classes to run the operation on
-    # Each item is to be separated by a comma like:
-    #     'skinny,atl03_ground_median,h_ph,median,[1]'
-    # '''
-    # agg_list = ['atl03,atl03_ground_median,h_ph,median,[1]',
-    #             'atl03,atl03_canopy_max98,h_ph,get_max98,[2,3]',
-    #             'atl08,all',
-    #             'truth,truth_ground_median,z,median,[2]',
-    #             'truth,truth_canopy_max98,z,get_max98,[4]']
-    
-
-    # df_bin = get_bin_df(df, 'alongtrack', 50, agg_list)
+    downsampled_atl03_bin = get_bin_df(atl03.df, 'time', 0.01, agg_list)
