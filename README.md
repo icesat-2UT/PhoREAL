@@ -1,23 +1,26 @@
 <h1>PhoREAL</h1>
 <h5>Tools to make ICESat-2 ATL03 and ATL08 easier</h5>
 
-Data products from ICESat-2 require some familiarity working with large datafiles and HDF5 files. PhoREAL is a library of tools and source code to help scientist and researchers more easily use ICESat-2 ATL03 and ATL08 data products.
+Data products from ICESat-2 require some familiarity working with large datafiles and HDF5 files. PhoREAL (Photon Research and Engineering Analysis Library) is a geospatial analysis toolbox that allows users to read, process, analyze, and output ICESat-2 ATL03 and ATL08 data in the form of figures and .las, .csv, and .kml files. 
 
-<h3>PhoREAL v3.22</h3>
+<h3>PhoREAL v3.24</h3>
 
-* PhoREAL is a geospatial analysis toolbox that allows users to read in ICESat-2 ATL03 .h5 data files, process the data, and output the data into several different file formats for further analysis including .las, .csv, and .kml.
+The new features available in PhoREAL v3.24 include: 
+* Batch mode capability (can process single/multiple ATL03/ATL08 file(s) or a directory of ATL03/ATL08 files)
+* Incorporation of ICESat-2 Orthometric (Mean Sea Level) heights (computed using EGM2008 ellipsoid)
+* Addition of latitude/longitude, time, and delta time for reference data
+* Addition of latitude/longitude, time, delta time, classification, and signal confidence for shifted ICESat-2 data
+* Clearer plotting of stats onto figures
+* Ability to load in files previously executed by PhoREAL for quicker plotting and analysis 
+* Additional ground track inputs including beam number and ground track strong/weak beam
 
-* On Windows systems, the PhoREAL toolbox can be run as a Graphical User Interface (GUI) executable (.exe)
 
-* On Linux systems, the PhoREAL toolbox can be run as a Python GUI or as a series of Python function commands via
+Note: On Windows systems, the PhoREAL toolbox can be run as a Graphical User Interface (GUI) executable (.exe). On Linux systems, the PhoREAL toolbox can be run as a Python GUI or as a series of Python function commands via
 the Linux command line
-
-* PhoREAL also has the ability to classify ATL03 data points from the classifications in the ATL08 data product, trim ICESat-2 ground track data by latitude or time, plot the resulting ATL03 data, and save any figures created
-
 
 
 <h3>Download PhoREALGUI.exe (for Windows)</h3>
-Update (November 17, 2020): PhoREAL v3.22 released
+Update (November 25, 2020): PhoREAL v3.24 released
 https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.22.png)
