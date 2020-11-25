@@ -528,7 +528,8 @@ def plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal,
     
     
 # Function to plot any x,y data from getAtlMeasuredSwath_auto.py
-def getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle, atl03Data, filterType = [], filterData = [], filterNum = []):
+def getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle,
+            filterType = [], filterData = [], filterNum = []):
         
     # Open figure window
     plt.ion()
@@ -579,7 +580,8 @@ def getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle, atl03Data, 
                 # endIf
                             
                 # Plot filtered data
-                plt.scatter(xDataPlot, yDataPlot, color=myColor, label=matchStr, s=0.7)
+#                plt.scatter(xDataPlot, yDataPlot, color=myColor, label=matchStr, s=0.7)
+                plt.plot(xDataPlot, yDataPlot, '.', color=myColor, label=matchStr, markersize=2)
             
             # endIf
         
@@ -590,7 +592,9 @@ def getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle, atl03Data, 
     else:
         
         # Plot all data
-        plt.scatter(xData, yData, color=[194/255, 197/255, 204/255], s=0.7, label='ATL03 Data')
+#        plt.scatter(xData, yData, color=[194/255, 197/255, 204/255], s=0.7, label='ATL03 Data')
+        lblStr = 'ATL03 Data'
+        plt.plot(xData, yData, '.', color=[194/255, 197/255, 204/255], markersize=2, label=lblStr)
         plt.legend(loc = 'upper left')
         
     # endIf
@@ -683,7 +687,7 @@ def getPlot_truth(xData, yData, xLabel, yLabel, title, yName):
 
     # Plot all data
     # plt.scatter(xData, yData, color=myColor, label=yName, s=1.0, zorder=0)
-    plt.scatter(xData, yData, color=myColor, label=yName, s=1.0)
+    plt.plot(xData, yData, 's', color=myColor, label=yName, markersize=1, zorder=0)
 
     # Figure properties
     plt.legend(loc = 'upper left')
@@ -699,11 +703,9 @@ def getPlot_truth(xData, yData, xLabel, yLabel, title, yName):
     
     
 # Function to plot Corrected Measured data from getMeasurementError_auto.py
-def getPlot_measCorr(xData, yData, xLabel, yLabel, title, yName):
+def getPlot_measCorr(xData, yData, xLabel, yLabel, title, outPath, origTitle,
+                     filterType = [], filterData = [], filterNum = []):
     
-    # Define plot colors
-    myColor = [1.0, 0.65, 0.0]
-
     # Get figure window
     figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
         
@@ -716,12 +718,69 @@ def getPlot_measCorr(xData, yData, xLabel, yLabel, title, yName):
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
     # endIf
-
-    # Plot all data
-    plt.scatter(xData, yData, color=myColor, label=yName, s=0.7)
+    
+    if(np.size(filterData) > 0):
+        
+        # Loop through filter numbers
+        for i in range(0,np.size(filterNum)):
+            
+            # Filter data
+            matchVal = filterNum[i]
+            matchingInds = filterData == matchVal
+            if(len(matchingInds>0)):
+                
+                xDataPlot = xData[matchingInds]
+                yDataPlot = yData[matchingInds]
+                            
+                if('class' in filterType.lower()):
+                    if(matchVal < 1):
+                        matchStr = 'Shifted ATL03 Unclassified'
+                        myColor = [194/255, 197/255, 204/255]
+                    elif(matchVal==1):
+                        matchStr = 'Shifted ATL03 Ground'
+                        myColor = [210/255, 184/255, 38/255]
+                    elif(matchVal==2):
+                        matchStr = 'Shifted ATL03 Canopy'
+                        myColor = [69/255, 129/255, 26/255]
+                    elif(matchVal==3):
+                        matchStr = 'Shifted ATL03 Top of Canopy'
+                        myColor = [133/255, 243/255, 52/255]
+                    # endIf
+                else:
+                    if(matchVal==0):
+                        myColor = [194/255, 197/255, 204/255]
+                    elif(matchVal==1):
+                        myColor = [0, 0, 0]
+                    elif(matchVal==2):
+                        myColor = [69/255, 129/255, 26/255]
+                    elif(matchVal==3):
+                        myColor = [1, 0, 0]
+                    elif(matchVal==4):
+                        myColor = [0, 0, 1]
+                    # endIf
+                    
+                    matchStr = 'Shifted ATL03 Sig Conf = ' + str(matchVal)
+                    
+                # endIf
+                            
+                # Plot filtered data
+                plt.plot(xDataPlot, yDataPlot, 's', color=myColor, label=matchStr, markersize=2)
+            
+            # endIf
+        # endFor
+        
+        plt.legend(loc = 'upper left')
+    
+    else:
+        
+        # Plot all data
+        lblStr = 'Shifted ATL03 Data'
+        plt.plot(xData, yData, 's', color=[194/255, 197/255, 204/255], markersize=2, label=lblStr)
+        plt.legend(loc = 'upper left')
+        
+    # endIf    
     
     # Figure properties
-    plt.legend(loc = 'upper left')
     plt.axis('tight')
     plt.grid(b = True, which = 'major', axis = 'both')
     plt.draw()

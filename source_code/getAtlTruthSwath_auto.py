@@ -16,7 +16,7 @@ from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from icesatIO import (atlTruthStruct, writeLas, writeLog, \
                       getTruthFilePaths, getTruthHeaders, \
                       reprojectHeaderData, findMatchingTruthFiles, \
-                      loadTruthFile, makeBuffer, GtToBeamNum, GtToBeamSW)
+                      loadTruthFile, makeBuffer)
 
 
 # Get ATL Truth Swath
@@ -32,9 +32,9 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
     
     # Print message
     gtNum = atlMeasuredData.gtNum
-    beamNum = GtToBeamNum(atlMeasuredData.atl03FilePath, gtNum)
-    beamSW = GtToBeamSW(atlMeasuredData.atl03FilePath, gtNum)
-    writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamSW), logFileID)
+    beamNum = atlMeasuredData.beamNum
+    beamStrength = atlMeasuredData.beamStrength
+    writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamStrength), logFileID)
         
     if(useExistingTruth):
                         
@@ -67,7 +67,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
             
             # Initialize parameters
             fileNum = 1
-            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[])
+            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[],[],[])
         
             # Loop over matching files
             for i in range(0,len(matchingTruthFiles)):

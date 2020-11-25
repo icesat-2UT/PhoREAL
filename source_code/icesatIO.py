@@ -48,8 +48,8 @@ except ImportError:
 
 # Import ICESat-2 modules
 from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
-from icesatUtils import (identifyEPSG, getCoordRotFwd, transform, \
-                         getGeoidHeight, getCoordRotRev, superFilter, getRaster)
+from icesatUtils import (identifyEPSG, getCoordRotFwd, transform, getGeoidHeight, \
+                         getCoordRotRev, superFilter, getRaster, getUTM2LatLon)
 
 
 # Object for readKmlBounds function
@@ -112,43 +112,237 @@ class geoidStruct:
     # endDef
 # endClass
         
+class atl03Struct:
+        
+    # Define class with designated fields
+    def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, 
+                 atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_zMsl, 
+                 atl03_time, atl03_deltaTime,
+                 atl03_signalConf, atl03_classification, atl03_intensity, 
+                 gtNum, beamNum, beamStrength, zone, hemi,
+                 atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
+            
+        self.lat = np.c_[atl03_lat]
+        self.lon = np.c_[atl03_lon]
+        self.easting = np.c_[atl03_easting]
+        self.northing = np.c_[atl03_northing]
+        self.crossTrack = np.c_[atl03_crossTrack]
+        self.alongTrack = np.c_[atl03_alongTrack]
+        self.z = np.c_[atl03_z]
+        self.zMsl = np.c_[atl03_zMsl]
+        self.time = np.c_[atl03_time]
+        self.deltaTime = np.c_[atl03_deltaTime]
+        self.signalConf = np.c_[atl03_signalConf]
+        self.classification = np.c_[atl03_classification]
+        self.intensity = np.c_[atl03_intensity]
+        self.gtNum = gtNum
+        self.beamNum = beamNum
+        self.beamStrength = beamStrength
+        self.zone = zone
+        self.hemi = hemi
+        self.atl03FilePath = atl03FilePath
+        self.atl03FileName = atl03FileName
+        self.trackDirection = trackDirection
+        self.atlVersion = alt03h5Info.atlVersion
+        self.year = alt03h5Info.year
+        self.month = alt03h5Info.month
+        self.day = alt03h5Info.day
+        self.hour = alt03h5Info.hour
+        self.minute = alt03h5Info.minute
+        self.second = alt03h5Info.second
+        self.trackNum = alt03h5Info.trackNum
+        self.unknown = alt03h5Info.unknown
+        self.releaseNum = alt03h5Info.releaseNum
+        self.incrementNum = alt03h5Info.incrementNum
+        self.dataIsMapped = dataIsMapped
+    # endDef
+# endClass 
+
+class atl08Struct:
+        
+    # Define class with designated fields
+    def __init__(self, atl08_lat, atl08_lon, atl08_easting, atl08_northing, 
+                 atl08_crossTrack, atl08_alongTrack, 
+                 atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, 
+                 atl08_maxCanopyMsl, atl08_teBestFitMsl, atl08_teMedianMsl,
+                 atl08_time, atl08_deltaTime,
+                 atl08_signalConf, atl08_classification, atl08_intensity, 
+                 gtNum, zone, hemi, 
+                 atl08FilePath, atl08FileName, trackDirection, alt08h5Info, dataIsMapped):
+            
+        self.lat = np.c_[atl08_lat]
+        self.lon = np.c_[atl08_lon]
+        self.easting = np.c_[atl08_easting]
+        self.northing = np.c_[atl08_northing]
+        self.crossTrack = np.c_[atl08_crossTrack]
+        self.alongTrack = np.c_[atl08_alongTrack]
+        self.maxCanopy = np.c_[atl08_maxCanopy]
+        self.teBestFit = np.c_[atl08_teBestFit]
+        self.teMedian = np.c_[atl08_teMedian]
+        self.maxCanopyMsl = np.c_[atl08_maxCanopyMsl]
+        self.teBestFitMsl = np.c_[atl08_teBestFitMsl]
+        self.teMedianMsl = np.c_[atl08_teMedianMsl]
+        self.time = np.c_[atl08_time]
+        self.deltaTime = np.c_[atl08_deltaTime]
+        self.signalConf = np.c_[atl08_signalConf]
+        self.classification = np.c_[atl08_classification]
+        self.intensity = np.c_[atl08_intensity]
+        self.gtNum = gtNum
+        self.zone = zone
+        self.hemi = hemi
+        self.atl08FilePath = atl08FilePath
+        self.atl08FileName = atl08FileName
+        self.trackDirection = trackDirection
+        self.atlVersion = alt08h5Info.atlVersion
+        self.year = alt08h5Info.year
+        self.month = alt08h5Info.month
+        self.day = alt08h5Info.day
+        self.hour = alt08h5Info.hour
+        self.minute = alt08h5Info.minute
+        self.second = alt08h5Info.second
+        self.trackNum = alt08h5Info.trackNum
+        self.unknown = alt08h5Info.unknown
+        self.releaseNum = alt08h5Info.releaseNum
+        self.incrementNum = alt08h5Info.incrementNum
+        self.dataIsMapped = dataIsMapped
+    # endDef
+# endClass        
+        
+class atlRotationStruct:
+    
+    # Define class with designated fields
+    def __init__(self, R_mat, xRotPt, yRotPt, desiredAngle, phi):
+        
+        self.R_mat = R_mat
+        self.xRotPt = xRotPt
+        self.yRotPt = yRotPt
+        self.desiredAngle = desiredAngle
+        self.phi = phi
+    # endDef
+# endClass
+    
 # Truth class 
 class atlTruthStruct:
         
     # Define class with designated fields
-    def __init__(self, easting, northing, crossTrack, alongTrack, z, 
+    def __init__(self, easting, northing, crossTrack, alongTrack, lat, lon, z, 
                  classification, intensity, zone, hemi, epsg=False):
             
         self.easting = np.c_[easting]
         self.northing = np.c_[northing]
         self.crossTrack = np.c_[crossTrack]
         self.alongTrack = np.c_[alongTrack]
+        self.lat = np.c_[lat]
+        self.lon = np.c_[lon]
         self.z = np.c_[z]
         self.classification = np.c_[classification]
         self.intensity = np.c_[intensity]
+        self.time = np.zeros(np.shape(self.easting))
+        self.deltaTime = np.zeros(np.shape(self.easting))
         self.zone = zone
         self.hemi = hemi
         self.epsg = epsg
-        
     # endDef
     
     # Define append method
-    def append(self, newDF):
+    def append(self, newClass):
         
-        self.easting = np.concatenate((self.easting, newDF.easting), axis=0)
-        self.northing = np.concatenate((self.northing, newDF.northing), axis=0)
-        self.crossTrack = np.concatenate((self.crossTrack, newDF.crossTrack), axis=0)
-        self.alongTrack = np.concatenate((self.alongTrack, newDF.alongTrack), axis=0)
-        self.z = np.concatenate((self.z, newDF.z), axis=0)
-        self.classification = np.concatenate((self.classification, newDF.classification), axis=0)
-        self.intensity = np.concatenate((self.intensity, newDF.intensity), axis=0)
-        self.zone = newDF.zone
-        self.hemi = newDF.hemi
-        self.epsg = newDF.epsg
+        self.easting = np.concatenate((self.easting, newClass.easting), axis=0)
+        self.northing = np.concatenate((self.northing, newClass.northing), axis=0)
+        self.crossTrack = np.concatenate((self.crossTrack, newClass.crossTrack), axis=0)
+        self.alongTrack = np.concatenate((self.alongTrack, newClass.alongTrack), axis=0)
+        self.lat = np.concatenate((self.lat, newClass.lat), axis=0)
+        self.lon = np.concatenate((self.lon, newClass.lon), axis=0)
+        self.z = np.concatenate((self.z, newClass.z), axis=0)
+        self.classification = np.concatenate((self.classification, newClass.classification), axis=0)
+        self.intensity = np.concatenate((self.intensity, newClass.intensity), axis=0)
+        self.time = np.concatenate((self.time, newClass.time), axis=0)
+        self.deltaTime = np.concatenate((self.deltaTime, newClass.deltaTime), axis=0)
+        self.zone = newClass.zone
+        self.hemi = newClass.hemi
+        self.epsg = newClass.epsg
         
     # endDef
 # endClass
         
+class offsetsStruct:
+    
+    # Define class with designated fields
+    def __init__(self, crossTrackBounds, alongTrackBounds, rasterResolutions, 
+                 useVerticalShift, verticalShift):
+        
+        self.crossTrackBounds = crossTrackBounds
+        self.alongTrackBounds = alongTrackBounds
+        self.rasterResolutions = rasterResolutions
+        self.useVerticalShift = useVerticalShift
+        self.verticalShift = verticalShift
+    # endDef
+# endClass
+
+class atlMeasuredDataReducedStruct:
+    
+    # Define class with designated fields
+    def __init__(self, easting, northing, z, crossTrack, alongTrack, lat, lon, 
+                 time, classification, signalConf):
+        
+        self.easting = easting
+        self.northing = northing
+        self.z = z
+        self.crossTrack = crossTrack
+        self.alongTrack = alongTrack
+        self.lat = lat
+        self.lon = lon
+        self.time = time
+        self.classification = classification
+        self.signalConf = signalConf
+    # endDef
+# endClass
+
+class atlCorrectionsStruct:
+    
+    # Define class with designated fields
+    def __init__(self, shiftedEasting, shiftedNorthing,
+                 shiftedCrossTrack, shiftedAlongTrack,
+                 shiftedLat, shiftedLon,
+                 shiftedVertical, shiftedVerticalMsl,
+                 time, deltaTime, classification,
+                 signalConf, zone, hemi,
+                 correctionsCrossTrack, correctionsAlongTrack, 
+                 correctionsEasting, correctionsNorthing, 
+                 correctionsVertical, 
+                 correctionsMAE, correctionsRMSE, correctionsME, 
+                 measRasterYCommonFinal, measRasterZCommonFinal,
+                 truthRasterYCommonFinal, truthRasterZCommonFinal):
+        
+        self.eastingArray = shiftedEasting
+        self.northingArray = shiftedNorthing
+        self.crossTrackArray = shiftedCrossTrack
+        self.alongTrackArray = shiftedAlongTrack
+        self.latArray = shiftedLat
+        self.lonArray = shiftedLon
+        self.zArray = shiftedVertical
+        self.zMslArray = shiftedVerticalMsl
+        self.time = time
+        self.deltaTime = deltaTime
+        self.classification = classification
+        self.signalConf = signalConf
+        self.zone = zone
+        self.hemi= hemi
+        self.crossTrack = correctionsCrossTrack
+        self.alongTrack = correctionsAlongTrack
+        self.easting = correctionsEasting
+        self.northing = correctionsNorthing
+        self.z = correctionsVertical
+        self.mae = correctionsMAE
+        self.rmse = correctionsRMSE
+        self.me = correctionsME
+        self.measX_raster = measRasterYCommonFinal
+        self.measY_raster = measRasterZCommonFinal
+        self.truthX_raster = truthRasterYCommonFinal
+        self.truthY_raster = truthRasterZCommonFinal
+    # endDef
+# endClass
+    
         
 ##### Function to read kmlBounds.txt    
 def readTruthRegionsTxtFile(kmlBoundsTextFile):
@@ -1161,10 +1355,10 @@ def createHTMLChart(ytrack, h_ph, classification, lat, lon,
         online = isconnected()
         
     if online == True:
-        viewer_output = (output_folder + "\Viewer_Online" + in_file03_name + ".html")
+        viewer_output = output_folder + '\\Viewer_Online' + in_file03_name + '.html'
         blank = blanki
     else:
-        viewer_output = (output_folder + "\Viewer_" + in_file03_name + ".html")
+        viewer_output = output_folder + '\\Viewer_' + in_file03_name + '.html'
         
         # Copy d3 file to output directory
         srcPath = os.path.normpath(input_folder + '\\d3')
@@ -1757,10 +1951,14 @@ def loadLasFile(truthFilePath, atlMeasuredData, rotationData, logFileID=False):
                        rotationData.R_mat, rotationData.xRotPt, 
                        rotationData.yRotPt, rotationData.desiredAngle)
         
+        # Get reference lat/lon
+        lasTruth_lat, lasTruth_lon = getUTM2LatLon(lasTruthData_x, lasTruthData_y,
+                                                   atlMeasuredData.zone, atlMeasuredData.hemi)
+        
         # Store data as object
         atlTruthData = atlTruthStruct(lasTruthData_x, lasTruthData_y, 
-                                      lasTruthData_x_newRot, 
-                                      lasTruthData_y_newRot, 
+                                      lasTruthData_x_newRot, lasTruthData_y_newRot, 
+                                      lasTruth_lat, lasTruth_lon,
                                       lasTruthData.z, 
                                       lasTruthData.classification, 
                                       lasTruthData.intensity, 
@@ -1833,8 +2031,11 @@ def loadTifFile(truthFilePath, atlMeasuredData, rotationData, outFilePath, logFi
                                                         rotationData.yRotPt, 
                                                         rotationData.desiredAngle)
         
+        # Get reference lat/lon
+        lat, lon = getUTM2LatLon(xarr, yarr, atlMeasuredData.zone, atlMeasuredData.hemi)
+        
         # Store Data as Object
-        atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, 
+        atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, lat, lon,
                                       zarr, classification, intensity, 
                                       atlMeasuredData.zone, 
                                       atlMeasuredData.hemi,
@@ -2589,6 +2790,8 @@ def makeBuffer(atlTruthData, atlMeasuredData, rotationData, buffer):
                                         atlTruthDataFiltered.northing, 
                                         atlTruthDataFiltered.crossTrack,
                                         atlTruthDataFiltered.alongTrack,
+                                        atlTruthDataFiltered.lat, 
+                                        atlTruthDataFiltered.lon, 
                                         atlTruthDataFiltered.z, 
                                         atlTruthDataFiltered.classification, 
                                         atlTruthDataFiltered.intensity, 
@@ -2627,15 +2830,16 @@ def makeBuffer_legacy(atlTruthData, atlMeasuredData, rotationData, buffer):
     subData_northing = atlTruthData.northing[xyBufferInds]
     subData_crossTrack = atlTruthData.crossTrack[xyBufferInds]
     subData_alongTrack = atlTruthData.alongTrack[xyBufferInds]
+    subData_lat = atlTruthData.lat[xyBufferInds]
+    subData_lon = atlTruthData.lon[xyBufferInds]
     subData_z = atlTruthData.z[xyBufferInds]
     subData_classification = atlTruthData.classification[xyBufferInds]
     subData_intensity = atlTruthData.intensity[xyBufferInds]
 
     # Store data as object
-    atlTruthDataBuffer = atlTruthStruct(subData_easting, 
-                                        subData_northing, 
-                                        subData_crossTrack,
-                                        subData_alongTrack,
+    atlTruthDataBuffer = atlTruthStruct(subData_easting, subData_northing, 
+                                        subData_crossTrack, subData_alongTrack,
+                                        subData_lat, subData_lon,
                                         subData_z, 
                                         subData_classification, 
                                         subData_intensity, 
@@ -2754,45 +2958,48 @@ def findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buff
 # endDef
     
 ### Function to get truth file paths from GUI input
-def getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False):
+def getTruthFilePaths(userInput, fileExt, logFileID=False):
     
     # INPUTS:
-    # truthSwathDir - string, list, tuple of path(s)
-    # truthFileType - '.las' or '.tif'
-    # logFileID is a file identifier to write to a file if desired
+    # userInput - string, list, tuple of path(s)
+    # fileExt - '.las', '.tif', '.h5' etc.
+    # logFileID - a file identifier to write to a file if desired
     
     # Initialize output
-    truthFilePaths = []
+    filePaths = []
     
     # Convert tuple to list if necessary
-    if(isinstance(truthSwathDir, tuple)):
-        truthSwathDir = list(truthSwathDir)
+    if(isinstance(userInput, tuple)):
+        userInput = list(userInput)
+    # endIf
+    
+    elif(isinstance(userInput, list)):
+        if(len(userInput)==1):
+            userInput = userInput[0]
+        # endIf
     # endIf
     
     # Get truth file paths based on file, files, or directory
-    if(('las' in truthFileType.lower()) or ('tif' in truthFileType.lower())):
-        if(isinstance(truthSwathDir, str)):
-            if(os.path.exists(truthSwathDir)):
-                if(os.path.isfile(truthSwathDir)):
-                    # Get truth file name and extension
-                    truthFilePaths = [os.path.normpath(truthSwathDir)]
-                else:
-                    # Get full paths to input files
-                    strSearch = os.path.normpath(truthSwathDir + '\\*' + truthFileType)
-                    truthFilePaths = glob.glob(strSearch, recursive = True)   
-                # endIf
+    if(isinstance(userInput, str)):
+        if(os.path.exists(userInput)):
+            if(os.path.isfile(userInput)):
+                # Get truth file name and extension
+                filePaths = [os.path.normpath(userInput)]
             else:
-                # Send error message
-                writeLog('   Reference file/dir does not exist.', logFileID)      
-            # endIf
-        elif(isinstance(truthSwathDir, list)):
-            truthFilePaths = [os.path.normpath(x) for x in truthSwathDir]
+                # Get full paths to input files
+                strSearch = os.path.normpath(userInput + '\\*' + fileExt)
+                filePaths = glob.glob(strSearch, recursive = True)   
+            # endIf     
         # endIf
-    else:
-        writeLog('   Incorrect file type for reference file.', logFileID)
+    elif(isinstance(userInput, list)):
+        filePathsList = [os.path.normpath(x) for x in userInput]
+        filePathsTrue = all([os.path.isfile(x) for x in filePathsList])
+        if(filePathsTrue):
+            filePaths = filePathsList
+        # endIf
     # endIf
 
-    return truthFilePaths
+    return filePaths
 
 # endDef 
     

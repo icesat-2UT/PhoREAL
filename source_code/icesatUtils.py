@@ -1309,6 +1309,8 @@ def sortAtlTruth(atlTruthData, verbose=False):
     atlTruthData.crossTrack = atlTruthData.crossTrack[sort_index[:,0]]
     atlTruthData.northing = atlTruthData.northing[sort_index[:,0]]
     atlTruthData.easting = atlTruthData.easting[sort_index[:,0]]
+    atlTruthData.lat = atlTruthData.lat[sort_index[:,0]]
+    atlTruthData.lon = atlTruthData.lon[sort_index[:,0]]
     atlTruthData.z = atlTruthData.z[sort_index[:,0]]
     atlTruthData.intensity = atlTruthData.intensity[sort_index[:,0]]
     atlTruthData.classification = atlTruthData.classification[sort_index[:,0]]
@@ -1375,12 +1377,16 @@ def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = [], v
         atlTruthData.crossTrack = atlTruthData.crossTrack[filter_data]
         atlTruthData.northing = atlTruthData.northing[filter_data]
         atlTruthData.easting = atlTruthData.easting[filter_data]
+        atlTruthData.lat = atlTruthData.lat[filter_data]
+        atlTruthData.lon = atlTruthData.lon[filter_data]
         atlTruthData.z = atlTruthData.z[filter_data]
         atlTruthData.intensity = atlTruthData.intensity[filter_data]
         atlTruthData.classification = atlTruthData.classification[filter_data]
+        atlTruthData.time = atlTruthData.time[filter_data]
+        atlTruthData.deltaTime = atlTruthData.deltaTime[filter_data]
     else:
-        indexMatches = indexMatch(atlMeasuredData.alongTrack \
-                                    ,atlTruthData.alongTrack)
+        indexMatches = indexMatch(atlMeasuredData.alongTrack, \
+                                  atlTruthData.alongTrack)
         #Generate filter
         indexMatches[indexMatches >= len(atlMeasuredData.crossTrack)] = \
             len(atlMeasuredData.crossTrack) - 1
@@ -1392,9 +1398,13 @@ def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = [], v
         atlTruthData.crossTrack = atlTruthData.crossTrack[filter_data]
         atlTruthData.northing = atlTruthData.northing[filter_data]
         atlTruthData.easting = atlTruthData.easting[filter_data]
+        atlTruthData.lat = atlTruthData.lat[filter_data]
+        atlTruthData.lon = atlTruthData.lon[filter_data]
         atlTruthData.z = atlTruthData.z[filter_data]
         atlTruthData.intensity = atlTruthData.intensity[filter_data]
-        atlTruthData.classification = atlTruthData.classification[filter_data]  
+        atlTruthData.classification = atlTruthData.classification[filter_data] 
+        atlTruthData.time = atlTruthData.time[filter_data] 
+        atlTruthData.deltaTime = atlTruthData.deltaTime[filter_data] 
     if(verbose):
         print("Superfilter complete")
     # endIf
@@ -2267,12 +2277,12 @@ def b_filt(b, *args):
     return arr_new
 # endDef
     
-# Function to interpolate and get Z MSL (orthometric heights) from Z HAE (ellipsoidal heights)
+# Function to interpolate 1d
 def interp_vals(input_x, input_y, interp_x, removeThresh=False):
     
     # Remove y values > 1e30
     if(removeThresh):
-        indsUnderThresh = input_y <= removeThresh
+        indsUnderThresh = input_y <= 1e30
         input_x = input_x[indsUnderThresh]
         input_y = input_y[indsUnderThresh]
     # endIf
@@ -2290,6 +2300,30 @@ def interp_vals(input_x, input_y, interp_x, removeThresh=False):
 
 # endDef
 
+# Function to interpolate 2d
+def interp_vals2d(input_x, input_y, input_z, interp_x, interp_y, removeThresh=False, removeDuplicates=False):
+    
+    # Remove y values > 1e30
+    if(removeThresh):
+        indsUnderThresh = input_y <= removeThresh
+        input_x = input_x[indsUnderThresh]
+        input_y = input_y[indsUnderThresh]
+    # endIf
+    
+    # Remove x duplicate values for scipy interp
+    if(removeDuplicates):
+        indsUnique = np.unique(input_x, return_index=True)[1]
+        input_x = input_x[indsUnique]
+        input_y = input_y[indsUnique]
+    # endIf
+    
+    # Interpolate delta_time
+    f1 = interpolate.interp2d(input_x, input_y, input_z, kind='linear', fill_value='extrapolate')
+    interp_z = f1(interp_x, interp_y)
+    
+    return interp_z
+
+# endDef
 
 if __name__ == "__main__":
     print("Test")    

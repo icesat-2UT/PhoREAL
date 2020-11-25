@@ -2,7 +2,8 @@
 
 import os, sys
 import numpy as np
-import icesatUtils as it
+import icesatUtils as iu
+import h5py as h5
 
 
 def search(DIR, search_list, logical='and', case=True, ignore_perms=True, ext=None, recursive=True, debug=0):
@@ -231,7 +232,7 @@ def filter_atl(files, year=None, doy=None, hms=None, track=None, cycle=None, f_t
             if f_desc == 'year':
                 for file_full in files:
                     try:
-                        y, d = it.get_h5_meta(file_full, rtn_doy=True, file_start='ATL')
+                        y, d = iu.get_h5_meta(file_full, rtn_doy=True, file_start='ATL')
                     except ValueError:
                         if debug:
                             warn_msg(file_full)
@@ -243,7 +244,7 @@ def filter_atl(files, year=None, doy=None, hms=None, track=None, cycle=None, f_t
             elif f_desc == 'doy':
                 for file_full in files:
                     try:
-                        y, d = it.get_h5_meta(file_full, rtn_doy=True, file_start='ATL')
+                        y, d = iu.get_h5_meta(file_full, rtn_doy=True, file_start='ATL')
                     except ValueError:
                         if debug:
                             warn_msg(file_full)
@@ -255,7 +256,7 @@ def filter_atl(files, year=None, doy=None, hms=None, track=None, cycle=None, f_t
             elif f_desc == 'hms':
                 for file_full in files:
                     try:
-                        h,m,s = it.get_h5_meta(file_full, f_desc, file_start='ATL')
+                        h,m,s = iu.get_h5_meta(file_full, f_desc, file_start='ATL')
                         hms_rtn = h+m+s
                     except ValueError:
                         if debug:
@@ -268,7 +269,7 @@ def filter_atl(files, year=None, doy=None, hms=None, track=None, cycle=None, f_t
             elif f_desc == 'f_type':
                 for file_full in files:
                     try:
-                        f_type_rtn = it.get_h5_meta(file_full, f_desc, file_start='ATL')
+                        f_type_rtn = iu.get_h5_meta(file_full, f_desc, file_start='ATL')
                     except ValueError:
                         if debug:
                             warn_msg(file_full)
@@ -289,7 +290,7 @@ def filter_atl(files, year=None, doy=None, hms=None, track=None, cycle=None, f_t
                 # track, cycle, release, version
                 for file_full in files:
                     try:
-                        val = it.get_h5_meta(file_full, f_desc, file_start='ATL')
+                        val = iu.get_h5_meta(file_full, f_desc, file_start='ATL')
                     except ValueError:
                         if debug:
                             warn_msg(file_full)
@@ -517,6 +518,35 @@ def find_match(file, search_type, SEARCH_DIR=None, recursive=True, match_ymd=Tru
     return files_out
 
 
+def get_dir(DIR='data', atl=3): #, year=None, doy=None):
+
+    """
+    Exclusively gets data directory (relative to user) for
+    bigtex.
+    Example:
+        # release 003 for atl03
+        import file_search as fs
+        DATA_DIR = fs.get_dir('003', 3)
+        files_03 = fs.search(DATA_DIR, ['ATL03'], ext='h5')
+        
+    """
+
+    BIGTEX_DIR = iu.get_root_dir('data')
+
+    if DIR == '':
+        print('error: DIR must be defined for bigtex')
+        return None
+
+    DIR = DIR.lower()
+    if DIR == 'data':
+        # return BIGTEX_DIR + '/data/release'
+        return os.path.join(BIGTEX_DIR, 'data', 'release')
+
+    else:
+        # return BIGTEX_DIR + '/data/release/%s/ATL%s_r%s' % (DIR.upper(), str(atl).zfill(2), DIR.upper())
+        rel, d = DIR.upper(), 'ATL%s_r%s' % (str(atl).zfill(2), DIR.upper())
+        return os.path.join(BIGTEX_DIR, 'data', 'release', rel, d)
+
 
 if __name__ == "__main__":
 
@@ -525,8 +555,8 @@ if __name__ == "__main__":
     files in release 003
     """
     print('find atl03 and atl08 files for release 003')
-    DIR_03 = 'your 03 dir' #get_dir('003', 3)
-    DIR_08 = 'your 08 dir' #get_dir('003', 8)
+    DIR_03 = get_dir('003', 3)
+    DIR_08 = get_dir('003', 8)
     files_03 = search(DIR_03, ['ATL03'], ext='h5', recursive=False)
     # files_08 = search(DIR_08, ['ATL08'], ext='h5', recursive=False)
     
@@ -547,8 +577,31 @@ if __name__ == "__main__":
             # for file_08 in files_08:
             #     print(file_08)
             # print('')
-            # it.pause()
+            # iu.pause()
 
         file_08 = files_08[0]
         files_03_match.append(file_03)
         files_08_match.append(file_08)
+
+    #     if len(files_03_match) > 10:
+    #         break
+
+
+    # if 1:
+    #     import icesatReader as ir
+    #     # file_03, file_08 = files_03_match[0], files_08_match[0]
+    #     num_files = len(files_03_match)
+    #     for f in range(num_files):
+    #         print(f)
+    #         file_03 = files_03_match[f]
+    #         file_08 = files_08_match[f]
+    #         try:
+    #             atl03 = ir.get_atl03_struct(file_03, 'gt1r', file_08)
+    #         except:
+    #             continue
+
+    #         if not atl03.dataIsMapped:
+    #             continue
+
+    #         ir.write_atl03_las(atl03, '/LIDAR/server/poseidon_files/USERS/jsipps/scripts_lidar/icesat_analysis')
+    #         break

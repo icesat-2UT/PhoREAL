@@ -17,67 +17,11 @@ import warnings
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from getAtlTruthSwath_auto import getAtlTruthSwath
 from icesatIO import (writeLas, writeLog, getTruthFilePaths, getTruthHeaders,
-                      GtToBeamNum, GtToBeamSW)
-from icesatUtils import (ismember, getRaster, getIntersection2d, getCoordRotRev)
+                      atlMeasuredDataReducedStruct, atlCorrectionsStruct, offsetsStruct)
+from icesatUtils import (ismember, getRaster, getIntersection2d, getCoordRotRev, getUTM2LatLon)
 from icesatPlot import (plotContour, plotZY, plotZT)
 
-
-class offsetsStruct:
-    
-    # Define class with designated fields
-    def __init__(self, crossTrackBounds, alongTrackBounds, rasterResolutions, 
-                 useVerticalShift, verticalShift):
-        
-        self.crossTrackBounds = crossTrackBounds
-        self.alongTrackBounds = alongTrackBounds
-        self.rasterResolutions = rasterResolutions
-        self.useVerticalShift = useVerticalShift
-        self.verticalShift = verticalShift
-    # endDef
-# endClass
-
-class atlMeasuredDataReducedStruct:
-    
-    # Define class with designated fields
-    def __init__(self, easting, northing, z, crossTrack, alongTrack, 
-                 time, classification, signalConf):
-        
-        self.easting = easting
-        self.northing = northing
-        self.z = z
-        self.crossTrack = crossTrack
-        self.alongTrack = alongTrack
-        self.time = time
-        self.classification = classification
-        self.signalConf = signalConf
-    # endDef
-# endClass
-
-class atlCorrectionsStruct:
-    
-    # Define class with designated fields
-    def __init__(self, correctionsCrossTrack, correctionsAlongTrack, 
-                 correctionsEasting, correctionsNorthing, correctionsVertical, 
-                 correctionsMAE, correctionsRMSE, correctionsME, 
-                 measRasterYCommonFinal, measRasterZCommonFinal,
-                 truthRasterYCommonFinal, truthRasterZCommonFinal):
-        
-        self.crossTrack = correctionsCrossTrack
-        self.alongTrack = correctionsAlongTrack
-        self.easting = correctionsEasting
-        self.northing = correctionsNorthing
-        self.z = correctionsVertical
-        self.mae = correctionsMAE
-        self.rmse = correctionsRMSE
-        self.me = correctionsME
-        self.measX_raster = measRasterYCommonFinal
-        self.measY_raster = measRasterZCommonFinal
-        self.truthX_raster = truthRasterYCommonFinal
-        self.truthY_raster = truthRasterZCommonFinal
-    # endDef
-# endClass
-
-
+# Function to get ICESat-2 offsets relative to reference data
 def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType, 
                         rotationData, outFilePath, 
                         useMeasSigConf, filterData, offsets, createMeasCorrFile, 
@@ -88,9 +32,9 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
     
     # Get and print ground track number
     gtNum = atlMeasuredData.gtNum
-    beamNum = GtToBeamNum(atlMeasuredData.atl03FilePath, gtNum)
-    beamSW = GtToBeamSW(atlMeasuredData.atl03FilePath, gtNum)
-    writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamSW), logFileID)
+    beamNum = atlMeasuredData.beamNum
+    beamStrength = atlMeasuredData.beamStrength
+    writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamStrength), logFileID)
 
     # Turn off runtime warnings (from np.nanmean)
     if not sys.warnoptions:
@@ -117,6 +61,8 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
     # endIf
     atlMeasuredDataReducedXrot = atlMeasuredData.crossTrack[measInTruthInds]
     atlMeasuredDataReducedYrot = atlMeasuredData.alongTrack[measInTruthInds]
+    atlMeasuredDataReducedLat = atlMeasuredData.lat[measInTruthInds]
+    atlMeasuredDataReducedLon = atlMeasuredData.lon[measInTruthInds]
     atlMeasuredDataReducedTime = atlMeasuredData.time[measInTruthInds]
     atlMeasuredDataReducedClass = atlMeasuredData.classification[measInTruthInds]
     atlMeasuredDataReducedSignal = atlMeasuredData.signalConf[measInTruthInds]
@@ -127,6 +73,8 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
                                                           atlMeasuredDataReducedZ, \
                                                           atlMeasuredDataReducedXrot, \
                                                           atlMeasuredDataReducedYrot, \
+                                                          atlMeasuredDataReducedLat, \
+                                                          atlMeasuredDataReducedLon, \
                                                           atlMeasuredDataReducedTime, \
                                                           atlMeasuredDataReducedClass, \
                                                           atlMeasuredDataReducedSignal)
@@ -547,8 +495,30 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
             _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
             _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
     
+            # Get shifted data
+            shiftedEasting = atlMeasuredData.easting + correctionsEasting
+            shiftedNorthing = atlMeasuredData.northing + correctionsNorthing
+            shiftedCrossTrack = atlMeasuredData.crossTrack + correctionsCrossTrack
+            shiftedAlongTrack = atlMeasuredData.alongTrack + correctionsAlongTrack
+            shiftedVertical = atlMeasuredData.z + correctionsVertical
+            shiftedVerticalMsl = atlMeasuredData.zMsl + correctionsVertical
+            
+            # Get lat/lon
+            shiftedLat, shiftedLon = getUTM2LatLon(shiftedEasting, 
+                                                   shiftedNorthing, 
+                                                   atlMeasuredData.zone, 
+                                                   atlMeasuredData.hemi)
+        
             # Store data in class structure
-            atlCorrections = atlCorrectionsStruct(correctionsCrossTrack, correctionsAlongTrack, \
+            atlCorrections = atlCorrectionsStruct(shiftedEasting, shiftedNorthing, \
+                                                  shiftedCrossTrack, shiftedAlongTrack, \
+                                                  shiftedLat, shiftedLon, \
+                                                  shiftedVertical, shiftedVerticalMsl, \
+                                                  atlMeasuredData.time, atlMeasuredData.deltaTime, \
+                                                  atlMeasuredData.classification, \
+                                                  atlMeasuredData.signalConf, \
+                                                  atlMeasuredData.zone, atlMeasuredData.hemi, \
+                                                  correctionsCrossTrack, correctionsAlongTrack, \
                                                   correctionsEasting, correctionsNorthing, \
                                                   correctionsVertical, \
                                                   correctionsMAE, correctionsRMSE, correctionsME, \
@@ -709,9 +679,31 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
         correctionsMAE = np.array([MAE])
         correctionsRMSE = np.array([RMSE])
         correctionsME = np.array([ME])
+    
+        # Get shifted data
+        shiftedEasting = atlMeasuredData.easting + correctionsEasting
+        shiftedNorthing = atlMeasuredData.northing + correctionsNorthing
+        shiftedCrossTrack = atlMeasuredData.crossTrack + correctionsCrossTrack
+        shiftedAlongTrack = atlMeasuredData.alongTrack + correctionsAlongTrack
+        shiftedVertical = atlMeasuredData.z + correctionsVertical
+        shiftedVerticalMsl = atlMeasuredData.zMsl + correctionsVertical
+        
+        # Get lat/lon
+        shiftedLat, shiftedLon = getUTM2LatLon(shiftedEasting, 
+                                               shiftedNorthing, 
+                                               atlMeasuredData.zone, 
+                                               atlMeasuredData.hemi)
         
         # Generate atlCorrections struct
-        atlCorrections = atlCorrectionsStruct(correctionsCrossTrack, correctionsAlongTrack, \
+        atlCorrections = atlCorrectionsStruct(shiftedEasting, shiftedNorthing, \
+                                              shiftedCrossTrack, shiftedAlongTrack, \
+                                              shiftedLat, shiftedLon, \
+                                              shiftedVertical, shiftedVerticalMsl, \
+                                              atlMeasuredData.time, atlMeasuredData.deltaTime, \
+                                              atlMeasuredData.classification, \
+                                              atlMeasuredData.signalConf, \
+                                              atlMeasuredData.zone, atlMeasuredData.hemi, \
+                                              correctionsCrossTrack, correctionsAlongTrack, \
                                               correctionsEasting, correctionsNorthing, \
                                               correctionsVertical, \
                                               correctionsMAE, correctionsRMSE, correctionsME, \

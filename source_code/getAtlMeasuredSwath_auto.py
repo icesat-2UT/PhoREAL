@@ -19,114 +19,17 @@ Date: September 20, 2019
 import os
 import numpy as np
 import time as runTime
-from icesatIO import (readAtl03H5, readAtl08H5, 
-                      readAtl03DataMapping, readAtl08DataMapping, 
-                      readTruthRegionsTxtFile, 
+from icesatIO import (readAtl03H5, readAtl08H5,
+                      readAtl03DataMapping, readAtl08DataMapping,
+                      readTruthRegionsTxtFile,
                       writeLas, writeKml, writeArrayToCSV, writeLog,
-                      GtToBeamNum, GtToBeamSW)
+                      GtToBeamNum, GtToBeamSW,
+                      atlRotationStruct, atl03Struct, atl08Struct)
 from icesatUtils import (getNameParts, getAtl08Mapping, getLatLon2UTM, 
                          getCoordRotFwd, getClosest, interp_vals)
 
-class atl03Struct:
-        
-    # Define class with designated fields
-    def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, 
-                 atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_zMsl, 
-                 atl03_time, atl03_deltaTime,
-                 atl03_signalConf, atl03_classification, atl03_intensity, 
-                 gtNum, zone, hemi,
-                 atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
-            
-        self.lat = np.c_[atl03_lat]
-        self.lon = np.c_[atl03_lon]
-        self.easting = np.c_[atl03_easting]
-        self.northing = np.c_[atl03_northing]
-        self.crossTrack = np.c_[atl03_crossTrack]
-        self.alongTrack = np.c_[atl03_alongTrack]
-        self.z = np.c_[atl03_z]
-        self.zMsl = np.c_[atl03_zMsl]
-        self.time = np.c_[atl03_time]
-        self.deltaTime = np.c_[atl03_deltaTime]
-        self.signalConf = np.c_[atl03_signalConf]
-        self.classification = np.c_[atl03_classification]
-        self.intensity = np.c_[atl03_intensity]
-        self.gtNum = gtNum
-        self.zone = zone
-        self.hemi = hemi
-        self.atl03FilePath = atl03FilePath
-        self.atl03FileName = atl03FileName
-        self.trackDirection = trackDirection
-        self.atlVersion = alt03h5Info.atlVersion
-        self.year = alt03h5Info.year
-        self.month = alt03h5Info.month
-        self.day = alt03h5Info.day
-        self.hour = alt03h5Info.hour
-        self.minute = alt03h5Info.minute
-        self.second = alt03h5Info.second
-        self.trackNum = alt03h5Info.trackNum
-        self.unknown = alt03h5Info.unknown
-        self.releaseNum = alt03h5Info.releaseNum
-        self.incrementNum = alt03h5Info.incrementNum
-        self.dataIsMapped = dataIsMapped
- 
-
-class atl08Struct:
-        
-    # Define class with designated fields
-    def __init__(self, atl08_lat, atl08_lon, atl08_easting, atl08_northing, 
-                 atl08_crossTrack, atl08_alongTrack, 
-                 atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, 
-                 atl08_time, atl08_deltaTime,
-                 atl08_signalConf, atl08_classification, atl08_intensity, 
-                 gtNum, zone, hemi, 
-                 atl08FilePath, atl08FileName, trackDirection, alt08h5Info, dataIsMapped):
-            
-        self.lat = np.c_[atl08_lat]
-        self.lon = np.c_[atl08_lon]
-        self.easting = np.c_[atl08_easting]
-        self.northing = np.c_[atl08_northing]
-        self.crossTrack = np.c_[atl08_crossTrack]
-        self.alongTrack = np.c_[atl08_alongTrack]
-        self.maxCanopy = np.c_[atl08_maxCanopy]
-        self.teBestFit = np.c_[atl08_teBestFit]
-        self.teMedian = np.c_[atl08_teMedian]
-        self.time = np.c_[atl08_time]
-        self.deltaTime = np.c_[atl08_deltaTime]
-        self.signalConf = np.c_[atl08_signalConf]
-        self.classification = np.c_[atl08_classification]
-        self.intensity = np.c_[atl08_intensity]
-        self.gtNum = gtNum
-        self.zone = zone
-        self.hemi = hemi
-        self.atl08FilePath = atl08FilePath
-        self.atl08FileName = atl08FileName
-        self.trackDirection = trackDirection
-        self.atlVersion = alt08h5Info.atlVersion
-        self.year = alt08h5Info.year
-        self.month = alt08h5Info.month
-        self.day = alt08h5Info.day
-        self.hour = alt08h5Info.hour
-        self.minute = alt08h5Info.minute
-        self.second = alt08h5Info.second
-        self.trackNum = alt08h5Info.trackNum
-        self.unknown = alt08h5Info.unknown
-        self.releaseNum = alt08h5Info.releaseNum
-        self.incrementNum = alt08h5Info.incrementNum
-        self.dataIsMapped = dataIsMapped
-        
-        
-class atlRotationStruct:
-    
-    # Define class with designated fields
-    def __init__(self, R_mat, xRotPt, yRotPt, desiredAngle, phi):
-        
-        self.R_mat = R_mat
-        self.xRotPt = xRotPt
-        self.yRotPt = yRotPt
-        self.desiredAngle = desiredAngle
-        self.phi = phi
-        
-
+     
+# Function to read ICESat-2 data
 def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False, 
                         outFilePath = False, gtNum = 'gt1r', trimInfo = 'auto', 
                         createAtl03LasFile = False, createAtl03KmlFile = False, 
@@ -168,10 +71,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
         
         # Get beam # and S/W
         beamNum = GtToBeamNum(atl03FilePath, gtNum)
-        beamSW = GtToBeamSW(atl03FilePath, gtNum)
+        beamStrength = GtToBeamSW(atl03FilePath, gtNum)
                 
         # Print message   
-        writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamSW), logFileID)
+        writeLog('   Ground Track Number: %s (Beam #%s, Beam Strength: %s)\n' %(gtNum, beamNum, beamStrength), logFileID)
         
         # Get ATL03 file path/name
         atl03FilePath = os.path.normpath(os.path.abspath(atl03FilePath))
@@ -186,7 +89,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
         signalConf_all = readAtl03H5(atl03FilePath, '/heights/signal_conf_ph', gtNum)
         zGeoidal = readAtl03H5(atl03FilePath, '/geophys_corr/geoid', gtNum)
         zGeoidal_deltaTime = readAtl03H5(atl03FilePath, '/geophys_corr/delta_time', gtNum)
-        zGeoidal_all = interp_vals(zGeoidal_deltaTime, zGeoidal, deltaTime_all,)
+        zGeoidal_all = interp_vals(zGeoidal_deltaTime, zGeoidal, deltaTime_all, removeThresh=True)
         zMsl_all = z_all - zGeoidal_all
         atl03_ph_index_beg, atl03_segment_id = readAtl03DataMapping(atl03FilePath, gtNum)
         
@@ -250,6 +153,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl08_teBestFit = readAtl08H5(atl08FilePath, '/land_segments/terrain/h_te_best_fit', gtNum)
                 atl08_teMedian = readAtl08H5(atl08FilePath, '/land_segments/terrain/h_te_median', gtNum)
                 atl08_deltaTime = readAtl08H5(atl08FilePath, '/land_segments/delta_time', gtNum)
+                atl08_zGeoidal = interp_vals(zGeoidal_deltaTime, zGeoidal, atl08_deltaTime, removeThresh=True)
+                atl08_maxCanopyMsl = atl08_maxCanopy - atl08_zGeoidal
+                atl08_teBestFitMsl = atl08_teBestFit - atl08_zGeoidal
+                atl08_teMedianMsl = atl08_teMedian - atl08_zGeoidal
                 atl08_classed_pc_indx, atl08_classed_pc_flag, atl08_segment_id = readAtl08DataMapping(atl08FilePath, gtNum)
                 atl08_signalConf = np.zeros(np.size(atl08_lat))
                 atl08_classification = np.zeros(np.size(atl08_lat))
@@ -412,6 +319,9 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     atl08_maxCanopy = atl08_maxCanopy[atl08IndsToKeep]
                     atl08_teBestFit = atl08_teBestFit[atl08IndsToKeep]
                     atl08_teMedian = atl08_teMedian[atl08IndsToKeep]
+                    atl08_maxCanopyMsl = atl08_maxCanopyMsl[atl08IndsToKeep]
+                    atl08_teBestFitMsl = atl08_teBestFitMsl[atl08IndsToKeep]
+                    atl08_teMedianMsl = atl08_teMedianMsl[atl08IndsToKeep]
                     atl08_time = atl08_time[atl08IndsToKeep]
                     atl08_deltaTime = atl08_deltaTime[atl08IndsToKeep]
                     atl08_signalConf = atl08_signalConf[atl08IndsToKeep]
@@ -433,6 +343,9 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl08_maxCanopy = atl08_maxCanopy[indsBelowThresh]
                 atl08_teBestFit = atl08_teBestFit[indsBelowThresh]
                 atl08_teMedian = atl08_teMedian[indsBelowThresh]
+                atl08_maxCanopyMsl = atl08_maxCanopyMsl[indsBelowThresh]
+                atl08_teBestFitMsl = atl08_teBestFitMsl[indsBelowThresh]
+                atl08_teMedianMsl = atl08_teMedianMsl[indsBelowThresh]
                 atl08_time = atl08_time[indsBelowThresh]
                 atl08_deltaTime = atl08_deltaTime[indsBelowThresh]
                 atl08_signalConf = atl08_signalConf[indsBelowThresh]
@@ -523,6 +436,9 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                         atl08_maxCanopy = atl08_maxCanopy[atl08IndsInRegion]
                         atl08_teBestFit = atl08_teBestFit[atl08IndsInRegion]
                         atl08_teMedian = atl08_teMedian[atl08IndsInRegion]
+                        atl08_maxCanopyMsl = atl08_maxCanopyMsl[atl08IndsInRegion]
+                        atl08_teBestFitMsl = atl08_teBestFitMsl[atl08IndsInRegion]
+                        atl08_teMedianMsl = atl08_teMedianMsl[atl08IndsInRegion]
                         atl08_time = atl08_time[atl08IndsInRegion]
                         atl08_deltaTime = atl08_deltaTime[atl08IndsInRegion]
                         atl08_signalConf = atl08_signalConf[atl08IndsInRegion]
@@ -571,7 +487,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                     atl03_time, \
                                     atl03_deltaTime, \
                                     atl03_signalConf, atl03_classification, atl03_intensity, \
-                                    gtNum, zone, hemi, \
+                                    gtNum, beamNum, beamStrength, zone, hemi, \
                                     atl03FilePath, atl03FileName, \
                                     trackDirection, \
                                     atl03h5Info, \
@@ -583,6 +499,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                         atl08_easting, atl08_northing, \
                                         atl08_crossTrack, atl08_alongTrack, \
                                         atl08_maxCanopy, atl08_teBestFit, atl08_teMedian, \
+                                        atl08_maxCanopyMsl, atl08_teBestFitMsl, atl08_teMedianMsl, \
                                         atl08_time, \
                                         atl08_deltaTime, \
                                         atl08_signalConf, atl08_classification, atl08_intensity, \

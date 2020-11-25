@@ -51,7 +51,7 @@ import pandas as pd
 pd.options.mode.chained_assignment = None
 
 
-DIR_ICEPY = os.path.normpath('PhoREAL git dir here')
+DIR_ICEPY = os.path.normpath('/LIDAR/server/poseidon_files/USERS/jsipps/icesat2_icepy')
 sys.path.append(DIR_ICEPY)
 import icesatUtils as iu
 import icesatPlot as ip
@@ -205,16 +205,16 @@ only 'h5' is specified in output_types.
 """
 
 # DATA_DIR contains 08_datasets.txt
-DATA_DIR = os.path.normpath('location of 08_datasets.txt')
+DATA_DIR = os.path.normpath('/LIDAR/server/poseidon_files/USERS/jsipps/scripts_lidar/icesat_analysis/Alaska')
 
 # will have output mat/pkl files (if write_output == True)
-OUT_DIR = os.path.normpath('output dir')
+OUT_DIR = os.path.normpath('/LIDAR/server/poseidon_files/USERS/jsipps/scripts_lidar/icesat_analysis/Alaska/output')
 
 # 03 files
-DIR_03 = os.path.normpath('atl03 file dir')
+DIR_03 = os.path.normpath('/bigtex_data/data/release/003/ATL03_r003/Alaska')
 
 # 08 files
-DIR_08 = os.path.normpath('atl08 file dir')
+DIR_08 = os.path.normpath('/bigtex_data/data/release/003/ATL08_r003/Alaska')
 
 
 """
@@ -605,9 +605,9 @@ for f in range(num_files):
                     b_nan = np.isnan(x_03_reg) | np.isnan(y_03_reg)
                     x_03_reg, y_03_reg, j_03_reg = x_03_reg[~b_nan], y_03_reg[~b_nan], j_03_reg[~b_nan]
 
-                    # if len(x_03_reg) != len(y_03_reg):
-                    #     print('error: length')
-                    #     # iu.pause()
+                    if len(x_03_reg) != len(y_03_reg):
+                        print('error: length')
+                        iu.pause()
 
                     if len(x_03_reg) <= 1:
                         # only 1 point of 08 and 1 or 0 points of 03,

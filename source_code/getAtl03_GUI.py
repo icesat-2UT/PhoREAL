@@ -37,6 +37,7 @@ from datetime import datetime
 import webbrowser
 import pandas as pd
 from scipy import interpolate
+import pickle as pkl
 
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from getAtlTruthSwath_auto import getAtlTruthSwath
@@ -45,8 +46,8 @@ from getMeasurementError_auto import getMeasurementError, offsetsStruct
 from icesatPlot import (getPlot, getPlot_atl08, getPlot_truth, 
                         getPlot_measCorr, getPklPlot, addStatsToPlot)
 from icesatIO import (createHTMLChart, writeLog, write_mat, getTruthFilePaths,
-                      getTruthHeaders)
-from icesatUtils import (superFilter, getNameParts)
+                      getTruthHeaders, swbeamToGT, beamNumToGT)
+from icesatUtils import (superFilter, getNameParts, interp_vals)
 from icesatBin_skinny import get_bin_df
 
 from gui_logo import images
@@ -64,7 +65,7 @@ print('\n')
 window = tk.Tk()
 
 # GUI title
-phoRealVersion = 'v3.19'
+phoRealVersion = 'v3.24'
 window.title('PhoREAL %s - Applied Research Labs (The University of Texas at Austin)' %phoRealVersion)
 
 # GUI size
@@ -74,7 +75,7 @@ window.resizable(width=False, height=False)
 # Set icon image for GUI
 if os.name == 'nt':
     window.wm_iconbitmap(images)
-
+# endIf
 
 # Create top level tabs
 tabControl = ttk.Notebook(window)  
@@ -103,10 +104,6 @@ tabControl.pack(expand=1, fill='both')
 s = ttk.Style()
 s.configure('TNotebook.Tab', font=('Arial','10','bold'))
 
-# Get current working directory
-global cwd
-cwd = os.path.normpath(os.getcwd())
-
 
 ###############################################################################
 #
@@ -115,95 +112,160 @@ cwd = os.path.normpath(os.getcwd())
 ###############################################################################
 
 # Define global variables
-global atl03FileExists, atl08FileExists, outPathExists, truthDataExists, \
-       atl03DF_all, truthFilePaths, truthFileType
+global cwd, atl03FileExists, atl03FilePaths, atl08FileExists, atl08FilePaths, \
+       outPathExists, truthDataExists, atl03DF_all, truthFilePaths, truthFileType
        
 # Initialize parameters
+cwd = os.path.normpath(os.getcwd())
 atl03FileExists = False
+atl03FilePaths = []
 atl08FileExists = False
+atl08FilePaths = []
 outPathExists = True
 truthDataExists = False
 atl03DF_all = []
 truthFilePaths = []
-truthFileType = []
+truthFileType = '.las'
 
 ### Panel label
 measLabelframe = tk.LabelFrame(tab1, width=545, height=450, text='Get ICESat-2 Data Input', font=('Arial Bold', 14))
 measLabelframe.place(x=15, y=10)
 
-### ATL03 INPUT FILE
-
 # Check ATL08 Button Callback
 def checkATL03():
     
-    global atl03FileExists
+    global atl03FileExists, atl03FilePaths
     
-    atl03File = os.path.normpath(atl03_textBox.get().strip())
-    atl03FileNotEmpty = atl03File != '.'
-    atl03FileExists = os.path.exists(atl03File) and atl03FileNotEmpty
+    atl03FileInputRaw = atl03_textBox.get()
+    atl03FileInputSplit = atl03FileInputRaw.split(',')
+    atl03FileInput = [x.strip() for x in atl03FileInputSplit]
+    atl03FilePaths = getTruthFilePaths(atl03FileInput, 'ATL03*.h5', logFileID=False)
+    
+    if(atl03FilePaths):
+        atl03FileExists = True
+    else:
+        atl03FileExists = False
+    # endIf
     
 # endDef
     
-# ATL03 File Entry Box
-lbl = tk.Label(measLabelframe, text='ATL03 File:', font=('Arial Bold', 12), anchor = 'w', justify='left')
-lbl.place(x=10, y=10)
-atl03_textBox = tk.Entry(measLabelframe, width=70)
-atl03_textBox.place(x=10, y=40)
-atl03_textBox.bind('<Return>', (lambda event: checkATL03()))
-atl03_textBox.bind('<Tab>', (lambda event: checkATL03()))
-
+# Function to determine the ATL03 file input type
+def selectAtl03FileType(event):
+    
+    global atl03FilePaths
+    
+    atl03_textBox.delete(0,'end')
+    atl03_textBox.insert(0,'')
+    atl03FilePaths = []
+    
+# endDef
+    
 # Browse ATL03 File Button Callback
 def browseAtl03():
     
-    global atl03FileExists
+    global atl03FileExists, atl03FilePaths
     
-    currentData = atl03_textBox.get()
-    atl03File = os.path.normpath(filedialog.askopenfilename(title = 'Select ATL03 .h5 file', filetypes = [('h5 files','ATL03_*.h5')]))
-    if(atl03File != '.'):
-        atl03FileExists = os.path.exists(atl03File)
-        if(atl03FileExists):
-            atl03_textBox.delete(0,len(currentData))
-            atl03_textBox.insert(0,atl03File) 
+    # Get GUI input parameters
+    atl03FileTypeValue = atl03FileTypeBox.get()
+    
+    # Determine whether to select a file or a directory
+    if('file' in atl03FileTypeValue.lower()):
+        # Option for .h5 file(s)
+        helpStr = 'Select ATL03 .h5 File(s)'
+        extStr = 'ATL03*.h5'
+        atl03Input = filedialog.askopenfilenames(title = helpStr, filetypes = [(extStr, extStr)])
+        inpIsDir = False
+    else:
+        # Option for .h5 directory
+        helpStr = 'Select Directory with ATL03 .h5 File(s)'
+        atl03Input = os.path.normpath(filedialog.askdirectory(title = helpStr))
+        inpIsDir = True
+    # endIf
+    
+    # Get ATL03 file paths from user input
+    if(atl03Input!='.' and atl03Input!=''):
+        atl03FilePaths = getTruthFilePaths(atl03Input, 'ATL03*.h5', logFileID=False)
+        atl03_textBox.delete(0,'end')
+        if(inpIsDir):
+            atl03_textBox.insert(0,atl03Input)
+        else:
+            atl03_textBox.insert(0,(', ').join(atl03FilePaths))
         # endIf
+        atl03FileExists = True
+    else:
+        atl03FileExists = False
     # endIf
 # endDef
     
+# ATL03 File Type Combo Box
+atl03FileTypeBox = ttk.Combobox(measLabelframe, width=12)
+atl03FileTypeBox.place(x=150, y=11)
+atl03FileTypes = ['.h5 File(s)','.h5 Directory']
+atl03FileTypeBox['values'] = atl03FileTypes
+atl03FileTypeBox.bind("<<ComboboxSelected>>", selectAtl03FileType)
+atl03FileTypeBox.current(0)
+
+# ATL03 File Entry Box
+lbl = tk.Label(measLabelframe, text='ATL03 File Type:', font=('Arial Bold', 12), anchor = 'w', justify='left')
+lbl.place(x=10, y=10)
+atl03_textBox = tk.Entry(measLabelframe, width=70)
+atl03_textBox.place(x=10, y=40)
+#atl03_textBox.bind('<Return>', (lambda event: checkATL03()))
+#atl03_textBox.bind('<Tab>', (lambda event: checkATL03()))
+
 # ATL03 File Browse Button
 atl03BrowseButton = tk.Button(measLabelframe, text='Browse', font=('Arial Bold', 12), command=browseAtl03) 
 atl03BrowseButton.place(x=450, y=30)
 
-
-### ATL08 INPUT FILE
-
 # Check ATL08 Button Callback
 def checkATL08():
     
-    global atl08FileExists
+    global atl08FileExists, atl08FilePaths
     
-    atl08File = os.path.normpath(atl08_textBox.get().strip())
-    atl08FileNotEmpty = atl08File != '.'
-    atl08FileExists = os.path.exists(atl08File) and atl08FileNotEmpty
-    useMeasErrorSection = useMeasErrorSectionChkState.get()
-    if(atl08FileExists and useMeasErrorSection):
-        useGroundIndex_checkBox.config(state = 'normal')
-    # endIf    
+    atl08FileInputRaw = atl08_textBox.get()
+    atl08FileInputSplit = atl08FileInputRaw.split(',')
+    atl08FileInput = [x.strip() for x in atl08FileInputSplit]
+    atl08FilePaths = getTruthFilePaths(atl08FileInput, 'ATL08*.h5', logFileID=False)
+    
+    if(atl08FilePaths):
+        atl08FileExists = True
+    else:
+        atl08FileExists = False
+    # endIf   
 # endDef
     
-# ATL08 File Entry Box
-lbl = tk.Label(measLabelframe, text='ATL08 File (Optional):', font=('Arial Bold', 12), anchor = 'w', justify='left')
-lbl.place(x=10, y=70)
-atl08_textBox = tk.Entry(measLabelframe, width=70) 
-atl08_textBox.place(x=10, y=100)
-atl08_textBox.bind('<Return>', (lambda event: checkATL08()))
-atl08_textBox.bind('<Tab>', (lambda event: checkATL08()))
-
+# Function to determine the ATL03 file input type
+def selectAtl08FileType(event):
+    
+    global atl08FilePaths
+    
+    atl08_textBox.delete(0,'end')
+    atl08_textBox.insert(0,'')
+    atl08FilePaths = []
+    
+# endDef
+    
 # Browse ATL08 File Button Callback
 def browseAtl08():
     
-    global atl08FileExists
+    global atl08FileExists, atl08FilePaths
     
+    # Get GUI input parameters
+    currentData = atl08_textBox.get()
+    atl08FileTypeValue = atl08FileTypeBox.get()
+    useMeasErrorSection = useMeasErrorSectionChkState.get()
+    
+    # Determine if single ATL03 file or not
+    singleAtl03File = False
+    if(len(atl03FilePaths)==1):
+        if(atl03FilePaths[0][-3:]=='.h5'):
+            singleAtl03File = True
+        # endIf
+    # endIf
+    
+    # Get matching ATL08 file name path if single ATL03 file
     try:
-        if(atl03FileExists):
+        if(atl03FileExists and singleAtl03File):
             
             # Get ATL03 file and name parts
             atl03Path = atl03_textBox.get().strip()
@@ -226,37 +288,60 @@ def browseAtl08():
         # String for all ATL08 .h5 files
         filterText = 'ATL08_*.h5'
     # endTry
+        
+    # Determine whether to select a file or directory
+    if('file' in atl08FileTypeValue.lower()):
+        # Option for .h5 file(s)
+        helpStr = 'Select ATL08 .h5 File(s)'
+        atl08Input = filedialog.askopenfilenames(title = helpStr, filetypes = [(filterText, filterText)])
+        inpIsDir = False
+    else:
+        # Option for .h5 directory
+        helpStr = 'Select Directory with ATL08 .h5 File(s)'
+        atl08Input = os.path.normpath(filedialog.askdirectory(title = helpStr))
+        inpIsDir = True
+    # endIf
     
-    currentData = atl08_textBox.get()
-    atl08File = os.path.normpath(filedialog.askopenfilename(title = 'Select ATL08 .h5 file', filetypes = [('h5 files', filterText)]))
-    if(atl08File != '.'):
-        atl08FileExists = os.path.exists(atl08File)
-        useMeasErrorSection = useMeasErrorSectionChkState.get()
-        if(atl08FileExists):
-            atl08_textBox.delete(0,len(currentData))
-            atl08_textBox.insert(0,atl08File)
-            if(useMeasErrorSection):
-                useGroundIndex_checkBox.config(state = 'normal')
-            # endIf
+    # Get ATL08 file paths from user input
+    if(atl08Input!='.' and atl08Input!=''):
+        atl08FilePaths = getTruthFilePaths(atl08Input, 'ATL08*.h5', logFileID=False)
+        atl08_textBox.delete(0,len(currentData))
+        if(inpIsDir):
+            atl08_textBox.insert(0,atl08Input)
         else:
-            useGroundIndex_checkBox.config(state = 'disabled')
+            atl08_textBox.insert(0,(', ').join(atl08FilePaths))
         # endIf
+        atl08FileExists = True
+        if(useMeasErrorSection):
+            useGroundIndex_checkBox.config(state = 'normal')
+        # endIf
+    else:
+        atl08FileExists = False
+        useGroundIndex_checkBox.config(state = 'disabled')
     # endIf
 # endDef
+    
+# ATL08 File Type Combo Box
+atl08FileTypeBox = ttk.Combobox(measLabelframe, width=12)
+atl08FileTypeBox.place(x=150, y=71)
+atl08FileTypes = ['.h5 File(s)','.h5 Directory']
+atl08FileTypeBox['values'] = atl08FileTypes
+atl08FileTypeBox.bind("<<ComboboxSelected>>", selectAtl08FileType)
+atl08FileTypeBox.current(0)
+
+# ATL08 File Entry Box
+lbl = tk.Label(measLabelframe, text='ATL08 File Type:', font=('Arial Bold', 12), anchor = 'w', justify='left')
+lbl.place(x=10, y=70)
+atl08_textBox = tk.Entry(measLabelframe, width=70) 
+atl08_textBox.place(x=10, y=100)
+lbl = tk.Label(measLabelframe, text='(Optional)', font=('Arial Bold', 12), anchor = 'w', justify='left')
+lbl.place(x=255, y=70)
+#atl08_textBox.bind('<Return>', (lambda event: checkATL08()))
+#atl08_textBox.bind('<Tab>', (lambda event: checkATL08()))
     
 # ATL08 File Browse Button
 atl08BrowseButton = tk.Button(measLabelframe, text='Browse', font=('Arial Bold', 12), command=browseAtl08) 
 atl08BrowseButton.place(x=450, y=90)
-
-
-### Output Path
-
-# Output Path Entry Box
-lbl = tk.Label(measLabelframe, text='Output Directory:', font=('Arial Bold', 12), anchor = 'w', justify='left')
-lbl.place(x=10, y=130)
-outPath_textBox = tk.Entry(measLabelframe, width=70) 
-outPath_textBox.place(x=10, y=160)
-outPath_textBox.insert(0,cwd)
 
 # Browse Output File Button Callback
 def browseOutput():
@@ -269,7 +354,14 @@ def browseOutput():
     # endIf
     
 # endDef
-    
+
+# Output Path Entry Box
+lbl = tk.Label(measLabelframe, text='Output Directory:', font=('Arial Bold', 12), anchor = 'w', justify='left')
+lbl.place(x=10, y=130)
+outPath_textBox = tk.Entry(measLabelframe, width=70) 
+outPath_textBox.place(x=10, y=160)
+#outPath_textBox.insert(0,cwd)
+
 # Output Directory Browse Button
 outPathBrowseButton = tk.Button(measLabelframe, text='Browse', font=('Arial Bold', 12), command=browseOutput) 
 outPathBrowseButton.place(x=450, y=150)
@@ -279,23 +371,98 @@ outPathBrowseButton.place(x=450, y=150)
 lbl = tk.Label(measLabelframe, text='Ground Track Numbers:', font=('Arial Bold', 12), anchor = 'w', justify='left')
 lbl.place(x=10, y=190)
 
-gtNumsAll = np.array(['GT1R','GT1L','GT2R','GT2L','GT3R','GT3L'])
+# Function to display GT types based on user choice
+def gtTypeCallback(event):
+    
+    # Get GT selection type
+    gtType = gtTypeBox.get()
+    
+    # Set GT selection text
+    if(gtType == 'GT Right/Left'):
+        gtNum1r_checkBox.config(text='GT1R')
+        gtNum2r_checkBox.config(text='GT2R')
+        gtNum3r_checkBox.config(text='GT3R')
+        gtNum1l_checkBox.config(text='GT1L')
+        gtNum2l_checkBox.config(text='GT2L')
+        gtNum3l_checkBox.config(text='GT3L')
+    elif(gtType == 'GT Strong/Weak'):
+        gtNum1r_checkBox.config(text='GT1S')
+        gtNum2r_checkBox.config(text='GT2S')
+        gtNum3r_checkBox.config(text='GT3S')
+        gtNum1l_checkBox.config(text='GT1W')
+        gtNum2l_checkBox.config(text='GT2W')
+        gtNum3l_checkBox.config(text='GT3W')
+    elif(gtType == 'Beam Number'):
+        gtNum1r_checkBox.config(text='# 1')
+        gtNum2r_checkBox.config(text='# 3')
+        gtNum3r_checkBox.config(text='# 5')
+        gtNum1l_checkBox.config(text='# 2')
+        gtNum2l_checkBox.config(text='# 4')
+        gtNum3l_checkBox.config(text='# 6')
+    # endIf
+    
+# endDef
+    
+# Function to get GT nums based on GT selection type and user input
+def getGtNums(atl03FilePath):
+    
+    # Get GT selection type
+    gtType = gtTypeBox.get()
+    
+    # Get GT user choices
+    gtNumsTF = [gtNum1rChkState.get(), gtNum1lChkState.get(), gtNum2rChkState.get(), gtNum2lChkState.get(), gtNum3rChkState.get(), gtNum3lChkState.get()]    
+
+    # Determine GT based on GT selection type and user input
+    if(gtType == 'GT Right/Left'):
+        
+        gtNumsAll = np.array(['GT1R','GT1L','GT2R','GT2L','GT3R','GT3L'])
+        gtNums = gtNumsAll[gtNumsTF]
+        
+    elif(gtType == 'GT Strong/Weak'):
+        
+        groupNumAll = np.array(['1','1','2','2','3','3'])
+        groupNum = groupNumAll[gtNumsTF]
+        swAll = np.array(['strong','weak','strong','weak','strong','weak'])
+        sw = swAll[gtNumsTF]
+        gtNums = swbeamToGT(atl03FilePath, groupNum, sw)
+        
+    elif(gtType == 'Beam Number'):
+        
+        beamNumAll = np.array(['1','2','3','4','5','6'])
+        beamNum = beamNumAll[gtNumsTF]
+        gtNums = beamNumToGT(atl03FilePath, beamNum)
+        
+    # endIf
+    
+    return gtNums    
+
+# endDef
+
+# GT Selection Type
+lbl = tk.Label(measLabelframe, text='Select By:', font=('Arial', 12), anchor = 'w', justify='left')
+lbl.place(x=10, y=220)
+gtTypeBox = ttk.Combobox(measLabelframe, width=16)
+gtTypeBox.place(x= 90, y = 222)
+gtTypes = ['GT Right/Left','GT Strong/Weak','Beam Number']
+gtTypeBox['values'] = gtTypes
+gtTypeBox.current(0)
+gtTypeBox.bind("<<ComboboxSelected>>", gtTypeCallback)
 
 ### GT Number Checkboxes
 gtNum1rChkState = tk.BooleanVar()
 gtNum1rChkState.set(True)
 gtNum1r_checkBox = tk.Checkbutton(measLabelframe, text = 'GT1R', font=('Arial', 12), var = gtNum1rChkState) 
-gtNum1r_checkBox.place(x=10, y=220)
+gtNum1r_checkBox.place(x=250, y=190)
 
 gtNum2rChkState = tk.BooleanVar()
 gtNum2rChkState.set(True)
 gtNum2r_checkBox = tk.Checkbutton(measLabelframe, text = 'GT2R', font=('Arial', 12), var = gtNum2rChkState) 
-gtNum2r_checkBox.place(x=90, y=220)
+gtNum2r_checkBox.place(x=350, y=190)
 
 gtNum3rChkState = tk.BooleanVar()
 gtNum3rChkState.set(True)
 gtNum3r_checkBox = tk.Checkbutton(measLabelframe, text = 'GT3R', font=('Arial', 12), var = gtNum3rChkState) 
-gtNum3r_checkBox.place(x=170, y=220)
+gtNum3r_checkBox.place(x=450, y=190)
 
 gtNum1lChkState = tk.BooleanVar()
 gtNum1lChkState.set(False)
@@ -305,12 +472,12 @@ gtNum1l_checkBox.place(x=250, y=220)
 gtNum2lChkState = tk.BooleanVar()
 gtNum2lChkState.set(False)
 gtNum2l_checkBox = tk.Checkbutton(measLabelframe, text = 'GT2L', font=('Arial', 12), var = gtNum2lChkState) 
-gtNum2l_checkBox.place(x=330, y=220)
+gtNum2l_checkBox.place(x=350, y=220)
 
 gtNum3lChkState = tk.BooleanVar()
 gtNum3lChkState.set(False)
 gtNum3l_checkBox = tk.Checkbutton(measLabelframe, text = 'GT3L', font=('Arial', 12), var = gtNum3lChkState) 
-gtNum3l_checkBox.place(x=410, y=220)
+gtNum3l_checkBox.place(x=450, y=220)
 
 
 ### Check None Button Callback
@@ -502,12 +669,6 @@ def useTruthSectionCallback():
         useMeasErrorSectionCallback()
     # endIf
 # endDef
-    
-### Activate Truth section
-useTruthSectionChkState = tk.BooleanVar()
-useTruthSectionChkState.set(False)
-useTruthSection_checkBox = tk.Checkbutton(tab1, text = '', font=('Arial', 12), var = useTruthSectionChkState, command = useTruthSectionCallback) 
-useTruthSection_checkBox.place(x=1110, y=10)
 
 # Browse Truth Data Directory File Button Callback
 def browseTruthDir():
@@ -539,8 +700,8 @@ def browseTruthDir():
             # Option for las/tif buffer reference file 
             if('las' in truthFileTypeValue.lower()):
                 helpStr = 'Select Reference Buffer .las File'
-                extStr = '*.las'
-                truthFileType = '.las'
+                extStr = '*buffer.las'
+                truthFileType = '*buffer.las'
             else:
                 helpStr = 'Select Reference Buffer .tif File'
                 extStr = '*.tif'
@@ -563,13 +724,13 @@ def browseTruthDir():
         inpIsDir = True
     # endIf
     
-    if(truthDataExists and truthData!='.'):
+    if(truthDataExists and truthData!='.' and truthData!=''):
         truthFilePaths = getTruthFilePaths(truthData, truthFileType, logFileID=False)
         truthDataDir_textBox.delete(0,len(currentData))
         if(inpIsDir):
             truthDataDir_textBox.insert(0,truthData)
         else:
-            truthDataDir_textBox.insert(0,truthFilePaths)
+            truthDataDir_textBox.insert(0,(', ').join(truthFilePaths))
         # endIf
     else:
         truthDataExists = False
@@ -585,7 +746,7 @@ def checkUseExistingTruth():
     useTruth = useExistingTruthChkState.get()
     if(useTruth):
         truthBuffer_textBox.config(state = 'disabled')
-        truthFileTypeBox['values'] = ['.las File','.tif File']
+        truthFileTypeBox['values'] = ['.las File']
     else:
         truthBuffer_textBox.config(state = 'normal')
         truthFileTypeBox['values'] = ['.las File(s)','.las Directory','.tif File(s)','.tif Directory']
@@ -597,6 +758,48 @@ def checkUseExistingTruth():
     truthDataDir_textBox.insert(0,'')
     truthFilePaths = []
 # endDef
+    
+# Browse Truth Data Directory File Button Callback
+def checkTruthDir():    
+    
+    global truthDataExists, truthFilePaths
+    
+    truthFileInputRaw = truthDataDir_textBox.get()
+    truthFileInputSplit = truthFileInputRaw.split(',')
+    truthFileInput = [x.strip() for x in truthFileInputSplit]
+    truthFilePaths = getTruthFilePaths(truthFileInput, truthFileType, logFileID=False)
+    
+    if(truthFilePaths):
+        truthDataExists = True
+    else:
+        truthDataExists = False
+    # endIf
+    
+# endDef
+    
+# Function to clear listbox contents when selected
+def selectTruthFileType(event):
+    
+    global truthFilePaths, truthFileType
+    
+    truthDataDir_textBox.delete(0,'end')
+    truthDataDir_textBox.insert(0,'')
+    truthFilePaths = []
+    
+    truthFileTypeValue = truthFileTypeBox.get()
+    if('las' in truthFileTypeValue.lower()):
+        truthFileType = '.las'
+    else:
+        truthFileType = '.tif'
+    # endIf
+    
+# endDef
+
+### Activate Truth section
+useTruthSectionChkState = tk.BooleanVar()
+useTruthSectionChkState.set(False)
+useTruthSection_checkBox = tk.Checkbutton(tab1, text = '', font=('Arial', 12), var = useTruthSectionChkState, command = useTruthSectionCallback) 
+useTruthSection_checkBox.place(x=1110, y=10)
 
 ### Use Existing Truth Check Box
 useExistingTruthChkState = tk.BooleanVar()
@@ -618,55 +821,7 @@ createTruthFileChkState.set(True)
 createTruthFile_checkBox = tk.Checkbutton(truthLabelframe, text = 'Save Reference File', font=('Arial', 12), var = createTruthFileChkState) 
 createTruthFile_checkBox.place(x=350, y=10)
 
-# Browse Truth Data Directory File Button Callback
-def checkTruthDir():
-    
-    global truthDataExists
-    
-    truthData = os.path.normpath(truthDataDir_textBox.get().strip())
-    truthDataNotEmpty = truthData != '.'
-    useTruth = useExistingTruthChkState.get()
-    if(useTruth):
-        truthDataExists = os.path.exists(truthData) and truthDataNotEmpty
-    else:
-        truthDataExists = os.path.isdir(truthData) and truthDataNotEmpty
-    # endIf
-    
-    # endIf
-# endDef
-    
-# Function to not allow editing in text box
-def ctrlEvent(event):
-    if(12==event.state and event.keysym=='c'):
-        return
-    else:
-        return "break"
-    # endIf
-# endDef
-    
-### Truth Data Directory Entry Box
-truthDataDir_textBox = tk.Entry(truthLabelframe, width=43)
-truthDataDir_textBox.place(x=170, y=55)
-#truthDataDir_textBox.bind('<Return>', (lambda event: checkTruthDir()))
-#truthDataDir_textBox.bind('<Tab>', (lambda event: checkTruthDir()))
-truthDataDir_textBox.bind("<Key>", lambda e: ctrlEvent(e))
-
-### Truth Data Dir Browse Button
-truthDataDirBrowseButton = tk.Button(truthLabelframe, text='Browse', font=('Arial Bold', 12), command=browseTruthDir) 
-truthDataDirBrowseButton.place(x=450, y=50)
-
-# Function to clear listbox contents when selected
-def selectTruthFileType(event):
-    
-    global truthFilePaths
-    
-    truthDataDir_textBox.delete(0,'end')
-    truthDataDir_textBox.insert(0,'')
-    truthFilePaths = []
-    
-# endDef
-    
-# Truth file Type listbox
+### Truth file Type listbox
 lbl = tk.Label(truthLabelframe, text='Type:', font=('Arial', 12), anchor = 'w', justify='left')
 lbl.place(x=12, y=53)
 truthFileTypeBox = ttk.Combobox(truthLabelframe, width=12)
@@ -674,6 +829,16 @@ truthFileTypeBox.place(x= 60, y = 55)
 truthFileTypes = ['.las File(s)','.las Directory','.tif File(s)','.tif Directory']
 truthFileTypeBox['values'] = truthFileTypes
 truthFileTypeBox.bind("<<ComboboxSelected>>", selectTruthFileType)
+    
+### Truth Data Directory Entry Box
+truthDataDir_textBox = tk.Entry(truthLabelframe, width=43)
+truthDataDir_textBox.place(x=170, y=55)
+#truthDataDir_textBox.bind('<Return>', (lambda event: checkTruthDir()))
+#truthDataDir_textBox.bind('<Tab>', (lambda event: checkTruthDir()))
+
+### Truth Data Dir Browse Button
+truthDataDirBrowseButton = tk.Button(truthLabelframe, text='Browse', font=('Arial Bold', 12), command=browseTruthDir) 
+truthDataDirBrowseButton.place(x=450, y=50)
 
 # Set Truth section to disabled (default mode)
 for child in truthLabelframe.winfo_children():
@@ -741,9 +906,18 @@ alongTrackBounds_textBox.insert(0,'-50, 50')
 ### Multi-Resolutional Stepdown Entry Box
 lbl = tk.Label(measErrorLabelframe, text='Grid Resolution(s) (m):', font=('Arial', 12), anchor = 'w', justify='left')
 lbl.place(x=10, y=80)
-multiresStepdown_textBox = tk.Entry(measErrorLabelframe, width=15)
+multiresStepdown_textBox = tk.Entry(measErrorLabelframe, width=9)
 multiresStepdown_textBox.place(x=175, y=85)
 multiresStepdown_textBox.insert(0,'8, 4, 2, 1')
+
+### Reference Height Selection
+lbl = tk.Label(measErrorLabelframe, text='Use ICESat-2 Heights:', font=('Arial', 12), anchor = 'w', justify='left')
+lbl.place(x=245, y=80)
+refHeightTypeBox = ttk.Combobox(measErrorLabelframe, width=17)
+refHeightTypeBox.place(x= 410, y = 82)
+refHeightTypes = ['Ellipsoidal (HAE)','Orthometric (MSL)']
+refHeightTypeBox['values'] = refHeightTypes
+refHeightTypeBox.current(0)
 
 # Use vertical shift checkbox callback
 def useVertShiftCallback():
@@ -838,6 +1012,192 @@ makePlots_checkBox.place(x=280, y=185)
 for child in measErrorLabelframe.winfo_children():
     child.configure(state='disabled')
 # endFor
+    
+# Function to refresh stats
+def refreshStats():
+    
+    global statsDF
+    
+    # Update status bar
+    statsStatusBar['value'] = 0
+    statuslbl.config(text='')
+
+    # Clear Add Stats listbox in Stats Section
+    addStatsTuple = ('')
+    addStatsBox['values'] = addStatsTuple
+    addStatsBox.delete(0,'end')
+    
+    # Clear stats
+    statsDF = []
+    
+    # Update window
+    window.update()
+                
+# end Def
+    
+# Function to load ATL03 plot info after a run
+def loadAtl03_info():
+    
+    # Set file name being analyzed
+    fileName_textBox.delete(0,'end')
+    fileName_textBox.insert(0,atl03Data[0].atl03FileName)
+    
+    # Set Ground Tracks to plot
+    gtNumsText = [i + ' (Beam #' + j + ', ' + k + ' beam)' for i, j, k in zip(gtNumsGood, beamNumsGood, beamStrengthGood)]
+    gtNumsTuple = tuple(gtNumsText)
+    gtNumPlotBox['values'] = gtNumsTuple
+    gtNumPlotBox.current(0)
+    
+    if(atl03Data[0].zone=='3413' or atl03Data[0].zone=='3976'):
+        
+        plotVarsTuple = ('Time (sec)', 'Delta Time (sec)', \
+                         'Latitude (deg)', 'Longitude (deg)', \
+                         'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
+                         'Cross-Track (m)', 'Along-Track (m)', \
+                         'Height (m HAE)', 'Height (m MSL)', \
+                         'Classification', 'Signal Confidence')
+        
+    else:
+        
+        plotVarsTuple = ('Time (sec)', 'Delta Time (sec)', \
+                         'Latitude (deg)', 'Longitude (deg)', \
+                         'UTM Easting (m)', 'UTM Northing (m)', \
+                         'Cross-Track (m)', 'Along-Track (m)', \
+                         'Height (m HAE)', 'Height (m MSL)', \
+                         'Classification', 'Signal Confidence')
+        
+    # endIf
+        
+    # Set X Vals to plot
+    xValsBox['values'] = plotVarsTuple
+    xValsBox.current(0)
+    
+    # Set Y Vals to plot
+    yValsBox['values'] = plotVarsTuple
+    yValsBox.current(8)
+    
+    # Set X Label
+    xAxisVal = xValsBox.get()
+    currentData = xlabel_textBox.get()
+    xlabel_textBox.delete(0,len(currentData))
+    xlabel_textBox.insert(0,xAxisVal) 
+    
+    # Set Y label
+    yAxisVal = yValsBox.get()
+    currentData = ylabel_textBox.get()
+    ylabel_textBox.delete(0,len(currentData))
+    ylabel_textBox.insert(0,yAxisVal) 
+    
+    # Set Vals to filter on
+    if(atl08Data):
+        filterTuple = ('  ','Classification', 'Signal Confidence')
+    else:
+        filterTuple = ('  ', 'Signal Confidence')
+    # endIf
+    filterBox['values'] = filterTuple
+    filterBox.current(0)
+    
+    # Set Filter Number Checkboxes
+    filter0_checkBox.place_forget()
+    filter1_checkBox.place_forget()
+    filter2_checkBox.place_forget()  
+    filter3_checkBox.place_forget()        
+    filter4_checkBox.place_forget()
+    filter0ChkState.set(False)
+    filter1ChkState.set(False)
+    filter2ChkState.set(False)
+    filter3ChkState.set(False)
+    filter4ChkState.set(False)
+    
+    # Refresh stats
+    refreshStats()
+    
+    # Update window
+    window.update()
+    
+# endDef
+           
+# Function to load ATL08 plot info after a run
+def loadAtl08_info():
+
+    # Set Y Vals to plot
+    yValsTuple_atl08 = ('Max Canopy (m HAE)', 'Terrain Best Fit (m HAE)', 'Terrain Median (m HAE)',
+                        'Max Canopy (m MSL)', 'Terrain Best Fit (m MSL)', 'Terrain Median (m MSL)')
+    yValsBox_atl08['values'] = yValsTuple_atl08
+    yValsBox_atl08.current(0)
+    
+    # Set Segment By in Stats sections
+    segmentByTuple = ('Time (sec)','Latitude (deg)','UTM Northing (m)')
+    segmentByBox['values'] = segmentByTuple
+    segmentByBox.current(0)
+    
+    # Set increment units in Stats section
+    currentData = incrementBox.get()
+    incrementBox.delete(0,len(currentData))
+    incrementBox.insert(0,'1')
+    incrementText.config(text = 'sec')
+
+    # Refresh stats
+    refreshStats()
+    
+    # Update window
+    window.update()
+                
+# endDef
+    
+# Function to check and match up ATL03/ATL08 file paths
+def getMatchingAtlFiles(atl03FilePaths, atl08FilePaths):
+    
+    # Get ATL08 formatted string to compare against
+    atl08FilePathsFormatted = np.empty(np.shape(atl08FilePaths), dtype=object)
+    for i in range(0,len(atl08FilePathsFormatted)):
+        
+        # Get ATL03 file
+        atl08FilePath = atl08FilePaths[i]
+        
+        # Get ATL03 file parts
+        atl08File_w_ext = os.path.basename(atl08FilePath)
+        atl08NameParts = getNameParts(atl08File_w_ext)
+        
+        # Build ATL08 formatted string
+        atl08FilePathsFormatted[i] = 'ATL03_' + atl08NameParts.year + atl08NameParts.month + \
+        atl08NameParts.day + atl08NameParts.hour + atl08NameParts.minute + \
+        atl08NameParts.second + '_' + atl08NameParts.trackNum + \
+        atl08NameParts.unknown
+                
+    # endFor
+    
+    # Loop through each ATL03 file and find matching ATL08 file
+    atl03FilePathsAll = np.empty(np.shape(atl03FilePaths), dtype=object)
+    atl08FilePathsAll = np.empty(np.shape(atl03FilePaths), dtype=object)
+    for i in range(0,len(atl03FilePaths)):
+        
+        # Get ATL03 file
+        atl03FilePath = atl03FilePaths[i]
+        
+        # Get ATL03 file parts
+        atl03File_w_ext = os.path.basename(atl03FilePath)
+        atl03NameParts = getNameParts(atl03File_w_ext)
+        
+        # Build ATL03 formatted string
+        atl03FilePathsFormatted = 'ATL03_' + atl03NameParts.year + atl03NameParts.month + \
+        atl03NameParts.day + atl03NameParts.hour + atl03NameParts.minute + \
+        atl03NameParts.second + '_' + atl03NameParts.trackNum + \
+        atl03NameParts.unknown
+        
+        # Compare ATL03 formatted string to ATL08 formatted string
+        atl03FilePathsAll[i] = atl03FilePaths[i]
+        if(np.isin(atl03FilePathsFormatted,atl08FilePathsFormatted)):
+            ind = np.where(atl08FilePathsFormatted==atl03FilePathsFormatted)[0][0]
+            atl08FilePathsAll[i] = atl08FilePaths[ind]
+        else:
+            atl08FilePathsAll[i] = ''
+        # endIf
+    # endFor
+    
+    return atl03FilePathsAll, atl08FilePathsAll
+    
+# endDef
 
 # Run Button Callback
 def runAtl03():
@@ -847,10 +1207,10 @@ def runAtl03():
     window.update()
         
     # Make atlMeasuredData a global variable
-    global atl03Data, atl08Data, \
-    atlTruthData, atlTruthDataFiltered, truthDataExists,  \
-    atlCorrections, atl03FileExists, atl08FileExists, \
-    outFilePath, outPathExists, atl03DF_all, gtNumsGood
+    global atl03Data, atl08Data, atlTruthDataFiltered, \
+    truthDataExists, atlCorrections, atl03FileExists, atl08FileExists, \
+    outFilePath, outPathExists, atl03DF_all, \
+    gtNumsGood, beamNumsGood, beamStrengthGood
         
     # Initialize variables
     atl03Data = []
@@ -859,27 +1219,21 @@ def runAtl03():
     atl03DF_all = []
     atl08Data = []
     atl08DataSingle = []
-    atlTruthData = []
     atlTruthDataSingle = []
     atlTruthDataFiltered = []
     atlTruthDataFilteredSingle = []
     atlCorrections = []
     atlCorrectionsSingle = []
     gtNumsGood = []
+    beamNumsGood = []
+    beamStrengthGood = []
     
-    # Check ATL03 file
+    # Check ATL03/ATL08 files
     checkATL03()
-    
-    # Check ATL08 file
     checkATL08()
+    atl03FilePathsAll, atl08FilePathsAll = getMatchingAtlFiles(atl03FilePaths,atl08FilePaths)
     
-    # Check Truth Directory
-    # checkTruthDir()
-    if(truthDataDir_textBox.get()==''):
-       truthDataExists = False
-    # endIf
-    
-    # Check output file path
+    # Check output file path, make output directory if it doesn't exist
     outFilePath = outPath_textBox.get().strip()
     if('' == outFilePath or '.' == outFilePath):
         outPathExists = False
@@ -894,8 +1248,10 @@ def runAtl03():
     # Get reference section status
     useTruthSection = useTruthSectionChkState.get()
     
+    # Check Truth Directory
     truthOkToRun = True
     if(useTruthSection):
+        checkTruthDir()
         if(not truthDataExists):
             truthOkToRun = False
         # endIf
@@ -931,338 +1287,301 @@ def runAtl03():
             writeLog('-------------------------------------', logFileID)
             writeLog('', logFileID)
         
-            # Get Measured Data inputs
-            atl03FilePath = atl03_textBox.get().strip()
-            if(atl08FileExists):
-                atl08FilePath = atl08_textBox.get().strip()
-            else:
-                atl08FilePath = ''
-            # endIf
-            gtNumsTF = [gtNum1rChkState.get(), gtNum1lChkState.get(), gtNum2rChkState.get(), gtNum2lChkState.get(), gtNum3rChkState.get(), gtNum3lChkState.get()]    
-            gtNums = gtNumsAll[gtNumsTF]  
-        
-            # Get Truth Data inputs
-            if(useTruthSection):
-                useExistingTruth = useExistingTruthChkState.get()
-                # truthSwathDir = truthDataDir_textBox.get().strip()
-                bufferInput = truthBuffer_textBox.get().strip()
-                if('' == bufferInput):
-                    buffer = 0
-                else:
-                    buffer = int(bufferInput)
-                # endIf
-                createTruthFile = createTruthFileChkState.get()
-            # endIf
-            
-            # Get Corrected Measured inputs
-            useMeasErrorSection = useMeasErrorSectionChkState.get()
-            if(useMeasErrorSection):
-                offsetsCrossTrackBounds = eval('[' + crossTrackBounds_textBox.get().strip() + ']')
-                offsetsAlongTrackBounds = eval('[' + alongTrackBounds_textBox.get().strip() + ']')
-                offsetsRasterResolutions = eval('[' + multiresStepdown_textBox.get().strip() + ']')
-                offsetsUseVerticalShift = useFixedVertShiftChkState.get()
-                offsetsVerticalShift = float(verticalShift_textBox.get().strip())
-                offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, offsetsRasterResolutions, offsetsUseVerticalShift, offsetsVerticalShift)
-                useMeasSigConf = useMeasSigConfChkState.get()
-                if(useMeasSigConf):
-                    filterData = eval('[' + measSigConfIndex_textBox.get().strip() + ']')
-                else:
-                    filterData = int(truthGroundIndex_textBox.get().strip())
-                # endIf
-                createMeasCorrFile = createMeasCorrFileChkState.get()
-                makePlots = makePlotsChkState.get()
-                showPlots = False
-            # endIf
-            
-            # Get trim inputs
-            if(trimNoneModeChkState.get()):
-                trimInfo = 'none'
-            elif(trimAutoModeChkState.get()):
-                trimInfo = 'auto'
-            elif(trimManualModeChkState.get()):
-                trimMode = 'manual'
-                if(latModeChkState.get()):
-                    trimType = 'lat'
-                    trimMin = latMin_textBox.get()
-                    trimMax = latMax_textBox.get()
-                elif(timeModeChkState.get()):
-                    trimType = 'time'
-                    trimMin = timeMin_textBox.get()
-                    trimMax = timeMax_textBox.get()
-                trimInfo = trimMode + ',' + trimType + ',' + trimMin + ',' + trimMax
-            else:
-                trimInfo = 'none'
-                trimNoneModeChkState.set(True)
-            # endIf
+            # Loop through all ATL03/ATL08 files
+            totalFiles = len(atl03FilePathsAll)
+            for numFile in range(0,totalFiles):
                 
-            # Get output file options
-            createLasFile = createLasChkState.get()
-            createKmlFile = createKmlChkState.get()
-            createCsvFile = createCsvChkState.get()
-            createATL08KmlFile = createATL08KmlChkState.get()
-            createATL08CsvFile = createATL08CsvChkState.get()
+                # Get ATL03/ATL08 file paths
+                atl03FilePath = atl03FilePathsAll[numFile] 
+                atl08FilePath = atl08FilePathsAll[numFile]
                 
-            # Read truth data once before looping over other GT nums
-            if(useTruthSection and truthDataExists and not(useExistingTruth)):
-                
-                # Get truth file header info
-                writeLog('Reading Reference Data...\n', logFileID)
-                truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID)
-            
-            elif(useTruthSection and truthDataExists and useExistingTruth):
-                
-                truthHeaderDF = False
-                        
-            # endIf
-                
-            # Loop through all GT nums
-            rotationData = False
-            for i in range(0,len(gtNums)):
-                
-                # Update status bar
-                statusBar['value'] = 0
-                window.update()
-            
+                # Print updates
+                writeLog('File #%d of %d' %(numFile+1,totalFiles),logFileID)
+                writeLog('File Name: %s' %(os.path.basename(atl03FilePath)),logFileID)
+                writeLog('', logFileID)         
+                         
                 # Get GT Nums
-                gtNum = gtNums[i].lower()
-                    
-                # Get ICESat-2 data
-                writeLog('Getting Measured Data...\n', logFileID)
-                atl03DataSingle, atl08DataSingle, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, gtNum, trimInfo, createLasFile, createKmlFile, createATL08KmlFile, createCsvFile, createATL08CsvFile, logFileID)
-                
-                # Update status bar
-                progressNum = 30
-                statusBar['value'] = progressNum
-                window.update()
-                
-                if(atl03DataSingle):
-                    
-                    # Create ATL03 array for dataframe
-                    atl03Array = np.column_stack([atl03DataSingle.time,
-                                                  atl03DataSingle.deltaTime,
-                                                  atl03DataSingle.lat,
-                                                  atl03DataSingle.lon,
-                                                  atl03DataSingle.easting,
-                                                  atl03DataSingle.northing,
-                                                  atl03DataSingle.z,
-                                                  atl03DataSingle.classification])
-        
-                    # Set ATL03 column names for dataframe
-                    colNames = ['Time (sec)','Delta Time (sec)',
-                                'Latitude (deg)','Longitude (deg)',
-                                'UTM Easting (m)','UTM Northing (m)',
-                                'Height (m HAE)','classification']
-                    
-                    # Create ATL03 dataframe
-                    atl03DF = pd.DataFrame(data=atl03Array, columns=colNames)
-                    
-                    # Append measured data for each run
-                    atl03Data.append(atl03DataSingle)
-                    atl03DF_all.append(atl03DF)
-                    gtNumsGood.append(gtNum)
-                    if(atl08FileExists):
-                        atl08Data.append(atl08DataSingle)
+                gtNums = getGtNums(atl03FilePath)
+            
+                # Get Truth Data inputs
+                if(useTruthSection):
+                    useExistingTruth = useExistingTruthChkState.get()
+                    # truthSwathDir = truthDataDir_textBox.get().strip()
+                    bufferInput = truthBuffer_textBox.get().strip()
+                    if('' == bufferInput):
+                        buffer = 0
+                    else:
+                        buffer = int(bufferInput)
                     # endIf
-                
-                # endIf
-
-                if(useTruthSection and truthDataExists):
-                        
-                    writeLog('Getting Reference Data...\n', logFileID)
-                        
-                    # Call getAtlTruthSwath
-                    atlTruthDataSingle = getAtlTruthSwath(atl03DataSingle, rotationData, truthHeaderDF, 
-                                                          truthFilePaths, buffer, outFilePath, createTruthFile, 
-                                                          truthFileType, useExistingTruth, logFileID)
-
-                    # Run superfilter on data
-                    writeLog('   Filtering truth data...', logFileID)
-                    atlTruthDataFilteredSingle, _ = superFilter(atl03DataSingle, atlTruthDataSingle, xBuf = 1, classCode = [])
-                    writeLog('\n', logFileID)
-            
-                    # Append reference data for each run
-                    atlTruthData.append(atlTruthDataSingle)
-                    atlTruthDataFiltered.append(atlTruthDataFilteredSingle)
-                    
-                    # Update status bar
-                    progressNum = 60
-                    statusBar['value'] = progressNum
-                    window.update()
-                
+                    createTruthFile = createTruthFileChkState.get()
                 # endIf
                 
+                # Get Corrected Measured inputs
+                useMeasErrorSection = useMeasErrorSectionChkState.get()
                 if(useMeasErrorSection):
-                    
-                    # Get ICESat-2 geolocation offsets
-                    writeLog('Finding Measurement Offsets...\n', logFileID)
-                    atlCorrectionsSingle = getMeasurementError(atl03DataSingle, atlTruthDataSingle, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots, logFileID)
+                    offsetsCrossTrackBounds = eval('[' + crossTrackBounds_textBox.get().strip() + ']')
+                    offsetsAlongTrackBounds = eval('[' + alongTrackBounds_textBox.get().strip() + ']')
+                    offsetsRasterResolutions = eval('[' + multiresStepdown_textBox.get().strip() + ']')
+                    refHeightType = refHeightTypeBox.get()
+                    offsetsUseVerticalShift = useFixedVertShiftChkState.get()
+                    offsetsVerticalShift = float(verticalShift_textBox.get().strip())
+                    offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, offsetsRasterResolutions, offsetsUseVerticalShift, offsetsVerticalShift)
+                    useMeasSigConf = useMeasSigConfChkState.get()
+                    if(useMeasSigConf):
+                        filterData = eval('[' + measSigConfIndex_textBox.get().strip() + ']')
+                    else:
+                        filterData = int(truthGroundIndex_textBox.get().strip())
+                    # endIf
+                    createMeasCorrFile = createMeasCorrFileChkState.get()
+                    makePlots = makePlotsChkState.get()
+                    showPlots = False
+                # endIf
                 
-                    # Append corrected measured data for each run
-                    atlCorrections.append(atlCorrectionsSingle)
-
+                # Get trim inputs
+                if(trimNoneModeChkState.get()):
+                    trimInfo = 'none'
+                elif(trimAutoModeChkState.get()):
+                    trimInfo = 'auto'
+                elif(trimManualModeChkState.get()):
+                    trimMode = 'manual'
+                    if(latModeChkState.get()):
+                        trimType = 'lat'
+                        trimMin = latMin_textBox.get()
+                        trimMax = latMax_textBox.get()
+                    elif(timeModeChkState.get()):
+                        trimType = 'time'
+                        trimMin = timeMin_textBox.get()
+                        trimMax = timeMax_textBox.get()
+                    trimInfo = trimMode + ',' + trimType + ',' + trimMin + ',' + trimMax
+                else:
+                    trimInfo = 'none'
+                    trimNoneModeChkState.set(True)
+                # endIf
+                    
+                # Get output file options
+                createLasFile = createLasChkState.get()
+                createKmlFile = createKmlChkState.get()
+                createCsvFile = createCsvChkState.get()
+                createATL08KmlFile = createATL08KmlChkState.get()
+                createATL08CsvFile = createATL08CsvChkState.get()
+                    
+                # Read truth data once before looping over other GT nums
+                if(useTruthSection and truthDataExists and not(useExistingTruth)):
+                    
+                    # Get truth file header info
+                    writeLog('Reading Reference Header Data...\n', logFileID)
+                    truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID)
+                
+                elif(useTruthSection and truthDataExists and useExistingTruth):
+                    
+                    truthHeaderDF = False
+                            
+                # endIf
+                    
+                # Loop through all GT nums
+                rotationData = False
+                for i in range(0,len(gtNums)):
+                    
                     # Update status bar
-                    progressNum = 90
-                    statusBar['value'] = progressNum
+                    statusBar['value'] = 0
                     window.update()
                 
+                    # Get GT Nums
+                    gtNum = gtNums[i].lower()
+                        
+                    # Get ICESat-2 data
+                    writeLog('Reading ICESat-2 Data...\n', logFileID)
+                    atl03DataSingle, atl08DataSingle, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, 
+                                                                                         gtNum, trimInfo, createLasFile, createKmlFile, 
+                                                                                         createATL08KmlFile, createCsvFile, createATL08CsvFile, 
+                                                                                         logFileID)
+                    
+                    # Update status bar
+                    progressNum = 30
+                    statusBar['value'] = progressNum
+                    window.update()
+                    
+                    if(bool(atl03DataSingle)):
+                        
+                        # Create ATL03 array for dataframe
+                        atl03Array = np.column_stack([atl03DataSingle.time,
+                                                      atl03DataSingle.deltaTime,
+                                                      atl03DataSingle.lat,
+                                                      atl03DataSingle.lon,
+                                                      atl03DataSingle.easting,
+                                                      atl03DataSingle.northing,
+                                                      atl03DataSingle.z,
+                                                      atl03DataSingle.zMsl,
+                                                      atl03DataSingle.classification])
+            
+                        # Set ATL03 column names for dataframe
+                        colNames = ['Time (sec)','Delta Time (sec)',
+                                    'Latitude (deg)','Longitude (deg)',
+                                    'UTM Easting (m)','UTM Northing (m)',
+                                    'Height (m HAE)','Height (m MSL)',
+                                    'classification']
+                        
+                        # Create ATL03 dataframe
+                        atl03DF = pd.DataFrame(data=atl03Array, columns=colNames)
+                        
+                        # Append measured data for each run
+                        atl03Data.append(atl03DataSingle)
+                        atl03DF_all.append(atl03DF)
+                        gtNumsGood.append(gtNum)
+                        beamNumsGood.append(atl03DataSingle.beamNum)
+                        beamStrengthGood.append(atl03DataSingle.beamStrength)
+                        if(atl08FileExists):
+                            atl08Data.append(atl08DataSingle)
+                        # endIf
+                    
+                    # endIf
+    
+                    if(bool(atl03DataSingle) and useTruthSection and truthDataExists):
+                            
+                        writeLog('Reading Reference Data...\n', logFileID)
+                            
+                        # Call getAtlTruthSwath
+                        atlTruthDataSingle = getAtlTruthSwath(atl03DataSingle, rotationData, truthHeaderDF, 
+                                                              truthFilePaths, buffer, outFilePath, createTruthFile, 
+                                                              truthFileType, useExistingTruth, logFileID)
+    
+                        # Run superfilter on data
+                        writeLog('   Filtering Reference Data...', logFileID)
+                        atlTruthDataFilteredSingle, _ = superFilter(atl03DataSingle, atlTruthDataSingle, xBuf = 1, classCode = [])
+                        writeLog('\n', logFileID)
+                
+                        # Interpolate to get reference time and deltaTime
+                        atlTruthDataFilteredSingle.time = interp_vals(np.ravel(atl03DataSingle.alongTrack),
+                                                                      np.ravel(atl03DataSingle.time), 
+                                                                      np.ravel(atlTruthDataFilteredSingle.alongTrack))
+                        
+                        atlTruthDataFilteredSingle.deltaTime = interp_vals(np.ravel(atl03DataSingle.alongTrack),
+                                                                           np.ravel(atl03DataSingle.deltaTime),
+                                                                           np.ravel(atlTruthDataFilteredSingle.alongTrack))
+                        
+                        # Append filtered reference data for each run
+                        atlTruthDataFiltered.append(atlTruthDataFilteredSingle)
+                        
+                        # Update status bar
+                        progressNum = 60
+                        statusBar['value'] = progressNum
+                        window.update()
+                    
+                    # endIf
+                    
+                    if(bool(atl03DataSingle) and bool(atlTruthDataSingle) and useMeasErrorSection):
+                        
+                        # Get ICESat-2 geolocation offsets
+                        writeLog('Finding ICESat-2 Offsets...\n', logFileID)
+                        atlCorrectionsSingle = getMeasurementError(atl03DataSingle, atlTruthDataSingle, refHeightType, 
+                                                                   rotationData, outFilePath, useMeasSigConf, filterData, 
+                                                                   offsets, createMeasCorrFile, makePlots, showPlots, logFileID)
+                    
+                        # Append corrected measured data for each run
+                        atlCorrections.append(atlCorrectionsSingle)
+    
+                        # Update status bar
+                        progressNum = 90
+                        statusBar['value'] = progressNum
+                        window.update()
+                    
+                    # endIf
+                    
+                    # Update status bar
+                    progressNum = 100
+                    statusBar['value'] = progressNum
+                    window.update()
+                               
+                    if(atl03DataSingle):
+                        
+                        # Store data into .mat file
+                        matFileName = atl03DataSingle.atl03FileName + '_' + atl03DataSingle.gtNum + '.mat'
+                        matFilePath = os.path.normpath(outFilePath + '/' + matFileName)
+                        mat_atl03FileName = atl03DataSingle.atl03FileName
+                        mat_gtNum = atl03DataSingle.gtNum
+                        mat_trackDirection = atl03DataSingle.trackDirection
+                    
+                    # endIf
+                    
+                    # Prepare output .mat file data
+                    if(atlCorrectionsSingle):
+                        
+                        # Collect .mat file data
+                        mat_eastingCorrection = np.array([np.round(atlCorrectionsSingle.easting[0],1)])
+                        mat_northingCorrection = np.array([np.round(atlCorrectionsSingle.northing[0],1)])
+                        mat_verticalCorrection = np.array([np.round(atlCorrectionsSingle.z[0],1)])
+                        mat_crossTrackCorrection = np.array([np.round(atlCorrectionsSingle.crossTrack[0],0)])
+                        mat_alongTrackCorrection = np.array([np.round(atlCorrectionsSingle.alongTrack[0],0)])
+                        mat_measX_raster = np.c_[atlCorrectionsSingle.measX_raster]
+                        mat_measY_raster = np.c_[atlCorrectionsSingle.measY_raster]
+                        mat_truthX_raster = np.c_[atlCorrectionsSingle.truthX_raster]
+                        mat_truthY_raster = np.c_[atlCorrectionsSingle.truthY_raster]
+            
+                        # Concatenate .mat file data
+                        matData = [mat_atl03FileName, mat_gtNum, mat_trackDirection, \
+                                   mat_eastingCorrection, mat_northingCorrection, mat_verticalCorrection, \
+                                   mat_crossTrackCorrection, mat_alongTrackCorrection, \
+                                   mat_measX_raster, mat_measY_raster, \
+                                   mat_truthX_raster, mat_truthY_raster]
+                    
+                        # Make .mat file variable names
+                        matNames = ['atl03FileName','gtNum','trackDirection', \
+                                    'eastingCorrection','northingCorrection','verticalCorrection', \
+                                    'crossTrackCorrection','alongTrackCorrection', \
+                                    'icesat2_corrected_utmn_raster','icesat2_corrected_z_raster', \
+                                    'reference_utmn_raster','reference_z_raster']
+                        
+                        # Write output .mat file
+                        try:
+                            writeLog('Writing output .mat file...\n', logFileID)
+                            write_mat(matFilePath, matData, matNames)
+                        except:
+                            pass
+                        # endTry
+                        
+                    # endIf
+                # endFor
+                
+                # Save output pickle file with all data
+                try:
+                    pklOutName = atl03DataSingle.atl03FileName + '_data.pkl'
+                    pklOutPath = os.path.normpath(outFilePath + '/' + pklOutName)
+                    with open(pklOutPath, 'wb') as f:
+                        pkl.dump([atl03Data, atl03DF_all, atl08Data, atlTruthDataFiltered,
+                                  atlCorrections, gtNumsGood, beamNumsGood, beamStrengthGood], f)
+                    # endWith
+                except:
+                    pass
+                # endTry
+                
+                if(len(gtNums)==0):
+                    
+                    # Reset status bar and print warning
+                    statusBar['value'] = 0
+                    writeLog('\nWARNING: No Ground Track Selected.\n', logFileID)
+                    
+                # endIf
+                        
+                # Load ATL03 plot info
+                if(atl03Data):
+                    loadAtl03_info()
                 # endIf
                 
-                # Update status bar
-                progressNum = 100
-                statusBar['value'] = progressNum
-                window.update()
-                           
-                if(atl03DataSingle):
-                    
-                    # Store data into .mat file
-                    matFileName = atl03DataSingle.atl03FileName + '_' + atl03DataSingle.gtNum + '.mat'
-                    matFilePath = os.path.normpath(outFilePath + '/' + matFileName)
-                    mat_atl03FileName = atl03DataSingle.atl03FileName
-                    mat_gtNum = atl03DataSingle.gtNum
-                    mat_trackDirection = atl03DataSingle.trackDirection
-                
+                # Load ATL08 plot info
+                if(atl08Data):
+                    loadAtl08_info()
                 # endIf
                 
-                # Prepare output .mat file data
-                if(atlCorrectionsSingle):
-                    
-                    # Collect .mat file data
-                    mat_eastingCorrection = np.array([np.round(atlCorrectionsSingle.easting[0],1)])
-                    mat_northingCorrection = np.array([np.round(atlCorrectionsSingle.northing[0],1)])
-                    mat_verticalCorrection = np.array([np.round(atlCorrectionsSingle.z[0],1)])
-                    mat_crossTrackCorrection = np.array([np.round(atlCorrectionsSingle.crossTrack[0],0)])
-                    mat_alongTrackCorrection = np.array([np.round(atlCorrectionsSingle.alongTrack[0],0)])
+                # End timer
+                timeEnd = runTime.time()
+                timeElapsedTotal = timeEnd - timeStart
+                timeElapsedMin = np.floor(timeElapsedTotal / 60)
+                timeElapsedSec = timeElapsedTotal % 60
                 
-                    # Concatenate .mat file data
-                    matData = [mat_atl03FileName, mat_gtNum, mat_trackDirection, \
-                               mat_eastingCorrection, mat_northingCorrection, mat_verticalCorrection, \
-                               mat_crossTrackCorrection, mat_alongTrackCorrection]
-                
-                    # Make .mat file variable names
-                    matNames = ['atl03FileName','gtNum','trackDirection', \
-                                'eastingCorrection','northingCorrection','verticalCorrection', \
-                                'crossTrackCorrection','alongTrackCorrection']
-                    
-                    # Write output .mat file
-                    writeLog('Writing output .mat file...\n', logFileID)
-                    write_mat(matFilePath, matData, matNames)
-                # endIf
-        
+                # Print completion message
+                writeLog('RUN COMPLETE (Total Run Time = %d min %d sec).\n' % (timeElapsedMin, timeElapsedSec), logFileID)
+            
             # endFor
-            
-            if(len(gtNums)==0):
-                
-                # Reset status bar and print warning
-                statusBar['value'] = 0
-                writeLog('\nWARNING: No Ground Track Selected.\n', logFileID)
-                
-            # endIf
-                    
-            if(atl03Data):
-                
-                # Set Ground Tracks to plot
-                gtNumsTuple = tuple(gtNumsGood)
-                gtNumPlotBox['values'] = gtNumsTuple
-                gtNumPlotBox.current(0)
-                
-                if(atl03Data[0].zone=='3413' or atl03Data[0].zone=='3976'):
-                    
-                    plotVarsTuple = ('Time (sec)', 'Delta Time (sec)', \
-                                     'Latitude (deg)', 'Longitude (deg)', \
-                                     'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
-                                     'Cross-Track (m)', 'Along-Track (m)', \
-                                     'Height (m)', \
-                                     'Classification', 'Signal Confidence')
-                    
-                else:
-                    
-                    plotVarsTuple = ('Time (sec)', 'Delta Time (sec)', \
-                                     'Latitude (deg)', 'Longitude (deg)', \
-                                     'UTM Easting (m)', 'UTM Northing (m)', \
-                                     'Cross-Track (m)', 'Along-Track (m)', \
-                                     'Height (m)', \
-                                     'Classification', 'Signal Confidence')
-                    
-                # endIf
-                    
-                # Set X Vals to plot
-                xValsBox['values'] = plotVarsTuple
-                xValsBox.current(0)
-                
-                # Set Y Vals to plot
-                yValsBox['values'] = plotVarsTuple
-                yValsBox.current(8)
-                
-                # Set X Label
-                xAxisVal = xValsBox.get()
-                currentData = xlabel_textBox.get()
-                xlabel_textBox.delete(0,len(currentData))
-                xlabel_textBox.insert(0,xAxisVal) 
-                
-                # Set Y label
-                yAxisVal = yValsBox.get()
-                currentData = ylabel_textBox.get()
-                ylabel_textBox.delete(0,len(currentData))
-                ylabel_textBox.insert(0,yAxisVal) 
-                
-                # Set Vals to filter on
-                if(atl08FileExists):
-                    filterTuple = ('  ','Classification', 'Signal Confidence')
-                else:
-                    filterTuple = ('  ', 'Signal Confidence')
-                # endIf
-                filterBox['values'] = filterTuple
-                filterBox.current(0)
-                
-                # Set Filter Number Checkboxes
-                filter0_checkBox.place_forget()
-                filter1_checkBox.place_forget()
-                filter2_checkBox.place_forget()  
-                filter3_checkBox.place_forget()        
-                filter4_checkBox.place_forget()
-                filter0ChkState.set(False)
-                filter1ChkState.set(False)
-                filter2ChkState.set(False)
-                filter3ChkState.set(False)
-                filter4ChkState.set(False)
-                
-            # endIf
-            
-            if(atl08Data):
-                
-                # Set Y Vals to plot
-                yValsTuple_atl08 = ('Max Canopy (m)', 'Terrain Best Fit (m)', 'Terrain Median (m)')
-                yValsBox_atl08['values'] = yValsTuple_atl08
-                yValsBox_atl08.current(0)
-                
-                # Set Segment By in Stats sections
-                segmentByTuple = ('Time (sec)','Latitude (deg)','UTM Northing (m)')
-                segmentByBox['values'] = segmentByTuple
-                segmentByBox.current(0)
-                
-#                # Set Add Stats listbox in Stats Section
-#                addStatsTuple = ('Ground Min','Ground Max','Ground Median','Ground Mean','Ground Mean + 3*Std','Ground Mean - 3*Std',
-#                        'All Canopy Min','All Canopy Max','All Canopy Median','All Canopy Mean','All Canopy Mean + 3*Std','All Canopy Mean - 3*Std',
-#                        'All Height Min','All Height Max','All Height Median','All Height Mean','All Height Mean + 3*Std','All Height Mean - 3*Std')
-#                addStatsBox['values'] = addStatsTuple
-#                addStatsBox.current(0)
-                
-                # Set increment units in Stats section
-                currentData = incrementBox.get()
-                incrementBox.delete(0,len(currentData))
-                incrementBox.insert(0,'1') 
-                incrementText.config(text = 'sec')
-                
-            # endIf
-            
-            # End timer
-            timeEnd = runTime.time()
-            timeElapsedTotal = timeEnd - timeStart
-            timeElapsedMin = np.floor(timeElapsedTotal / 60)
-            timeElapsedSec = timeElapsedTotal % 60
-            
-            # Print completion message
-            writeLog('RUN COMPLETE (Total Run Time = %d min %d sec).\n' % (timeElapsedMin, timeElapsedSec), logFileID)
             
         except:
             
@@ -1285,6 +1604,7 @@ def runAtl03():
         writeLog('-------------------------------------', logFileID)
         writeLog('Run Completed On: %s' %currentDateTime, logFileID)
         writeLog('-------------------------------------', logFileID)
+        writeLog('', logFileID)
           
         # Close .log file
         logFileID.close()
@@ -1345,9 +1665,9 @@ statusBar.place(x=320, y=25)
 labelframe = tk.LabelFrame(tab2, width=545, height=270, text='Plot ICESat-2 ATL03 Data', font=('Arial Bold', 14))
 labelframe.place(x=15, y=10)
 
-# Plot text
-lbl = tk.Label(tab2, text='ATL03 Plotting Options:', font=('Arial Bold', 12), anchor = 'w', justify='left')
-lbl.place(x=30, y=50)
+## Plot text
+#lbl = tk.Label(tab2, text='ATL03 Plotting Options:', font=('Arial Bold', 12), anchor = 'w', justify='left')
+#lbl.place(x=30, y=50)
 
 # X Axis Callback
 def xAxisCallback(event):
@@ -1362,7 +1682,20 @@ def yAxisCallback(event):
     yAxisVal = yValsBox.get()
     currentData = ylabel_textBox.get()
     ylabel_textBox.delete(0,len(currentData))
-    ylabel_textBox.insert(0,yAxisVal)   
+    ylabel_textBox.insert(0,yAxisVal)
+    
+    # Update status bar
+    statsStatusBar['value'] = 0
+    statuslbl.config(text='')
+
+    # Clear Add Stats listbox in Stats Section
+    addStatsTuple = ('')
+    addStatsBox['values'] = addStatsTuple
+    addStatsBox.delete(0,'end')
+    
+    # Update window
+    window.update()
+                
 # endDef  
     
 # Filter Number Checkboxes
@@ -1441,12 +1774,63 @@ def filterChoiceCallback(event):
     # endIf
 # endDef
     
+# Function called when GT num is selected
+def gtNumPlotCallback(event):
+    
+    # Refresh stats
+    refreshStats()
+ 
+# endDef
+ 
+# File Name Entry Box
+lbl = tk.Label(tab2, text='File Name:', font=('Arial', 12), anchor = 'w', justify='left')
+lbl.place(x=30, y=50)
+fileName_textBox = tk.Entry(tab2, width=50)
+fileName_textBox.place(x=120, y=52)
+
+def loadNewPklFile():
+    
+    # Check output file path
+    startDir = outPath_textBox.get().strip()
+    if('' == startDir or '.' == startDir):
+        startDir = cwd
+    else:
+        outPathExists = os.path.isdir(startDir)
+        if(not outPathExists):
+            os.mkdir(outFilePath)
+            startDir = cwd
+        # endIf
+    # endIf
+    
+    # Ask user for input .pkl files
+    pklFile = filedialog.askopenfilename(initialdir = startDir, title = 'Select File to Load', filetypes = [('*data.pkl files','*data.pkl')], multiple=False)
+
+    # If the user selection is not empty, then continue
+    if(pklFile != '.'):
+            
+        global atl03Data, atl03DF_all, atl08Data, atlTruthDataFiltered, \
+               atlCorrections, gtNumsGood, beamNumsGood, beamStrengthGood
+        
+        with open(pklFile, 'rb') as f:
+            atl03Data, atl03DF_all, atl08Data, atlTruthDataFiltered, atlCorrections, gtNumsGood, beamNumsGood, beamStrengthGood = pkl.load(f)
+        # endWith
+        
+        loadAtl03_info()
+        loadAtl08_info()
+    # endIf
+    
+# endDef
+
+# Load New File Button
+atl03BrowseButton = tk.Button(tab2, text='Load', font=('Arial Bold', 16), width=6, command=loadNewPklFile) 
+atl03BrowseButton.place(x=450, y=40)
+
 # GT Num Plot Combo Box
 lbl = tk.Label(tab2, text='Ground Track:', font=('Arial', 12), anchor = 'w', justify='left')
 lbl.place(x=30, y=80)
-gtNumPlotBox = Combobox(tab2, width=10)
-gtNumPlotBox.place(x= 150, y = 82)
-#gtNumPlotBox.bind("<<ComboboxSelected>>", gtNumPlotCallback)
+gtNumPlotBox = Combobox(tab2, width=26)
+gtNumPlotBox.place(x= 140, y = 82)
+gtNumPlotBox.bind("<<ComboboxSelected>>", gtNumPlotCallback)
 
 # X Axis Combo Box
 lbl = tk.Label(tab2, text='X Axis:', font=('Arial', 12), anchor = 'w', justify='left')
@@ -1483,7 +1867,7 @@ filterBox.bind("<<ComboboxSelected>>", filterChoiceCallback)
 
 # Itialize lists
 plotList = ('time', 'deltaTime', 'lat', 'lon', 'easting', 'northing', \
-            'crossTrack', 'alongTrack', 'z', 'classification', 'signalConf')
+            'crossTrack', 'alongTrack', 'z', 'zMsl', 'classification', 'signalConf')
 filterState = np.array([0,1,2,3,4])
 
 # Plot Button Callback
@@ -1539,7 +1923,8 @@ def plotAtl03():
         gtNum = gtNumPlotBox.current()
         
         # Call getPlot function
-        getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle, atl03Data[gtNum], filterType, filterData, filterNum)
+        getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle,
+                filterType, filterData, filterNum)
     
     except:
         
@@ -1584,11 +1969,15 @@ def segmentByCallback(event):
 # endDef
 
 # Interpolate stats dataframe midpoints
-def interpStats(atl03DF, statsDF):
+def interpStats(atl03DF, statsDF_orig):
         
-    # Get binned X data
-    binned_x_colName = statsDF.columns[0]
-    binned_x = statsDF[binned_x_colName]
+    # Get binned X data - start
+    binned_x_colName = statsDF_orig.columns[0]
+    binned_x_start = statsDF_orig[binned_x_colName]
+    
+    # Get binned X data - end
+    binned_x_colName = statsDF_orig.columns[1]
+    binned_x_end = statsDF_orig[binned_x_colName]
     
     # Get status inputs
     segmentBy = segmentByBox.get()
@@ -1605,56 +1994,71 @@ def interpStats(atl03DF, statsDF):
     # endIf
             
     # Drop duplicate rows in segmentKey column
-    atl03DF.drop_duplicates(subset=segmentKey, keep='first', inplace=True, ignore_index=False)
+    atl03DF_in = atl03DF.drop_duplicates(subset=segmentKey, keep='first', inplace=False, ignore_index=False)
 
     # Get full X data
-    full_x = atl03DF[segmentKey]
+    full_x = atl03DF_in[segmentKey]
     
     # Interpolate delta_time
-    full_delta_time = atl03DF['Delta Time (sec)']
+    full_delta_time = atl03DF_in['Delta Time (sec)']
     f1 = interpolate.interp1d(full_x, full_delta_time, kind='linear', fill_value='extrapolate')
-    binned_delta_time = f1(binned_x)
+    binned_delta_time_start = f1(binned_x_start)
+    binned_delta_time_end = f1(binned_x_end)
     
     # Interpolate time
-    full_time = atl03DF['Time (sec)']
+    full_time = atl03DF_in['Time (sec)']
     f2 = interpolate.interp1d(full_x, full_time, kind='linear', fill_value='extrapolate')
-    binned_time = f2(binned_x)
-    
+    binned_time_start = f2(binned_x_start)
+    binned_time_end = f2(binned_x_end)
+
     # Interpolate lat_ph
-    full_lat_ph = atl03DF['Latitude (deg)']
+    full_lat_ph = atl03DF_in['Latitude (deg)']
     f3 = interpolate.interp1d(full_x, full_lat_ph, kind='linear', fill_value='extrapolate')
-    binned_lat_ph = f3(binned_x)
+    binned_lat_ph_start = f3(binned_x_start)
+    binned_lat_ph_end = f3(binned_x_end)
     
     # Interpolate lon_ph
-    full_lon_ph = atl03DF['Longitude (deg)']
+    full_lon_ph = atl03DF_in['Longitude (deg)']
     f4 = interpolate.interp1d(full_x, full_lon_ph, kind='linear', fill_value='extrapolate')
-    binned_lon_ph = f4(binned_x)
+    binned_lon_ph_start = f4(binned_x_start)
+    binned_lon_ph_end = f4(binned_x_end)
     
     # Interpolate easting
-    full_easting = atl03DF['UTM Easting (m)']
+    full_easting = atl03DF_in['UTM Easting (m)']
     f5 = interpolate.interp1d(full_x, full_easting, kind='linear', fill_value='extrapolate')
-    binned_easting = f5(binned_x)
+    binned_easting_start = f5(binned_x_start)
+    binned_easting_end = f5(binned_x_end)
     
     # Interpolate northing
-    full_northing = atl03DF['UTM Northing (m)']
+    full_northing = atl03DF_in['UTM Northing (m)']
     f6 = interpolate.interp1d(full_x, full_northing, kind='linear', fill_value='extrapolate')
-    binned_northing = f6(binned_x)
+    binned_northing_start = f6(binned_x_start)
+    binned_northing_end = f6(binned_x_end)
     
     # Put columns into one array                      
-    addedArray = np.column_stack([binned_delta_time, binned_time, 
-                                  binned_lat_ph, binned_lon_ph,
-                                  binned_easting, binned_northing])
+    addedArray = np.column_stack([binned_delta_time_start, binned_delta_time_end,
+                                  binned_time_start, binned_time_end,
+                                  binned_lat_ph_start, binned_lat_ph_end,
+                                  binned_lon_ph_start, binned_lon_ph_end,
+                                  binned_easting_start, binned_easting_end,
+                                  binned_northing_start, binned_northing_end])
     
     # Convert array into Pandas dataframe                    
     addedDF = pd.DataFrame(data=addedArray, columns=['seg_start_delta_time_interp (sec)',
+                                                     'seg_end_delta_time_interp (sec)',
                                                      'seg_start_time_interp (sec)',
+                                                     'seg_end_time_interp (sec)',
                                                      'seg_start_lat_interp (deg)',
+                                                     'seg_end_lat_interp (deg)',
                                                      'seg_start_lon_interp (deg)',
+                                                     'seg_end_lon_interp (deg)',
                                                      'seg_start_easting_interp (m)',
-                                                     'seg_start_northing_interp (m)'])
+                                                     'seg_end_easting_interp (m)',
+                                                     'seg_start_northing_interp (m)',
+                                                     'seg_end_northing_interp (m)'])
     
     # Concatenate new dataframe onto original one
-    statsNewDF = pd.concat([statsDF, addedDF], axis=1)
+    statsNewDF = pd.concat([statsDF_orig, addedDF], axis=1)
     
     # Return new dataframe
     return statsNewDF
@@ -1665,6 +2069,9 @@ def interpStats(atl03DF, statsDF):
 def computeStats():
         
     global statsDF
+    
+    # Refresh stats
+    refreshStats()
     
     # Update status bar
     statsStatusBar['value'] = 0
@@ -1679,103 +2086,117 @@ def computeStats():
     # Get status inputs
     segmentBy = segmentByBox.get()
     increment = incrementBox.get()
+    yval = yValsBox.get()
     
-    # Get file numbers to plot
-    indsToPlotTuple = [gtNumPlotBox.current()]
+    # Only compute stats when HAE or MSL heights are on the y-axis
+    if('height' in yval.lower()):
     
-    # Test if inputs are valid
-    segmentByValid = segmentBy!=''
-    incrementValid = increment!=''
-    indsToPlotTupleValid = indsToPlotTuple!=()
-    atl03DF_allValid = len(atl03DF_all)>=1
-    
-    # Test if all inputs are valid
-    allValid = segmentByValid and incrementValid and indsToPlotTupleValid and atl03DF_allValid
-
-    # Continue code if all inputs are valid, else send message box error
-    if(allValid):
+        # Get file numbers to plot
+        indsToPlotTuple = [gtNumPlotBox.current()]
         
-        if(len(indsToPlotTuple)==1):
+        # Test if inputs are valid
+        segmentByValid = segmentBy!=''
+        incrementValid = increment!=''
+        indsToPlotTupleValid = indsToPlotTuple!=()
+        atl03DF_allValid = len(atl03DF_all)>=1
         
-            # Get correct data frame to use from user
-            dfNum = indsToPlotTuple[0]
-            atl03DF = atl03DF_all[dfNum]
+        # Test if all inputs are valid
+        allValid = segmentByValid and incrementValid and indsToPlotTupleValid and atl03DF_allValid
+    
+        # Continue code if all inputs are valid, else send message box error
+        if(allValid):
             
-            # Get the segment key to bin data by            
-            if('Segment ID' == segmentBy):
-                segmentKey = 'Segment ID'
-            elif('Time (sec)' == segmentBy):
-                segmentKey = 'Time (sec)'
-            elif('Latitude (deg)' == segmentBy):
-                segmentKey = 'Latitude (deg)'
-            elif('UTM Northing (m)' == segmentBy):
-                segmentKey = 'UTM Northing (m)'
-            # endIf
+            if(len(indsToPlotTuple)==1):
             
-            # Convert increment to float
-            increment = float(increment)
-            
-            # Create aggregate list for binning function
-            agg_list = ['ATL03;atl03_ground_min (m);Height (m HAE);min;[1]',
-                        'ATL03;atl03_ground_max (m);Height (m HAE);max100;[1]',
-                        'ATL03;atl03_ground_median (m);Height (m HAE);median;[1]',
-                        'ATL03;atl03_ground_mean (m);Height (m HAE);mean;[1]',
-                        'ATL03;atl03_ground_std (m);Height (m HAE);std;[1]',
-                        'ATL03;atl03_all_canopy_min (m);Height (m HAE);min;[2,3]',
-                        'ATL03;atl03_all_canopy_max (m);Height (m HAE);max100;[2,3]',
-                        'ATL03;atl03_all_canopy_median (m);Height (m HAE);median;[2,3]',
-                        'ATL03;atl03_all_canopy_mean (m);Height (m HAE);mean;[2,3]',
-                        'ATL03;atl03_all_canopy_std (m);Height (m HAE);std;[2,3]',
-                        'ATL03;atl03_all_height_min (m);Height (m HAE);min;[1,2,3]',
-                        'ATL03;atl03_all_height_max (m);Height (m HAE);max100;[1,2,3]',
-                        'ATL03;atl03_all_height_median (m);Height (m HAE);median;[1,2,3]',
-                        'ATL03;atl03_all_height_mean (m);Height (m HAE);mean;[1,2,3]',
-                        'ATL03;atl03_all_height_std (m);Height (m HAE);std;[1,2,3]']
-            
-            try:
-            
-                # Set Add Stats listbox in Stats Section
-                addStatsBox.set('')
-                window.update()
+                # Get correct data frame to use from user
+                dfNum = indsToPlotTuple[0]
+                atl03DF = atl03DF_all.copy()
+                atl03DF = atl03DF[dfNum]
                 
-                # Bin data into dataframe
-                atl03DF_binned = get_bin_df(atl03DF, segmentKey, increment, agg_list)
+                # Get the segment key to bin data by            
+                if('Segment ID' == segmentBy):
+                    segmentKey = 'Segment ID'
+                elif('Time (sec)' == segmentBy):
+                    segmentKey = 'Time (sec)'
+                elif('Latitude (deg)' == segmentBy):
+                    segmentKey = 'Latitude (deg)'
+                elif('UTM Northing (m)' == segmentBy):
+                    segmentKey = 'UTM Northing (m)'
+                # endIf
+                
+                # Convert increment to float
+                increment = float(increment)
+                
+                # Create aggregate list for binning function
+                agg_list = ['ATL03;atl03_ground_min (m);' + yval + ';min;[1]',
+                            'ATL03;atl03_ground_max (m);' + yval + ';max100;[1]',
+                            'ATL03;atl03_ground_median (m);' + yval + ';median;[1]',
+                            'ATL03;atl03_ground_mean (m);' + yval + ';mean;[1]',
+                            'ATL03;atl03_ground_std (m);' + yval + ';std;[1]',
+                            'ATL03;atl03_all_canopy_min (m);' + yval + ';min;[2,3]',
+                            'ATL03;atl03_all_canopy_max (m);' + yval + ';max100;[2,3]',
+                            'ATL03;atl03_all_canopy_median (m);' + yval + ';median;[2,3]',
+                            'ATL03;atl03_all_canopy_mean (m);' + yval + ';mean;[2,3]',
+                            'ATL03;atl03_all_canopy_std (m);' + yval + ';std;[2,3]',
+                            'ATL03;atl03_all_height_min (m);' + yval + ';min;[1,2,3]',
+                            'ATL03;atl03_all_height_max (m);' + yval + ';max100;[1,2,3]',
+                            'ATL03;atl03_all_height_median (m);' + yval + ';median;[1,2,3]',
+                            'ATL03;atl03_all_height_mean (m);' + yval + ';mean;[1,2,3]',
+                            'ATL03;atl03_all_height_std (m);' + yval + ';std;[1,2,3]']
+                
+                try:
+                
+                    # Set Add Stats listbox in Stats Section
+                    addStatsBox.set('')
+                    window.update()
                     
-                # Pull subset of data into smaller dataframe
-                statsDF = atl03DF_binned[atl03DF_binned.columns[[0,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]]]
+                    # Bin data into dataframe
+                    atl03DF_binned = get_bin_df(atl03DF, segmentKey, increment, agg_list)
+                        
+                    # Pull subset of data into smaller dataframe
+                    statsDF_orig = atl03DF_binned.copy()
+                    statsDF_orig = statsDF_orig[statsDF_orig.columns[[0,2,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]]]
+                    
+                    # Rename 'beg_id' column name to Segment By name
+                    newColName = 'segment_start_' + segmentBy.lower()
+                    statsDF_orig.rename(columns={'beg_id':newColName}, inplace=True)
+                    
+                    # Rename 'end_id' column name to Segment By name
+                    newColName = 'segment_end_' + segmentBy.lower()
+                    statsDF_orig.rename(columns={'end_id':newColName}, inplace=True)
+                    
+                    # Interpolate stats dataframe midpoints
+                    statsDF = interpStats(atl03DF, statsDF_orig)
+                    
+                    # Update status bar
+                    statsStatusBar['value'] = 100
+                    statuslbl.config(text='Complete')
+                    
+                    # Set Add Stats listbox in Stats Section
+                    addStatsTuple = ('Ground Min','Ground Max','Ground Median','Ground Mean','Ground Mean + 3*Std','Ground Mean - 3*Std',
+                            'All Canopy Min','All Canopy Max','All Canopy Median','All Canopy Mean','All Canopy Mean + 3*Std','All Canopy Mean - 3*Std',
+                            'All Height Min','All Height Max','All Height Median','All Height Mean','All Height Mean + 3*Std','All Height Mean - 3*Std')
+                    addStatsBox['values'] = addStatsTuple
+                    addStatsBox.current(0)
+        
+                    # Update window
+                    window.update()
                 
-                # Rename 'beg_id' column name to Segment By name
-                newColName = 'segment_start_' + segmentBy.lower()
-                statsDF_orig = statsDF.rename(columns={'beg_id':newColName})
+                except:
+                    
+                    messagebox.showinfo('Error','Could not compute stats. Please check inputs.')
+                    
+                # endTry
                 
-                # Interpolate stats dataframe midpoints
-                statsDF = interpStats(atl03DF, statsDF_orig)
-                
-                # Update status bar
-                statsStatusBar['value'] = 100
-                statuslbl.config(text='Complete')
-                
-                # Set Add Stats listbox in Stats Section
-                addStatsTuple = ('Ground Min','Ground Max','Ground Median','Ground Mean','Ground Mean + 3*Std','Ground Mean - 3*Std',
-                        'All Canopy Min','All Canopy Max','All Canopy Median','All Canopy Mean','All Canopy Mean + 3*Std','All Canopy Mean - 3*Std',
-                        'All Height Min','All Height Max','All Height Median','All Height Mean','All Height Mean + 3*Std','All Height Mean - 3*Std')
-                addStatsBox['values'] = addStatsTuple
-                addStatsBox.current(0)
-    
-                # Update window
-                window.update()
-            
-            except:
-                
-                messagebox.showinfo('Error','Could not compute stats. Please check inputs.')
-                
-            # endTry
-            
+            else:
+                messagebox.showinfo('Error','Please select only 1 file to compute stats.') 
+            # endIf
         else:
-            messagebox.showinfo('Error','Please select only 1 file to compute stats.') 
+            messagebox.showinfo('Error','Missing data to compute stats.') 
         # endIf
+    
     else:
-        messagebox.showinfo('Error','Missing data to compute stats.') 
+        messagebox.showinfo('Error','Can only compute stats with HAE or MSL Heights in Y Axis above.') 
     # endIf
     
     # Enable button
@@ -1937,52 +2358,61 @@ yValsBox_atl08 = Combobox(dataLayersLabelframe, width=30)
 yValsBox_atl08.place(x=10, y=45)
 
 # Itialize ATL08 plot lists
-plotList_atl08 = ('maxCanopy', 'teBestFit', 'teMedian')
+plotList_atl08 = ('maxCanopy', 'teBestFit', 'teMedian', 
+                  'maxCanopyMsl', 'teBestFitMsl', 'teMedianMsl')
 
 # Plot ATL08 Button Callback
 def plotAtl08():
-    
+        
     # Try plot code
     try:
         
-        # Get
-        gtNumToPlot = gtNumPlotBox.current()
+        if(len(atl08Data)>0):
+            
+            # Get
+            gtNumToPlot = gtNumPlotBox.current()
+            
+            # Get x,y combo box number selections
+            xVarNum = xValsBox.current()
+            yVarNum = yValsBox_atl08.current()
+            
+            # Get x,y combo bxx text selections
+            xData = eval('atl08Data[' + str(gtNumToPlot) + '].' + plotList[xVarNum])
+            yData = eval('atl08Data[' + str(gtNumToPlot) + '].' + plotList_atl08[yVarNum])
+            fileName = eval('atl03Data[' + str(gtNumToPlot) + '].atl03FileName')
+            gtNum = eval('atl03Data[' + str(gtNumToPlot) + '].gtNum')
+            
+            # Remove bad data from ATL08
+            indsToKeep = yData<=1e20
+            xData = xData[indsToKeep]
+            yData = yData[indsToKeep]
+            
+            # Get labels
+            xLabel = xlabel_textBox.get()
+            yLabel = ylabel_textBox.get()
+            title = fileName + ' (' + gtNum + ')'
+            
+            yName = plotList_atl08[yVarNum]
+            
+            # Call getPlot function
+            getPlot_atl08(xData, yData, xLabel, yLabel, title, yName)
         
-        # Get x,y combo box number selections
-        xVarNum = xValsBox.current()
-        yVarNum = yValsBox_atl08.current()
-        
-        # Get x,y combo bxx text selections
-        xData = eval('atl08Data[' + str(gtNumToPlot) + '].' + plotList[xVarNum])
-        yData = eval('atl08Data[' + str(gtNumToPlot) + '].' + plotList_atl08[yVarNum])
-        fileName = eval('atl03Data[' + str(gtNumToPlot) + '].atl03FileName')
-        gtNum = eval('atl03Data[' + str(gtNumToPlot) + '].gtNum')
-        
-        # Remove bad data from ATL08
-        indsToKeep = yData<=1e20
-        xData = xData[indsToKeep]
-        yData = yData[indsToKeep]
-        
-        # Get labels
-        xLabel = xlabel_textBox.get()
-        yLabel = ylabel_textBox.get()
-        title = fileName + ' (' + gtNum + ')'
-        
-        yName = plotList_atl08[yVarNum]
-        
-        # Call getPlot function
-        getPlot_atl08(xData, yData, xLabel, yLabel, title, yName)
+        else:
+            
+            messagebox.showinfo('Error','No ATL08 data to plot.')
+            
+        # endIf
     
     except:
         
-        print('Cannot plot data. Please check inputs')
+        messagebox.showinfo('Error','Cannot plot data. Please check inputs.')
         
     # endTry
 # endDef
     
 # Plot ATL08 Button
 btn = tk.Button(dataLayersLabelframe, text='Add ATL08', font=('Arial Bold', 16), width = 15, command=plotAtl08) 
-btn.place(x=315, y=25)
+btn.place(x=320, y=25)
 
 
 ###############################################################################
@@ -1996,9 +2426,9 @@ btn.place(x=315, y=25)
 #truthPlotLabelframe.place(x=580, y=10)
 
 # Reference Data text
-truthText = ['Reference data can be plotted for:\n' \
-             'easting, northing, cross-track,\n' \
-             'along-track, or height.']
+truthText = ['Add reference data to plot, note:\n' \
+             'Reference Time and Delta Time are\n' \
+             'calculated using linear interpolation.']
     
 # Add text        
 lbl = tk.Label(dataLayersLabelframe, text=truthText[0], font=('Arial', 12), anchor = 'w', justify='left')
@@ -2006,16 +2436,17 @@ lbl.place(x=10, y=90)
 
 # Itialize Reference data plot lists
 plotList_truth = ('time', 'deltaTime', \
-                  'latitude', 'longitude', \
+                  'lat', 'lon', \
                   'easting', 'northing', \
                   'crossTrack', 'alongTrack', \
-                  'z', 'class', 'confidence')
+                  'z', 'z', 'class', 'confidence')
 
 plotList_truthNames = ('Reference Time', 'Reference Delta Time', \
                        'Reference Lat', 'Reference Lon', \
                        'Reference Easting', 'Reference Northing', \
                        'Reference Cross-Track', 'Reference Along-Track', \
-                       'Reference Height', 'Reference Class', 'Reference Conf') 
+                       'Reference Height', 'Reference Height', \
+                       'Reference Class', 'Reference Conf') 
 
 # Plot Reference Button Callback
 def plotTruth():
@@ -2023,57 +2454,59 @@ def plotTruth():
     # Try plot code
     try:
                 
-        # Get
-        gtNumToPlot = gtNumPlotBox.current()
+        if(len(atlTruthDataFiltered)>0):
         
-        # Get x,y combo box number selections
-        xVarNum = xValsBox.current()
-        yVarNum = yValsBox.current()
-        
-        # x,y param names
-        xParam = plotList_truth[xVarNum]
-        yParam = plotList_truth[yVarNum]
-        
-        if('time' in xParam or 'time' in yParam):
-            messagebox.showinfo('Error','Reference data cannot plot time.')
-        elif('latitude' in xParam or 'latitude' in yParam):
-            messagebox.showinfo('Error','Reference data cannot plot latitude.')
-        elif('longitude' in xParam or 'longitude' in yParam):
-            messagebox.showinfo('Error','Reference data cannot plot longitude.')
-        elif('class' in xParam or 'class' in yParam):
-            messagebox.showinfo('Error','Reference data cannot plot classification.')
-        elif('confidence' in xParam or 'confidence' in yParam):
-            messagebox.showinfo('Error','Reference data cannot plot signal confidence.')
-        else:    
+            # Get
+            gtNumToPlot = gtNumPlotBox.current()
             
-            # Get x,y combo bxx text selections
-            xData = eval('atlTruthDataFiltered[' + str(gtNumToPlot) + '].' + xParam)
-            yData = eval('atlTruthDataFiltered[' + str(gtNumToPlot) + '].' + yParam)
-            fileName = eval('atl03Data[' + str(gtNumToPlot) + '].atl03FileName')
-            gtNum = eval('atl03Data[' + str(gtNumToPlot) + '].gtNum')
+            # Get x,y combo box number selections
+            xVarNum = xValsBox.current()
+            yVarNum = yValsBox.current()
+            
+            # x,y param names
+            xParam = plotList_truth[xVarNum]
+            yParam = plotList_truth[yVarNum]
+            
+            if('class' in xParam or 'class' in yParam):
+                messagebox.showinfo('Error','Reference data cannot plot classification on x/y axis.')
+            elif('confidence' in xParam or 'confidence' in yParam):
+                messagebox.showinfo('Error','Reference data cannot plot signal confidence on x/y axis.')
+            else:    
+                
+                # Get x,y combo bxx text selections
+                xData = eval('atlTruthDataFiltered[' + str(gtNumToPlot) + '].' + xParam)
+                yData = eval('atlTruthDataFiltered[' + str(gtNumToPlot) + '].' + yParam)
+                fileName = eval('atl03Data[' + str(gtNumToPlot) + '].atl03FileName')
+                gtNum = eval('atl03Data[' + str(gtNumToPlot) + '].gtNum')
+            
+                # Get labels
+                xLabel = xlabel_textBox.get()
+                yLabel = ylabel_textBox.get()
+                title = fileName + ' (' + gtNum + ')'
+                
+                yName = plotList_truthNames[yVarNum]
+                
+                # Call getPlot function
+                getPlot_truth(xData, yData, xLabel, yLabel, title, yName)
+                
+            # endIf
         
-            # Get labels
-            xLabel = xlabel_textBox.get()
-            yLabel = ylabel_textBox.get()
-            title = fileName + ' (' + gtNum + ')'
+        else:
             
-            yName = plotList_truthNames[yVarNum]
-            
-            # Call getPlot function
-            getPlot_truth(xData, yData, xLabel, yLabel, title, yName)
+            messagebox.showinfo('Error','No Reference data to plot.')
             
         # endIf
     
     except:
         
-        print('Cannot plot data. Please check inputs')
+        messagebox.showinfo('Error','Cannot plot data. Please check inputs.')
         
     # endTry
 # endDef
 
 # Plot Truth Button
 btn = tk.Button(dataLayersLabelframe, text='Add Reference', font=('Arial Bold', 16), width = 15, command=plotTruth) 
-btn.place(x=315, y=105)
+btn.place(x=320, y=105)
 
 
 ###############################################################################
@@ -2087,25 +2520,26 @@ btn.place(x=315, y=105)
 #measCorrPlotLabelframe.place(x=580, y=150)
 
 # Corrected Measured text
-measCorrText = ['Shifted ICESat-2 data can be plotted for:\n'\
-                'easting, northing, cross-track,\n' \
-                'along-track, or height.']
+measCorrText = ['Plot shifted ICESat-2 track that has\n'\
+                'been corrected in XYZ relative to the\n' \
+                'reference data.']
 
 # Corrected Measured Data Y Axis Combo Box
 lbl = tk.Label(dataLayersLabelframe, text=measCorrText[0], font=('Arial', 12), anchor = 'w', justify='left')
 lbl.place(x=10, y=170)
 
 plotList_measCorr = ('time', 'deltaTime', \
-                     'latitude', 'longitude', \
-                     'easting', 'northing', \
-                     'crossTrack', 'alongTrack', \
-                     'z', 'class', 'confidence')
+                     'latArray', 'lonArray', \
+                     'eastingArray', 'northingArray', \
+                     'crossTrackArray', 'alongTrackArray', \
+                     'zArray', 'zMslArray', 'classification', 'signalConf')
 
 plotList_measCorrNames = ('Shifted ATL03 Time', 'Shifted ATL03 Delta Time',\
                           'Shifted ATL03 Lat', 'Shifted ATL03 Lon', \
                           'Shifted ATL03 Easting', 'Shifted ATL03 Northing', \
                           'Shifted ATL03 Cross-Track', 'Shifted ATL03 Along-Track', \
-                          'Shifted ATL03 Height', 'Shifted ATL03 Class', 'Shifted ATL03 Conf') 
+                          'Shifted ATL03 Height HAE', 'Shifted ATL03 Height MSL', \
+                          'Shifted ATL03 Classification', 'Shifted ATL03 Signal Confidence') 
 
 # Plot Corrected Measured Button Callback
 def plotMeasCorr():
@@ -2113,53 +2547,70 @@ def plotMeasCorr():
     # Try plot code
     try:
                 
-        # Get
-        gtNumToPlot = gtNumPlotBox.current()
-        
-        # Get x,y combo box number selections
-        xVarNum = xValsBox.current()
-        yVarNum = yValsBox.current()
-        
-        # x,y param names
-        xParam = plotList_truth[xVarNum]
-        yParam = plotList_truth[yVarNum]
-        
-        if('time' in xParam or 'time' in yParam):
-            messagebox.showinfo('Error','Corrected measured data cannot plot time.')
-        elif('latitude' in xParam or 'latitude' in yParam):
-            messagebox.showinfo('Error','Corrected measured data cannot plot latitude.')
-        elif('longitude' in xParam or 'longitude' in yParam):
-            messagebox.showinfo('Error','Corrected measured data cannot plot longitude.')
-        elif('class' in xParam or 'class' in yParam):
-            messagebox.showinfo('Error','Corrected measured data cannot plot classification.')
-        elif('confidence' in xParam or 'confidence' in yParam):
-            messagebox.showinfo('Error','Corrected measured data cannot plot signal confidence.')
-        else: 
+        if(len(atlCorrections)>0):
             
+            # Get
+            gtNumToPlot = gtNumPlotBox.current()
+            
+            # Get x,y combo box number selections
+            xVarNum = xValsBox.current()
+            yVarNum = yValsBox.current()
+            
+            # x,y param names
+            xParam = plotList_measCorr[xVarNum]
+            yParam = plotList_measCorr[yVarNum]
+                
             # Get x,y combo bxx text selections
-            xDataOrig = eval('atl03Data[' + str(gtNumToPlot) + '].' + xParam)
-            yDataOrig = eval('atl03Data[' + str(gtNumToPlot) + '].' + yParam)
-            xDataCorr = eval('atlCorrections[' + str(gtNumToPlot) + '].' + xParam)
-            yDataCorr = eval('atlCorrections[' + str(gtNumToPlot) + '].' + yParam)
+            xData = eval('atlCorrections[' + str(gtNumToPlot) + '].' + xParam)
+            yData = eval('atlCorrections[' + str(gtNumToPlot) + '].' + yParam)
             fileName = eval('atl03Data[' + str(gtNumToPlot) + '].atl03FileName')
             gtNum = eval('atl03Data[' + str(gtNumToPlot) + '].gtNum')
-        
-            xData = xDataOrig + xDataCorr
-            yData = yDataOrig + yDataCorr
             
             # Get labels
             xLabel = xlabel_textBox.get()
             yLabel = ylabel_textBox.get()
-            title = fileName + ' (' + gtNum + ')'
+            title = fileName + ' (' + gtNum + ')'            
             
-            yName = plotList_measCorrNames[yVarNum]
+            # Get Filter data type (classification or signal confidence) and filter numbers
+            filterChoice = filterBox.get()
+            if('  ' in filterChoice.lower()):
+                filterType = []
+                filterData = []
+                filterNum = []
+            elif('class' in filterChoice.lower()):
+                filterType = filterChoice
+                filterData = eval('atlCorrections[' + str(gtNumToPlot) + '].classification')
+                filterTF = [filter0ChkState.get(), filter1ChkState.get(), filter2ChkState.get(), filter3ChkState.get(), filter4ChkState.get()]    
+                filterNum = filterState[filterTF]
+            elif('signal' in filterChoice.lower()):
+                filterType = filterChoice
+                filterData = eval('atlCorrections[' + str(gtNumToPlot) + '].signalConf')
+                filterTF = [filter0ChkState.get(), filter1ChkState.get(), filter2ChkState.get(), filter3ChkState.get(), filter4ChkState.get()]    
+                filterNum = filterState[filterTF]
+            # endIf
             
-            # Call getPlot function
-            getPlot_measCorr(xData, yData, xLabel, yLabel, title, yName)
+            # Get output path
+            outPath = outPath_textBox.get().strip()
+            
+            # Get original plot title
+            origTitle = title
+            
+            # Get gtNum
+            gtNum = gtNumPlotBox.current()
+            
+            # Call getPlot_measCorr function
+            getPlot_measCorr(xData, yData, xLabel, yLabel, title, outPath, 
+                             origTitle, filterType, filterData, filterNum)
+    
+        else:
+        
+            messagebox.showinfo('Error','No Shifted ATL03 data to plot.')
+            
+        # endIf
     
     except:
         
-        print('Cannot plot data. Please check inputs')
+        messagebox.showinfo('Error','Cannot plot data. Please check inputs.')
         
     # endTry
 # endDef
@@ -2269,7 +2720,7 @@ def loadPlot():
     # endIf
     
     # Ask user for input .pkl files
-    pklFiles = filedialog.askopenfilename(initialdir = startDir, title = 'Select File(s) to Plot', filetypes = [('.pkl files','*.pkl')], multiple=True)
+    pklFiles = filedialog.askopenfilename(initialdir = startDir, title = 'Select File(s) to Plot', filetypes = [('*fig*.pkl files','*fig*.pkl')], multiple=True)
 
     # If the user selection is not empty, then continue
     if(pklFiles != '.'):
@@ -2305,24 +2756,24 @@ phoreal_help_info1 = \
 '--------------------------------------------\n' \
 'This section handles the input ATL03/ATL08 files from ICESat-2\n' \
 '\n' \
-'+ ATL03 File: Path to input ATL03 .h5 file\n' \
-'+ ATL08 File: Path to input ATL08 .h5 file\n' \
+'+ ATL03 File: Path to input ATL03 .h5 file(s) or directory\n' \
+'+ ATL08 File: Path to input ATL08 .h5 file(s) or directory\n' \
 '+ Output Directory: Path to directory for output data\n' \
 '+ Ground Track Numbers: Option to select ICESat-2 ground tracks\n' \
 '+ Trim ICESat-2 Data Options: Methods to trim ICESat-2 data\n' \
 '     - None: No trimming\n' \
 '     - Manual: Trim to user-specified latitude or time min/max bounds\n' \
-'     - Auto: Trim to reference region bounds (ARL ONLY)\n' \
-'+ Create Output Files: Option to create output files for measured data\n' \
+'     - Auto: Trim to reference region bounds (uses kmlBounds.txt file)\n' \
+'+ Create Output Files: Option to create output files for ICESat-2 data\n' \
 '\n' \
 'Get Reference Data Input Section:\n' \
 '-----------------------------------------------\n' \
 'This section handles the reference data used to find ICESat-2 offsets\n' \
 '\n' \
-'+ Use Existing Data: Option to use existing or new reference data\n' \
-'+ Buffer Size: For creating new reference data (ARL Only)\n' \
-'+ Reference File Name: Path to reference file (.las, .laz, or .tif files)\n' \
-'+ Save Reference File: Option to create output reference file'
+'+ Use Existing Data: Option to use existing reference buffer data\n' \
+'+ Buffer Size: Buffer to create around ICESat-2 track in reference data\n' \
+'+ Save Reference File: Option to create output reference buffer .las file\n' \
+'+ Reference File(s): Path to reference file(s) or directory (.las or .tif)' \
 
 
 lbl = tk.Label(helpLabelframe1, text=phoreal_help_info1, font=('Arial', 12), anchor = 'w', justify='left')
@@ -2341,16 +2792,20 @@ phoreal_help_info2 = \
 '\n' \
 '+ Cross-Track Bounds (m): Cross-track search area [min, max] or one value\n' \
 '+ Along-Track Bounds (m): Along-track search area [min, max] or one value\n' \
-'+ Grid Resolution(s) (m): Raster resolution(s) to grid reference data\n' \
 '+ Use Fixed Vertical Shift: Option to use a fixed vertical shift value\n' \
 '+ Vertical Shift (m): Vertical shift value if previous option is selected\n' \
+'+ Grid Resolution(s) (m): Raster resolution(s) to grid reference data\n' \
+'+ Use ICESat-2 Heights: Option to use Ellipsoidal (HAE) heights or \n' \
+'   Orthometric (MSL) heights when comparing to reference data\n' \
+'   Note: Geoidal heights have been calculated on the ATL03\n' \
+'         data product using the EGM2008 ellipsoid\n' \
 '+ Use ICESat-2 Signal Confidence Value(s): Option to use ICESat-2\n' \
 '   signal confidence values to filter measured data\n' \
 '     - Input signal confidence values to filter ICESat-2 data\n' \
 '+ Use Reference Ground Index: Option to use reference ground index value\n' \
 '   to filter reference data (Requires ATL08 file)\n' \
-'     - Reference ground index value (Texpert ground class = 2)\n' \
-'+ Save Shifted ICESat-2 File: Option to create corrected file\n' \
+'     - Reference ground index value (ASPRS ground class = 2)\n' \
+'+ Save Shifted ICESat-2 File: Option to save ICESat-2 shifted XYZ file\n' \
 '+ Make Output Plots: Option to create output plots'
 
 lbl = tk.Label(helpLabelframe2, text=phoreal_help_info2, font=('Arial', 12), anchor = 'w', justify='left')
