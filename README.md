@@ -1,7 +1,7 @@
 <h1>PhoREAL</h1>
 <h5>Tools to make ICESat-2 ATL03 and ATL08 analysis easier</h5>
 
-Data products from ICESat-2 require some familiarity working with large datafiles and HDF5 files. PhoREAL (Photon Research and Engineering Analysis Library) is a geospatial analysis toolbox that allows users to read, process, analyze, and output ICESat-2 ATL03 and ATL08 data in the form of figures and .las, .csv, and .kml files. 
+PhoREAL (Photon Research and Engineering Analysis Library) is a geospatial analysis toolbox that allows users to read, process, analyze, and output ICESat-2 ATL03 and ATL08 data in the form of figures and .las, .csv, and .kml files. 
 
 <h3>PhoREAL v3.24</h3>
 
