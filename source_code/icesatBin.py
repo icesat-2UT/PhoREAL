@@ -7,11 +7,18 @@ Created on Tue Oct 13 13:45:53 2020
 """
 import os
 import ctypes
+from shutil import copyfile    
 from numpy.ctypeslib import ndpointer 
 import pandas as pd
 import numpy as np
 from scipy import stats
 from scipy import interpolate
+import h5py
+
+
+from icesatReader import get_atl03_struct
+from icesatReader import get_atl08_struct
+
 
 root = os.path.dirname(__file__)
 superFilterFile_windows = os.path.join(root,'closest_x64.dll')
@@ -54,12 +61,68 @@ def get_max98(series):
         max98 = np.nan
     return max98
 
+def get_max95(series):
+    try:
+        max95 = np.percentile(series, 95)
+    except:
+        max95 = np.nan
+    return max95
+
+def get_max90(series):
+    try:
+        max90 = np.percentile(series, 90)
+    except:
+        max90 = np.nan
+    return max90
+
+def get_max85(series):
+    try:
+        max85 = np.percentile(series, 85)
+    except:
+        max85 = np.nan
+    return max85
+
+def get_max80(series):
+    try:
+        max80 = np.percentile(series, 80)
+    except:
+        max80 = np.nan
+    return max80
+
 def get_max75(series):
     try:
         max75 = np.percentile(series, 75)
     except:
         max75 = np.nan
     return max75
+
+def get_max70(series):
+    try:
+        max70 = np.percentile(series, 70)
+    except:
+        max70 = np.nan
+    return max70
+
+def get_max65(series):
+    try:
+        max65 = np.percentile(series, 65)
+    except:
+        max65 = np.nan
+    return max65
+
+def get_max60(series):
+    try:
+        max60 = np.percentile(series, 60)
+    except:
+        max60 = np.nan
+    return max60
+
+def get_max55(series):
+    try:
+        max55 = np.percentile(series, 55)
+    except:
+        max55 = np.nan
+    return max55
 
 def get_max50(series):
     try:
@@ -68,12 +131,68 @@ def get_max50(series):
         max50 = np.nan
     return max50
 
+def get_max45(series):
+    try:
+        max45 = np.percentile(series, 45)
+    except:
+        max45 = np.nan
+    return max45
+
+def get_max40(series):
+    try:
+        max40 = np.percentile(series, 40)
+    except:
+        max40 = np.nan
+    return max40
+
+def get_max35(series):
+    try:
+        max35 = np.percentile(series, 35)
+    except:
+        max35 = np.nan
+    return max35
+
+def get_max30(series):
+    try:
+        max30 = np.percentile(series, 30)
+    except:
+        max30 = np.nan
+    return max30
+
 def get_max25(series):
     try:
         max25 = np.percentile(series, 25)
     except:
         max25 = np.nan
     return max25
+
+def get_max20(series):
+    try:
+        max20 = np.percentile(series, 20)
+    except:
+        max20 = np.nan
+    return max20
+
+def get_max15(series):
+    try:
+        max15 = np.percentile(series, 15)
+    except:
+        max15 = np.nan
+    return max15
+
+def get_max10(series):
+    try:
+        max10 = np.percentile(series, 10)
+    except:
+        max10 = np.nan
+    return max10
+
+def get_max5(series):
+    try:
+        max5 = np.percentile(series, 5)
+    except:
+        max5 = np.nan
+    return max5
 
 def get_min(series):
     try:
@@ -116,6 +235,13 @@ def get_mode(series):
     except:
         mode = np.nan
     return mode
+    
+def get_mean(series):
+    try:
+        m = np.mean(series)
+    except:
+        m = np.nan
+    return m
 
 def calculate_seg_meteric(df_in, df_out, classification, operation, field, 
                           outfield, key_field = 'bin_id',
@@ -179,9 +305,11 @@ def get_target_keys(key_df, df, field, res = -1):
 
 def agg_keys(key_df, df, agg_list, key = 'bin_id'):
     for i in agg_list:
-        agg = i.split(',')
+        agg = i.split(';')
         if 'perfect' in agg[2]:
             c = 'perfect_class'
+        elif('bathy' in agg[0]):
+            c = 'Label'
         else:
             c = 'classification'
 
@@ -212,17 +340,81 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                          get_max98,agg[2],agg[1], key_field = key,
                                              classfield = c)
+        elif 'max95' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max95,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max90' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max90,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max85' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max85,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max80' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max95,agg[2],agg[1], key_field = key,
+                                             classfield = c)
         elif 'max75' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                          get_max75,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max70' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max70,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max65' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max65,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max60' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max60,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max55' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max55,agg[2],agg[1], key_field = key,
                                              classfield = c)
         elif 'max50' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                          get_max50,agg[2],agg[1], key_field = key,
                                              classfield = c)
+        elif 'max45' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max45,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max40' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max40,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max35' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max35,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max30' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max30,agg[2],agg[1], key_field = key,
+                                             classfield = c)
         elif 'max25' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                         get_max25,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max20' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max20,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max15' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                        get_max15,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max10' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_max10,agg[2],agg[1], key_field = key,
+                                             classfield = c)
+        elif 'max5' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                        get_max5,agg[2],agg[1], key_field = key,
                                              classfield = c)
         elif 'min' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
@@ -236,12 +428,16 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                          get_std,agg[2],agg[1], key_field = key,
                                              classfield = c) 
+        elif 'mean' in agg[3]:
+            key_df = calculate_seg_meteric(df, key_df, class_list, 
+                         get_mean,agg[2],agg[1], key_field = key,
+                                             classfield = c)
         elif 'rh_canopy' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, [1], 
-                         np.median,'h_ph','ground', key_field = key,
+                         np.median,agg[2],'ground', key_field = key,
                                              classfield = c) 
             key_df = calculate_seg_meteric(df, key_df, [2,3], 
-                         np.median,'h_ph','canopy', key_field = key,
+                         np.median,agg[2],'canopy', key_field = key,
                                              classfield = c) 
             key_df[agg[1]] = key_df.canopy - key_df.ground
             key_df[agg[1]][key_df[agg[1]] < 0] = 0
@@ -422,7 +618,7 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     
     key_df = create_key_df(atl08_df, 'alongtrack', res_at)
 
-    domain_list = ['time','easting','northing','crosstrack','alongtrack',
+    domain_list = [
                'delta_time','delta_time_beg','delta_time_end','latitude',
                'longitude','segment_id_beg','segment_id_end']
     
@@ -458,8 +654,28 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     
     #Compute the ATL03 
     
-    agg_list = ['atl03,atl03_ground_median,h_ph,median,[1]',
-            'atl03,atl03_canopy_h,h_ph,get_max98,[2,3]']
+    agg_list = ['atl03;atl03_ground_median;h_ph;median;[1]',
+            'atl03;atl03_canopy_h;h_ph;get_max98;[2,3]',
+            'atl03;atl03_rh_100;h_ph;get_max100;[1,2,3]',
+            'atl03;atl03_rh_95;h_ph;get_max95;[1,2,3]',
+            'atl03;atl03_rh_90;h_ph;get_max90;[1,2,3]',
+            'atl03;atl03_rh_85;h_ph;get_max85;[1,2,3]',
+            'atl03;atl03_rh_80;h_ph;get_max80;[1,2,3]',
+            'atl03;atl03_rh_75;h_ph;get_max75;[1,2,3]',
+            'atl03;atl03_rh_70;h_ph;get_max70;[1,2,3]',
+            'atl03;atl03_rh_65;h_ph;get_max65;[1,2,3]',
+            'atl03;atl03_rh_60;h_ph;get_max60;[1,2,3]',
+            'atl03;atl03_rh_55;h_ph;get_max55;[1,2,3]',
+            'atl03;atl03_rh_50;h_ph;get_max50;[1,2,3]',
+            'atl03;atl03_rh_45;h_ph;get_max45;[1,2,3]',
+            'atl03;atl03_rh_40;h_ph;get_max40;[1,2,3]',
+            'atl03;atl03_rh_35;h_ph;get_max35;[1,2,3]',
+            'atl03;atl03_rh_30;h_ph;get_max30;[1,2,3]',
+            'atl03;atl03_rh_25;h_ph;get_max25;[1,2,3]',
+            'atl03;atl03_rh_20;h_ph;get_max20;[1,2,3]',
+            'atl03;atl03_rh_15;h_ph;get_max15;[1,2,3]',
+            'atl03;atl03_rh_10;h_ph;get_max10;[1,2,3]',
+            'atl03;atl03_rh_5;h_ph;get_max5;[1,2,3]']
     
     target_key, include = get_target_keys(key_df, atl03_df, 'alongtrack')
     atl03_df = atl03_df.reset_index(drop = True)
@@ -481,45 +697,113 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
 
     
     df_bin_03.drop(df_bin_03.columns.difference(['bin_id','atl03_ground_median',
-                                         'atl03_canopy_h','atl03_canopy_rh']),
+                                         'atl03_canopy_h','atl03_canopy_rh',
+                                         'atl03_rh_5','atl03_rh_10',
+                                         'atl03_rh_15','atl03_rh_20',
+                                         'atl03_rh_25','atl03_rh_30',
+                                         'atl03_rh_35','atl03_rh_40',
+                                         'atl03_rh_45','atl03_rh_50',
+                                         'atl03_rh_55','atl03_rh_60',
+                                         'atl03_rh_65','atl03_rh_70',
+                                         'atl03_rh_75','atl03_rh_80',
+                                         'atl03_rh_85','atl03_rh_90',
+                                         'atl03_rh_95','atl03_rh_100',
+                                         ]),
                    1,inplace=True)
     
     
     
     df_bin = pd.merge(df_bin_08, df_bin_03, on="bin_id",how='left')    
     
-    df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id', 'res'])
+    df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id', 'res','bin_id',
+                           'time','easting','northing','crosstrack',
+                           'alongtrack'], axis = 1, inplace = True)
+    
     
     return df_bin
+'''
+Function to read copy ATL08 and append 30m segment information
+'''    
+def copy_and_append_atl08(atl03filepath, atl08filepath, out_dir, in_res=30):
+    atl08file = atl08filepath.split('/')[-1]
+    newatl08file = out_dir + atl08file
+    newatl08file = os.join(out_dir, atl08file)
     
+    copyfile(atl08filepath,newatl08file)
+    h5f = h5py.File(newatl08file,'a')
+    gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
+    for gt in gt_list:
+        base_key = gt + '/land_segments/30m_segment/'
+        print('ATL03 Heights')
+        atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+        
+        print('ATL08 Land Segments')
+        atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+        
+        print('Match ATL08 to ATL03 by segment')
+        upsampled_atl08_bin = create_atl08_bin(atl03, atl08, res_at = in_res)
+        
+        print('Append Data to ATL08')
+        all_cols = upsampled_atl08_bin.columns
+        
+        for i in range(0,len(all_cols)):
+            a = np.array(upsampled_atl08_bin[all_cols[i]])
+            h5f[base_key + all_cols[i]] = a
     
+    h5f.close()
 
+    
 if __name__ == "__main__":
     if os.name == 'nt':
         basepath = 'Y:/USERS/eric/2_production/'
+        output_folder = 'Y:/USERS/eric/2_production/copy/'
     else:
         basepath = '/LIDAR/server/USERS/eric/2_production/'
+        output_folder = '/LIDAR/server/USERS/eric/2_production/copy/'
+
 
     atl03file = 'ATL03_20181021130238_03500103_002_01.h5'
     atl08file = 'ATL08_20181021130238_03500103_002_01.h5'
     
     atl03filepath = basepath + atl03file
     atl08filepath = basepath + atl08file
-    gt = 'gt1r'    
+    newatl08file = output_folder + atl08file
+    # gt = 'gt1r'    
 
     from icesatReader import get_atl03_struct
     from icesatReader import get_atl08_struct
-    
-    
-    print('ATL03 Heights')
-    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
-    
-    print('ATL08 Land Segments')
-    atl08 = get_atl08_struct(atl08filepath, gt, atl03)
-    
-    
-    upsampled_atl08_bin = create_atl08_bin(atl03, atl08, res_at = 30)
-    
-    agg_list = ['atl03,atl03_min,h_ph,min,[1]']
 
-    downsampled_atl03_bin = get_bin_df(atl03.df, 'time', 0.01, agg_list)
+    from shutil import copyfile    
+    import h5py
+    copyfile(atl08filepath,newatl08file)
+    
+        # gt1l/land_segments/30m_segment/
+    h5f = h5py.File(output_folder + atl08file,'a')
+
+    gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
+    for gt in gt_list:
+        base_key = gt + '/land_segments/30m_segment/'
+        print('ATL03 Heights')
+        atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+        
+        print('ATL08 Land Segments')
+        atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+        
+        print('Match ATL08 to ATL03 by segment')
+        upsampled_atl08_bin = create_atl08_bin(atl03, atl08, res_at = 30)
+        
+
+        
+        all_cols = upsampled_atl08_bin.columns
+        
+        for i in range(0,len(all_cols)):
+            a = np.array(upsampled_atl08_bin[all_cols[i]])
+            h5f[base_key + all_cols[i]] = a
+    
+    h5f.close()
+    
+
+    
+    # agg_list = ['atl03,atl03_min,h_ph,min,[1]']
+
+    # downsampled_atl03_bin = get_bin_df(atl03.df, 'time', 0.01, agg_list)

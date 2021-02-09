@@ -846,23 +846,23 @@ def hist(data, bins):
     fig.show()
     
 # Add stats to plot
-def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,statsDF):
+def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,yHt,statsDF):
     
+    # Get figure window
+    figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
+    figNum = plt.gcf().number
+    fig = plt.figure(figNum)
+    if(len(figsExist)>0):
+        ax = plt.gca()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+    # endIf
+        
     if(len(indsToPlotTuple)==1):
         
         # Make plot interactive
         plt.ion()
         
-        # Get figure window
-        figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
-        figNum = plt.gcf().number
-        fig = plt.figure(figNum)
-        if(len(figsExist)>0):
-            ax = plt.gca()
-            xlim = ax.get_xlim()
-            ylim = ax.get_ylim()
-        # endIf
-
         # Define face color scheme
         myBrown = [204/255, 102/255, 0/255]
         myMidGreen = [0/255, 200/255, 0/255]
@@ -917,6 +917,16 @@ def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,statsDF):
             xData_start = (statsDF[statsDF_xName]).to_numpy()
             statsDF_xName = 'seg_end_northing_interp (m)'
             xData_end = (statsDF[statsDF_xName]).to_numpy()
+        elif(xParam=='crossTrack'):
+            statsDF_xName = 'seg_start_crossTrack_interp (m)'
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_crossTrack_interp (m)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
+        elif(xParam=='alongTrack'):
+            statsDF_xName = 'seg_start_alongTrack_interp (m)'
+            xData_start = (statsDF[statsDF_xName]).to_numpy()
+            statsDF_xName = 'seg_end_alongTrack_interp (m)'
+            xData_end = (statsDF[statsDF_xName]).to_numpy()
         else:
             xDataGood = False
         # endIf
@@ -926,100 +936,106 @@ def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,statsDF):
             yDataGood = False
         # endIf
         
+        if('hae' in yHt.lower()):
+            htType = 'HAE'
+        else:
+            htType = 'MSL'
+        # endIf
+        
         # Get matching y parameter from dataframe
         if(yParam=='Ground Min'):
-            statsDF_yName = 'atl03_ground_min (m)'
+            statsDF_yName = 'atl03_ground_min (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myBrown
             binEdgeColor = myBlue
         elif(yParam=='Ground Max'):
-            statsDF_yName = 'atl03_ground_max (m)'
+            statsDF_yName = 'atl03_ground_max (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myBrown
             binEdgeColor = myRed
         elif(yParam=='Ground Median'):
-            statsDF_yName = 'atl03_ground_median (m)'
+            statsDF_yName = 'atl03_ground_median (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myBrown
             binEdgeColor = myGray
         elif(yParam=='Ground Mean'):
-            statsDF_yName = 'atl03_ground_mean (m)'
+            statsDF_yName = 'atl03_ground_mean (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myBrown
             binEdgeColor = myBlack
         elif(yParam=='Ground Mean + 3*Std'):
-            statsDF_yName1 = 'atl03_ground_mean (m)'
-            statsDF_yName2 = 'atl03_ground_std (m)'
+            statsDF_yName1 = 'atl03_ground_mean (m ' + htType + ')'
+            statsDF_yName2 = 'atl03_ground_std (m ' + htType + ')'
             yData = (statsDF[statsDF_yName1]).to_numpy() + 3*(statsDF[statsDF_yName2]).to_numpy()
             binFaceColor = myBrown
             binEdgeColor = myOrange
         elif(yParam=='Ground Mean - 3*Std'):
-            statsDF_yName1 = 'atl03_ground_mean (m)'
-            statsDF_yName2 = 'atl03_ground_std (m)'
+            statsDF_yName1 = 'atl03_ground_mean (m ' + htType + ')'
+            statsDF_yName2 = 'atl03_ground_std (m ' + htType + ')'
             yData = (statsDF[statsDF_yName1]).to_numpy() - 3*(statsDF[statsDF_yName2]).to_numpy()
             binFaceColor = myBrown
             binEdgeColor = myPurple
         elif(yParam=='All Canopy Min'):
-            statsDF_yName = 'atl03_all_canopy_min (m)'
+            statsDF_yName = 'atl03_all_canopy_min (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myMidGreen
             binEdgeColor = myBlue
         elif(yParam=='All Canopy Max'):
-            statsDF_yName = 'atl03_all_canopy_max (m)'
+            statsDF_yName = 'atl03_all_canopy_max (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myMidGreen
             binEdgeColor = myRed
         elif(yParam=='All Canopy Median'):
-            statsDF_yName = 'atl03_all_canopy_median (m)'
+            statsDF_yName = 'atl03_all_canopy_median (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myMidGreen
             binEdgeColor = myGray
         elif(yParam=='All Canopy Mean'):
-            statsDF_yName = 'atl03_all_canopy_mean (m)'
+            statsDF_yName = 'atl03_all_canopy_mean (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myMidGreen
             binEdgeColor = myBlack
         elif(yParam=='All Canopy Mean + 3*Std'):
-            statsDF_yName1 = 'atl03_all_canopy_mean (m)'
-            statsDF_yName2 = 'atl03_all_canopy_std (m)'
+            statsDF_yName1 = 'atl03_all_canopy_mean (m ' + htType + ')'
+            statsDF_yName2 = 'atl03_all_canopy_std (m ' + htType + ')'
             yData = (statsDF[statsDF_yName1]).to_numpy() + 3*(statsDF[statsDF_yName2]).to_numpy()
             binFaceColor = myMidGreen
             binEdgeColor = myOrange
         elif(yParam=='All Canopy Mean - 3*Std'):
-            statsDF_yName1 = 'atl03_all_canopy_mean (m)'
-            statsDF_yName2 = 'atl03_all_canopy_std (m)'
+            statsDF_yName1 = 'atl03_all_canopy_mean (m ' + htType + ')'
+            statsDF_yName2 = 'atl03_all_canopy_std (m ' + htType + ')'
             yData = (statsDF[statsDF_yName1]).to_numpy() - 3*(statsDF[statsDF_yName2]).to_numpy()
             binFaceColor = myMidGreen
             binEdgeColor = myPurple
         elif(yParam=='All Height Min'):
-            statsDF_yName = 'atl03_all_height_min (m)'
+            statsDF_yName = 'atl03_all_height_min (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myWhite
             binEdgeColor = myBlue
         elif(yParam=='All Height Max'):
-            statsDF_yName = 'atl03_all_height_max (m)'
+            statsDF_yName = 'atl03_all_height_max (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myWhite
             binEdgeColor = myRed
         elif(yParam=='All Height Median'):
-            statsDF_yName = 'atl03_all_height_median (m)'
+            statsDF_yName = 'atl03_all_height_median (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myWhite
             binEdgeColor = myGray
         elif(yParam=='All Height Mean'):
-            statsDF_yName = 'atl03_all_height_mean (m)'
+            statsDF_yName = 'atl03_all_height_mean (m ' + htType + ')'
             yData = (statsDF[statsDF_yName]).to_numpy()
             binFaceColor = myWhite
             binEdgeColor = myBlack
         elif(yParam=='All Height Mean + 3*Std'):
-            statsDF_yName1 = 'atl03_all_height_mean (m)'
-            statsDF_yName2 = 'atl03_all_height_std (m)'
+            statsDF_yName1 = 'atl03_all_height_mean (m ' + htType + ')'
+            statsDF_yName2 = 'atl03_all_height_std (m ' + htType + ')'
             yData = (statsDF[statsDF_yName1]).to_numpy() + 3*(statsDF[statsDF_yName2]).to_numpy()
             binFaceColor = myWhite
             binEdgeColor = myOrange
         elif(yParam=='All Height Mean - 3*Std'):
-            statsDF_yName1 = 'atl03_all_height_mean (m)'
-            statsDF_yName2 = 'atl03_all_height_std (m)'
+            statsDF_yName1 = 'atl03_all_height_mean (m ' + htType + ')'
+            statsDF_yName2 = 'atl03_all_height_std (m ' + htType + ')'
             yData = (statsDF[statsDF_yName1]).to_numpy() - 3*(statsDF[statsDF_yName2]).to_numpy()
             binFaceColor = myWhite
             binEdgeColor = myPurple

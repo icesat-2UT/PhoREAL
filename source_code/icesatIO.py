@@ -119,6 +119,7 @@ class atl03Struct:
                  atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_zMsl, 
                  atl03_time, atl03_deltaTime,
                  atl03_signalConf, atl03_classification, atl03_intensity, 
+                 atl03_segment_id,
                  gtNum, beamNum, beamStrength, zone, hemi,
                  atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
             
@@ -135,6 +136,7 @@ class atl03Struct:
         self.signalConf = np.c_[atl03_signalConf]
         self.classification = np.c_[atl03_classification]
         self.intensity = np.c_[atl03_intensity]
+        self.segmentID = np.c_[atl03_segment_id]
         self.gtNum = gtNum
         self.beamNum = beamNum
         self.beamStrength = beamStrength
@@ -638,21 +640,22 @@ def readAtlH5(in_file, fieldName):
     return dataOut
 
 ##### Function to read ATL03 .h5 files for mapping
-def readAtl03DataMapping(in_file03, label):
+def readAtl03DataMapping(in_file03, label, return_delta_time=False):
 #
 # Reads the data from ATL03
 #
 # Open the file
 #
-  if not os.path.isfile(in_file03):
-    print('File does not exist')
-
-  try:
-    f = h5py.File(in_file03, 'r')
-  except Exception as e:
-    print('Python message: %s\n' % e)
-    return [], []
-# endif
+    if not os.path.isfile(in_file03):
+        print('File does not exist')
+    # endIf
+    
+    try:
+        f = h5py.File(in_file03, 'r')
+    except Exception as e:
+        print('Python message: %s\n' % e)
+        return [], []
+    # endTry
 #
 # segment_ph_cnt
 #
@@ -660,12 +663,12 @@ def readAtl03DataMapping(in_file03, label):
 #
 # segment_id
 #
-  dsname=label+'/geolocation/segment_id'
-  if dsname in f:
-    segment_id=np.array(f[dsname])
-  else:
-    segment_id=[]
-# endif
+    dsname=label+'/geolocation/segment_id'
+    if dsname in f:
+        segment_id=np.array(f[dsname])
+    else:
+        segment_id=[]
+    # endif
 #
 # segment_lat
 #
@@ -674,20 +677,39 @@ def readAtl03DataMapping(in_file03, label):
 #
 # ph_index_beg
 #
-  dsname=label+'/geolocation/ph_index_beg'
-  if dsname in f:
-    ph_index_beg=np.array(f[dsname])
-  else:
-    ph_index_beg=[]
-# endif
+    dsname=label+'/geolocation/ph_index_beg'
+    if dsname in f:
+        ph_index_beg=np.array(f[dsname])
+    else:
+        ph_index_beg=[]
+    # endif
 #
 
+#
+# delta_time
+#
+    if(return_delta_time):
+        dsname=label+'/geolocation/delta_time'
+        if dsname in f:
+            delta_time=np.array(f[dsname])
+        else:
+            delta_time=[]
+        # endif
+    # endIf
+    
+    
 #
 # Close the file
 #
-  f.close()
+    f.close()
 
-  return ph_index_beg, segment_id 
+    if(return_delta_time):
+        return ph_index_beg, segment_id, delta_time
+    else:
+        return ph_index_beg, segment_id 
+    # endIf
+  
+# endDef
 
 
 ##### Function to read ATL08 .h5 files for mapping
@@ -2572,7 +2594,11 @@ def readLasHeader(lasFileInput, outputFilePath = False, logFileID = False):
                         
                         # Get EPSG code
                         proj = osr.SpatialReference(wkt=wktAll)
-                        epsg = 'epsg:' + proj.GetAttrValue('AUTHORITY',1)
+                        try:
+                            epsg = 'epsg:' + proj.GetAttrValue('AUTHORITY',1)
+                        except:
+                            pass
+                        # endTry
     
 #                        # Get ellipsoid
 #                        ellipsoid = (findStr(wktAll,'PROJCS["','/ UTM zone')).strip()
