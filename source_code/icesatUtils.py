@@ -27,7 +27,12 @@ import h5py
 import ctypes
 from numpy.ctypeslib import ndpointer 
 import copy
-from osgeo import ogr
+try:
+    from osgeo import ogr
+except ImportError:
+    osgeo_func = ['createShapefiles']
+    print('warning: module osgeo not found')
+    print('affected functions:', osgeo_func)
 
 # Import ICESat-2 modules
 from gui_addins import (superFilterFile_windows, superFilterFile_linux)

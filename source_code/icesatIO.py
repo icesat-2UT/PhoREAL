@@ -25,8 +25,6 @@ import h5py
 import ntpath
 import glob
 from scipy.io import loadmat
-from osgeo import gdal,osr,ogr
-from gdalconst import GA_ReadOnly
 import socket
 import shutil
 import pandas as pd
@@ -45,6 +43,20 @@ except ImportError:
   print('warning: module simplekml not found')
   print('affected functions:', simplekml_func)
 # endTry
+try:
+    from osgeo import gdal,osr,ogr
+except ImportError:
+  osgeo_func = ['writeTif','getDEMArrays','readDEMepsg','formatDEM', 
+                'write_geotiff','read_geotiff','loadTifFile','readTifHeader',
+                'createShapefiles']
+  print('warning: module osgeo not found')
+  print('affected functions:', osgeo_func)
+try:
+    from gdalconst import GA_ReadOnly
+except ImportError:
+  laspy_func = ['readTifHeader']
+  print('warning: module gdalconst not found')
+  print('affected functions:', laspy_func)
 
 # Import ICESat-2 modules
 from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
