@@ -49,11 +49,13 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
     else:
         
         # Reproject unmatching ESPG files to match ICESat-2 EPSG code
+        writeLog('   Reprojecting header file data...', logFileID)
         truthHeaderNewDF = reprojectHeaderData(truthHeaderDF, atlMeasuredData, logFileID)
         
         # Find truth files that intersect ICESat-2 track
         writeLog('   Determining which reference files intersect ground track...', logFileID)
-        matchingTruthFiles = findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buffer)
+        _, matchingTruthFileInds = findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buffer)
+        matchingTruthFiles = np.array(truthFilePaths)[matchingTruthFileInds]
         
         # Read truth files that intersect ICESat-2 track
         if(len(matchingTruthFiles)>0):
@@ -101,7 +103,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
         else:
             
             # No data to process
-            atlTruthData = []
+            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[],[],[])
             
             writeLog('', logFileID)
             writeLog('   WARNING: No matching reference files intersect ground track.', logFileID)
@@ -114,7 +116,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
     
     # Inform user if data is empty
     if(atlTruthEmpty):
-        writeLog('ERROR: Reference data is empty.', logFileID)
+        writeLog('   WARNING: Reference data is empty.', logFileID)
     # endIf
     
     # Create output file
@@ -134,7 +136,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
 
         # If output directory does not exist, create it
         if(not os.path.exists(os.path.normpath(outFilePath))):
-            os.mkdir(os.path.normpath(outFilePath))
+            os.makedirs(os.path.normpath(outFilePath))
         # EndIf
         
         # Write to file
@@ -173,53 +175,9 @@ if __name__ == "__main__":
     
     ##### Start Inputs for getAtlMeasuredSwath
 
-    # Path to ATL03 Input File
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181126114738_08990103_001_01.h5' # FINLAND
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181030110205_04860106_001_01.h5' # SONONMA
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20190101195003_00670202_001_01_sreq_2696.h5' # SONOMA
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20190228170214_09510202_001_02_sreq_2696.h5' # SONOMA
-    # atl03FilePath = '//bigtex/laserpewpew/data/release/001/ATL03_r001/ATL03_20190426213703_04370308_001_01.h5' # Brazil    
-    
-    # Path to ATL08 Input File
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181126114738_08990103_952_01.h5' # FINLAND
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181030110205_04860106_952_01.h5' # SONOMA
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20190101195003_00670202_952_01.h5' # SONOMA
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20190228170214_09510202_952_02.h5' # SONOMA
-    # atl08FilePath = False    
-    
-    # Path to Output Directory
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_finland_20181126_python' # FINLAND
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20181030_python' # SONOMA
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190101_python' # SONOMA
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190228_python' # SONOMA
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test' # SONOMA
-    
-#    if os.name == 'nt':
-#        base03 = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/' 
-#        base08 = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/'
-#        outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test'
-#    atl03FilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/ATL03_20181030110205_04860106_001_01_sub_218.h5' # WSMR
-#    atl08FilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/ATL08_20181030110205_04860106_001_01_sub_218.h5' # WSMR
-#    outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test''
-
-#    atl03FilePath = '/LIDAR/server/USERS/eric/2_production/icesat2_icepy/ATL03_20181030110205_04860106_001_01_sub_218.h5' # WSMR
-#    atl08FilePath = '/LIDAR/server/USERS/eric/2_production/icesat2_icepy/ATL08_20181030110205_04860106_001_01_sub_218.h5' # WSMR
-#    outFilePath = '/LIDAR/server/USERS/eric/2_production/other/test'
-#   
-#    atl03FilePath = '/laserpewpew/data/release/002/ATL03_r002/Indiana/ATL03_20181021204535_03550102_002_01.h5'
-#    atl08FilePath = '/laserpewpew/data/release/002/ATL08_r002/Indiana/ATL08_20181021204535_03550102_002_01.h5'
-
-# Current brad
-#    atl03FilePath = 'Z:/data/release/002/ATL03_r002/Finland/ATL03_20181016133637_02740103_002_01.h5'
-#    atl08FilePath = 'Z:/data/release/002/ATL08_r002/Finland/ATL08_20181016133637_02740103_002_01.h5'
-
     atl03FilePath = 'C:/Users/malonzo/GLAM/delete/ATL03_20181030110205_04860106_002_01.h5'
     atl08FilePath = 'C:/Users/malonzo/GLAM/delete/ATL08_20181030110205_04860106_002_01.h5'
-    
-    atl03FilePath = 'C:/Users/malonzo/GLAM/delete/ATL03_20191129150021_09730506_003_01_sreq_3257.h5'
-    atl08FilePath = []
-    
-    # outFilePath = '/LIDAR/server/USERS/eric/2_production/other/test'
+
     outFilePath = 'C:/Users/malonzo/GLAM/delete'
 
     # Ground track number to analyze
@@ -248,17 +206,11 @@ if __name__ == "__main__":
     
     buffer = 50                 # Distance in cross-track (meters) around ATL03 track to look for truth data 
     useExistingTruth = False     # Option to use existing truth data if it exists
-#    truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short.las'
-#    truthSwathDir = '/LIDAR/server/USERS/eric/2_production/icesat2_icepy/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short_dtm_utm.tif'
-#    truthSwathDir = 'LIDAR/data/TanDEMX/MississippiValley_TDR_DSM/TDT_N37W085_02_DEM.TIF'
-#    truthSwathDir = 'N:/data/TanDEMX/S_finland_TDR DSM_20190109.1457/ULD_TanDEM-X_TDR_DSM_20190109.1457_N62E022.tif'
-#    truthSwathDir = 'C:/Users/malonzo/GLAM/delete'
+
     truthSwathDir = 'Z:/data/validation/data/WSMR/ir'
-#    truthSwathDir = 'C:/Users/malonzo/GLAM/delete/ATL03_20191129150021_09730506_003_01_sreq_3257_gt1r_REFERENCE_50L50Rm_buffer.las'
     truthFileType = '.las'
     createTruthFile = True      # Option to create output truth .las file
 
-    
     ##### End Inputs for getAtlTruthSwath
     
     

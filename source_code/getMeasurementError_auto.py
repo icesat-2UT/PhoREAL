@@ -8,12 +8,14 @@ geolocation error in the MEASURED data based on TRUTH data.
 @author: malonzo
 """
 
+# Filter Runtime warnings
+import warnings
+
 # Import modules
 import os
 import numpy as np
 import time as runTime
 import sys
-import warnings
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from getAtlTruthSwath_auto import getAtlTruthSwath
 from icesatIO import (writeLas, writeLog, getTruthFilePaths, getTruthHeaders,
@@ -116,290 +118,475 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
         
     # endIf
         
-    if((len(crossTrackBounds) > 1) and (len(alongTrackBounds) > 1)):
-            
-        # Initialize parameters
-        correctionsCrossTrack = 0
-        correctionsAlongTrack = 0
-
-        crossTrackEdgeError = 0
-        alongTrackEdgeError = 0
-        numErr = 0
-        crossTrackBoundLimits = [-48, 48]
-        alongTrackBoundLimits = [-1000, 1000]
-
-        def limBounds(x, y, lim):
-            # x = max([x, lim[0]])
-            # y = min([lim[1], y])
-            return x, y
-
-        # Get array offsets
-        crossTrackMinBound = (np.fix(crossTrackBounds[0]/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-        crossTrackMaxBound = (np.fix((crossTrackBounds[-1])/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-        alongTrackMinBound = (np.fix(alongTrackBounds[0]/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-        alongTrackMaxBound = (np.fix((alongTrackBounds[-1])/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-        
-        # Loop through all raster resolutions (multi-resolutional approach)
-        totRasterResolutions = len(rasterResolutions)
-        # for i in range(0,totRasterResolutions):
-        i = 0
-        while i < totRasterResolutions:
-            
-            # Get current raster resolution
-            rasterResolution = rasterResolutions[i]
-
-            # Set cross-track/along-track offsets
-            if(i > 0):
-                
-                # Get previous raster resolution
-                rasterResolutionPrev = rasterResolutions[i - 1]
-                
-                # Set cross-track offsets
-                crossTrackBoundStart = correctionsCrossTrack - rasterResolutionPrev - rasterResolution + crossTrackEdgeError
-                crossTrackBoundEnd = correctionsCrossTrack + rasterResolutionPrev + rasterResolution + crossTrackEdgeError
-                crossTrackBoundStart, crossTrackBoundEnd = limBounds(crossTrackBoundStart, crossTrackBoundEnd, crossTrackBoundLimits)
-                crossTrackMinBound = (np.fix(crossTrackBoundStart/rasterResolution)*rasterResolution).astype(int)
-                crossTrackMaxBound = (np.fix(crossTrackBoundEnd/rasterResolution)*rasterResolution).astype(int)
-                crossTrackOffsets = np.arange(crossTrackMinBound, crossTrackMaxBound + 1, rasterResolution)
-            
-                # Set along-track offsets
-                alongTrackBoundStart = correctionsAlongTrack - rasterResolutionPrev - rasterResolution + alongTrackEdgeError
-                alongTrackBoundEnd = correctionsAlongTrack + rasterResolutionPrev + rasterResolution + alongTrackEdgeError
-                alongTrackBoundStart, alongTrackBoundEnd = limBounds(alongTrackBoundStart, alongTrackBoundEnd, alongTrackBoundLimits)
-                alongTrackMinBound = (np.fix(alongTrackBoundStart/rasterResolution)*rasterResolution).astype(int)
-                alongTrackMaxBound = (np.fix(alongTrackBoundEnd/rasterResolution)*rasterResolution).astype(int)
-                alongTrackOffsets = np.arange(alongTrackMinBound, alongTrackMaxBound + 1, rasterResolution)
+    # Check and make sure there is Measured and Truth data after filtering
+    measDataExists = (len(measXRot)>0) and (len(measYRot)>0)
+    truthDataExists = (len(truthXRot)>0) and (len(truthYRot)>0)
+    if(measDataExists and truthDataExists):
     
-            else:
-
-                # Set cross-track offsets
-                crossTrackBoundStart = crossTrackBounds[0] + crossTrackEdgeError
-                crossTrackBoundEnd = crossTrackBounds[-1] + crossTrackEdgeError
-                crossTrackBoundStart, crossTrackBoundEnd = limBounds(crossTrackBoundStart, crossTrackBoundEnd, crossTrackBoundLimits)
-                crossTrackMinBound = (np.fix(crossTrackBoundStart/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-                crossTrackMaxBound = (np.fix(crossTrackBoundEnd/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-                crossTrackOffsets = np.arange(crossTrackMinBound, crossTrackMaxBound + 1, rasterResolutions[0])
-
-                # Set along-track offsets
-                alongTrackBoundStart = alongTrackBounds[0] + alongTrackEdgeError
-                alongTrackBoundEnd = alongTrackBounds[-1] + alongTrackEdgeError
-                alongTrackBoundStart, alongTrackBoundEnd = limBounds(alongTrackBoundStart, alongTrackBoundEnd, alongTrackBoundLimits)
-                alongTrackMinBound = (np.fix(alongTrackBoundStart/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-                alongTrackMaxBound = (np.fix(alongTrackBoundEnd/rasterResolutions[0])*rasterResolutions[0]).astype(int)
-                alongTrackOffsets = np.arange(alongTrackMinBound, alongTrackMaxBound + 1, rasterResolutions[0])
-
-            # endIf
-            
-            # Print message to screen
-            writeLog('', logFileID)
-            writeLog('   Test Case %d of %d' %(i+1, totRasterResolutions), logFileID)
-            if not (crossTrackEdgeError == 0 and alongTrackEdgeError == 0):
-                writeLog('   Relocated search center to [%s, %s]' % (crossTrackEdgeError, alongTrackEdgeError), logFileID)
-
-            writeLog('   Raster Resolution = %s m' % rasterResolution, logFileID)
-            writeLog('   Cross Track Offsets = [%s, %s] (Adjusted to align with %s m resolution)' %(crossTrackOffsets[0], crossTrackOffsets[-1], rasterResolution), logFileID)
-            writeLog('   Along Track Offsets = [%s, %s] (Adjusted to align with %s m resolution)' %(alongTrackOffsets[0], alongTrackOffsets[-1], rasterResolution), logFileID)
-            
-            # Make Offsets Int's and flip along-track offsets array so larger numbers at top
-            crossTrackOffsets = crossTrackOffsets.astype(int)
-            alongTrackOffsets = (np.flipud(alongTrackOffsets)).astype(int)
-            
-            # Format TRUTH data
-            truthXRotReduced = np.ravel(truthXRot)
-            truthYRotReduced = np.ravel(truthYRot)
-            truthZReduced = np.ravel(truthZ)
-            
-            # Rasterize MEASURED data
-            gridMethod = 'Mean'
-            fillValue = np.nan
-            writeLog('   Gridding ICESat-2 Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
-            measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
-            
-            # Rasterize TRUTH data
-            writeLog('   Gridding Reference Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
-            truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
-            
-            # Find offsets with minimum MAE
-            writeLog('   Finding Offsets with Minimum MAE...', logFileID)
-            
-            # Store MEASURED data into array variables
-            measRasterXRot = np.c_[np.ravel(measRasterRot.x)]
-            measRasterYRot = np.c_[np.ravel(measRasterRot.y)]
-            measRasterZ    = np.c_[np.ravel(measRasterRot.grid)]
-            measRasterT    = np.c_[np.ravel(measRasterRot.t)]
-            
-            # Store TRUTH data into array variables
-            truthRasterXRot = np.c_[np.ravel(truthRasterRot.x)]
-            truthRasterYRot = np.c_[np.ravel(truthRasterRot.y)]
-            truthRasterZ    = np.c_[np.ravel(truthRasterRot.grid)]
-
-            # Create 2 column array of all MEASURED X,Y data
-            measXYall = np.column_stack([measRasterXRot, measRasterYRot])
-            
-            # Create 2 column array of all TRUTH X,Y data
-            truthXYall = np.column_stack([truthRasterXRot, truthRasterYRot])
-
-            # Find common TRUTH and MEASURED indices
-            _, truthIndsCommon, measIndsCommon = getIntersection2d(truthXYall, measXYall, assume_unique=True)
-            
-            # Only use MEASURED indices in common with TRUTH indices            
-            measRasterXRot_common = measRasterXRot[measIndsCommon]
-            measRasterYRot_common = measRasterYRot[measIndsCommon]
-            measRasterZ_common = measRasterZ[measIndsCommon]
-            measRasterT_common = measRasterT[measIndsCommon]
-            
-            # Find row, col for indices in TRUTH raster (that are in common with MEASURED raster)
-            truthColsInit = (truthIndsCommon%np.shape(truthRasterRot.x)[1]).astype(int)
-            truthRowsInit = (np.floor(truthIndsCommon/np.shape(truthRasterRot.x)[1])).astype(int)
-            
-            # Find min/max row, col for indicies in TRUTH raster
-            truthMinXBounds = 0
-            truthMaxXBounds = np.shape(truthRasterRot.grid)[1]
-            truthMinYBounds = 0
-            truthMaxYBounds = np.shape(truthRasterRot.grid)[0]
-                    
-            # Pre-allocate results data
-            numHorzCombos = np.size(crossTrackOffsets)
-            numVertCombos = np.size(alongTrackOffsets)
-            resultsCrossTrackShift = np.zeros((numVertCombos,numHorzCombos))
-            resultsAlongTrackShift = np.zeros((numVertCombos,numHorzCombos))
-            resultsVerticalShift = np.zeros((numVertCombos,numHorzCombos))
-            resultsMAE = np.zeros((numVertCombos,numHorzCombos))
-            resultsRMSE = np.zeros((numVertCombos,numHorzCombos))
-            resultsME = np.zeros((numVertCombos,numHorzCombos))
-            
-            # Loop through all combos and find min MAE
-            for I in range(0,numHorzCombos):
-                for J in range(0,numVertCombos):
-                    
-                    # Get cross-track/along-track offset values
-                    crossTrackShift = crossTrackOffsets[I]
-                    alongTrackShift = alongTrackOffsets[J]
+        if((len(crossTrackBounds) > 1) and (len(alongTrackBounds) > 1)):
                 
-                    # Get amount to shift X,Y indices
-                    moveIndsX = (crossTrackShift/rasterResolution).astype(int)
-                    moveIndsY = (alongTrackShift/rasterResolution).astype(int)
-                    
-                    # Get new TRUTH data from shifted X,Y indices
-                    truthColsCurrent = truthColsInit + moveIndsX
-                    truthRowsCurrent = truthRowsInit - moveIndsY # y array is inverted
-
-                    # Determine indices in bounds
-                    colsToKeep = (truthColsCurrent>=truthMinXBounds) & (truthColsCurrent<truthMaxXBounds)
-                    rowsToKeep = (truthRowsCurrent>=truthMinYBounds) & (truthRowsCurrent<truthMaxYBounds)
-                    indsToKeep = colsToKeep & rowsToKeep
-                    
-                    # Get current TRUTH Z points
-                    truthColsCurrent = truthColsCurrent[indsToKeep]
-                    truthRowsCurrent = truthRowsCurrent[indsToKeep]
-                    truthRasterZCurr = np.c_[np.ravel(truthRasterRot.grid[truthRowsCurrent, truthColsCurrent])]
-                    
-                    # Get current MEASURED Z points
-                    measRasterZCurr = measRasterZ_common[indsToKeep]
-                    
-                    # Find Z error
-                    zError = truthRasterZCurr - measRasterZCurr
-                    
-                    # Determine vertical shift
-                    if(offsets.useVerticalShift == 1):
-                            
-                        # Use defined vertical shift
-                        verticalShift = offsets.verticalShift
-                            
-                    else:
-                            
-                        # MAE is tied to median error (RMSE to mean error)
-                        verticalShift = np.nanmedian(zError)
-                            
-                    # Endif
-                    
-                    if(np.logical_not(np.isnan(verticalShift))):
-                    
-                        # Apply vertical shift
-                        measRasterZShifted = measRasterZCurr + verticalShift
-                        
-                        # Get new Z error
-                        zError = truthRasterZCurr - measRasterZShifted
-                        
-                        # Get Mean Absolute Error and RMSE
-                        MAE = np.nanmean(abs(zError))
-                        RMSE = np.sqrt(np.nanmean(zError**2))
-                        ME = np.nanmean(zError)
-                    
-                    else:
-                    
-                        # Populate with default values
-                        verticalShift = np.nan
-                        MAE = np.nan
-                        RMSE = np.nan
-                        ME = np.nan
-                    
-                    # endIf
-                    
-                    # Store results
-                    resultsCrossTrackShift[J,I] = crossTrackShift
-                    resultsAlongTrackShift[J,I] = alongTrackShift
-                    resultsVerticalShift[J,I] = verticalShift
-                    resultsMAE[J,I] = MAE
-                    resultsRMSE[J,I] = RMSE
-                    resultsME[J,I] = ME
-                
-                # endFor
-                
-            # endFor
-        
-#            # TEST!!!
-#            # Set first/last rows/columns to NaN on first iteration to avoid choosing edge cases           
-#            if(i==0):
-#                resultsMAE[0,:] = np.nan
-#                resultsMAE[-1,:] = np.nan
-#                resultsMAE[:,0] = np.nan
-#                resultsMAE[:,-1] = np.nan
-#            # endIf
-            
-            # Find row, col for min MAE
-            minRow = np.where(resultsMAE == np.nanmin(resultsMAE))[0]
-            minCol = np.where(resultsMAE == np.nanmin(resultsMAE))[1]
-            if minRow == [] or minCol == []:
-                writeLog('Error: Gridding all NaN, ensure ICESat-2/Reference files are correct', logFileID)
-                return []
-
-            # Check that estimate is not close to an edge
-            nr, nc = np.shape(resultsMAE)
-            dr, dc = 1, 1 # edge "closeness", index units
-            inBounds = minRow in range(0+dr, nr-dr) and minCol in range(0+dc, nc-dc)
-            if not inBounds:
-                # estimated an edge
-
-                p = np.array([float(resultsCrossTrackShift[minRow,minCol]), float(resultsAlongTrackShift[minRow,minCol])])
-                mid = np.array([np.mean([crossTrackBoundStart, crossTrackBoundEnd]), np.mean([alongTrackBoundStart, alongTrackBoundEnd])])
-                vec_diff = p - mid
-
-                numErr += 1
-                if numErr == 5:
-                    writeLog('   Error: Could not determine valid estimate, consider increasing search bounds', logFileID)
-                    return []
-
-                else:
-                    crossTrackEdgeError += vec_diff[0] #p[0]
-                    alongTrackEdgeError += vec_diff[1] #p[1]
-                    writeLog('   Warning: Estimate on edge [%4.1f, %4.1f] m, relocating search and re-running test case %d...' % (p[0], p[1], i+1), logFileID)
-                    continue # do not update i
-
-            # Set edge error to zero if inBounds, this way
-            # we center on estimate and zoom in since estimate is good
-            numErr = 0
+            # Initialize parameters
+            correctionsCrossTrack = 0
+            correctionsAlongTrack = 0
+    
             crossTrackEdgeError = 0
             alongTrackEdgeError = 0
-
-            # Get output associated with min MAE            
-            correctionsCrossTrack = resultsCrossTrackShift[minRow, minCol]
-            correctionsAlongTrack = resultsAlongTrackShift[minRow, minCol]
-            correctionsVertical = resultsVerticalShift[minRow, minCol]
-            correctionsMAE = resultsMAE[minRow, minCol]
-            correctionsRMSE = resultsRMSE[minRow, minCol]
-            correctionsME = resultsME[minRow, minCol]
+            numErr = 0
+            crossTrackBoundLimits = [-48, 48]
+            alongTrackBoundLimits = [-1000, 1000]
+    
+            def limBounds(x, y, lim):
+                # x = max([x, lim[0]])
+                # y = min([lim[1], y])
+                return x, y
+    
+            # Get array offsets
+            crossTrackMinBound = (np.fix(crossTrackBounds[0]/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+            crossTrackMaxBound = (np.fix((crossTrackBounds[-1])/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+            alongTrackMinBound = (np.fix(alongTrackBounds[0]/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+            alongTrackMaxBound = (np.fix((alongTrackBounds[-1])/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+            
+            # Loop through all raster resolutions (multi-resolutional approach)
+            totRasterResolutions = len(rasterResolutions)
+            # for i in range(0,totRasterResolutions):
+            i = 0
+            while i < totRasterResolutions:
+                
+                # Get current raster resolution
+                rasterResolution = rasterResolutions[i]
+    
+                # Set cross-track/along-track offsets
+                if(i > 0):
+                    
+                    # Get previous raster resolution
+                    rasterResolutionPrev = rasterResolutions[i - 1]
+                    
+                    # Set cross-track offsets
+                    crossTrackBoundStart = correctionsCrossTrack - rasterResolutionPrev - rasterResolution + crossTrackEdgeError
+                    crossTrackBoundEnd = correctionsCrossTrack + rasterResolutionPrev + rasterResolution + crossTrackEdgeError
+                    crossTrackBoundStart, crossTrackBoundEnd = limBounds(crossTrackBoundStart, crossTrackBoundEnd, crossTrackBoundLimits)
+                    crossTrackMinBound = (np.fix(crossTrackBoundStart/rasterResolution)*rasterResolution).astype(int)
+                    crossTrackMaxBound = (np.fix(crossTrackBoundEnd/rasterResolution)*rasterResolution).astype(int)
+                    crossTrackOffsets = np.arange(crossTrackMinBound, crossTrackMaxBound + 1, rasterResolution)
+                
+                    # Set along-track offsets
+                    alongTrackBoundStart = correctionsAlongTrack - rasterResolutionPrev - rasterResolution + alongTrackEdgeError
+                    alongTrackBoundEnd = correctionsAlongTrack + rasterResolutionPrev + rasterResolution + alongTrackEdgeError
+                    alongTrackBoundStart, alongTrackBoundEnd = limBounds(alongTrackBoundStart, alongTrackBoundEnd, alongTrackBoundLimits)
+                    alongTrackMinBound = (np.fix(alongTrackBoundStart/rasterResolution)*rasterResolution).astype(int)
+                    alongTrackMaxBound = (np.fix(alongTrackBoundEnd/rasterResolution)*rasterResolution).astype(int)
+                    alongTrackOffsets = np.arange(alongTrackMinBound, alongTrackMaxBound + 1, rasterResolution)
         
+                else:
+    
+                    # Set cross-track offsets
+                    crossTrackBoundStart = crossTrackBounds[0] + crossTrackEdgeError
+                    crossTrackBoundEnd = crossTrackBounds[-1] + crossTrackEdgeError
+                    crossTrackBoundStart, crossTrackBoundEnd = limBounds(crossTrackBoundStart, crossTrackBoundEnd, crossTrackBoundLimits)
+                    crossTrackMinBound = (np.fix(crossTrackBoundStart/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+                    crossTrackMaxBound = (np.fix(crossTrackBoundEnd/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+                    crossTrackOffsets = np.arange(crossTrackMinBound, crossTrackMaxBound + 1, rasterResolutions[0])
+    
+                    # Set along-track offsets
+                    alongTrackBoundStart = alongTrackBounds[0] + alongTrackEdgeError
+                    alongTrackBoundEnd = alongTrackBounds[-1] + alongTrackEdgeError
+                    alongTrackBoundStart, alongTrackBoundEnd = limBounds(alongTrackBoundStart, alongTrackBoundEnd, alongTrackBoundLimits)
+                    alongTrackMinBound = (np.fix(alongTrackBoundStart/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+                    alongTrackMaxBound = (np.fix(alongTrackBoundEnd/rasterResolutions[0])*rasterResolutions[0]).astype(int)
+                    alongTrackOffsets = np.arange(alongTrackMinBound, alongTrackMaxBound + 1, rasterResolutions[0])
+    
+                # endIf
+                
+                # Print message to screen
+                writeLog('', logFileID)
+                writeLog('   Test Case %d of %d' %(i+1, totRasterResolutions), logFileID)
+                if not (crossTrackEdgeError == 0 and alongTrackEdgeError == 0):
+                    writeLog('   Relocated search center to [%s, %s]' % (crossTrackEdgeError, alongTrackEdgeError), logFileID)
+    
+                writeLog('   Raster Resolution = %s m' % rasterResolution, logFileID)
+                writeLog('   Cross Track Offsets = [%s, %s] (Adjusted to align with %s m resolution)' %(crossTrackOffsets[0], crossTrackOffsets[-1], rasterResolution), logFileID)
+                writeLog('   Along Track Offsets = [%s, %s] (Adjusted to align with %s m resolution)' %(alongTrackOffsets[0], alongTrackOffsets[-1], rasterResolution), logFileID)
+                
+                # Make Offsets Int's and flip along-track offsets array so larger numbers at top
+                crossTrackOffsets = crossTrackOffsets.astype(int)
+                alongTrackOffsets = (np.flipud(alongTrackOffsets)).astype(int)
+                
+                # Format TRUTH data
+                truthXRotReduced = np.ravel(truthXRot)
+                truthYRotReduced = np.ravel(truthYRot)
+                truthZReduced = np.ravel(truthZ)
+                
+                # Rasterize MEASURED data
+                gridMethod = 'Mean'
+                fillValue = np.nan
+                writeLog('   Gridding ICESat-2 Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+                measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
+                
+                # Rasterize TRUTH data
+                writeLog('   Gridding Reference Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+                truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
+                
+                # Find offsets with minimum MAE
+                writeLog('   Finding Offsets with Minimum MAE...', logFileID)
+                
+                # Store MEASURED data into array variables
+                measRasterXRot = np.c_[np.ravel(measRasterRot.x)]
+                measRasterYRot = np.c_[np.ravel(measRasterRot.y)]
+                measRasterZ    = np.c_[np.ravel(measRasterRot.grid)]
+                measRasterT    = np.c_[np.ravel(measRasterRot.t)]
+                
+                # Store TRUTH data into array variables
+                truthRasterXRot = np.c_[np.ravel(truthRasterRot.x)]
+                truthRasterYRot = np.c_[np.ravel(truthRasterRot.y)]
+                truthRasterZ    = np.c_[np.ravel(truthRasterRot.grid)]
+    
+                # Create 2 column array of all MEASURED X,Y data
+                measXYall = np.column_stack([measRasterXRot, measRasterYRot])
+                
+                # Create 2 column array of all TRUTH X,Y data
+                truthXYall = np.column_stack([truthRasterXRot, truthRasterYRot])
+    
+                # Find common TRUTH and MEASURED indices
+                _, truthIndsCommon, measIndsCommon = getIntersection2d(truthXYall, measXYall, assume_unique=True)
+                
+                # Only use MEASURED indices in common with TRUTH indices            
+                measRasterXRot_common = measRasterXRot[measIndsCommon]
+                measRasterYRot_common = measRasterYRot[measIndsCommon]
+                measRasterZ_common = measRasterZ[measIndsCommon]
+                measRasterT_common = measRasterT[measIndsCommon]
+                
+                # Find row, col for indices in TRUTH raster (that are in common with MEASURED raster)
+                truthColsInit = (truthIndsCommon%np.shape(truthRasterRot.x)[1]).astype(int)
+                truthRowsInit = (np.floor(truthIndsCommon/np.shape(truthRasterRot.x)[1])).astype(int)
+                
+                # Find min/max row, col for indicies in TRUTH raster
+                truthMinXBounds = 0
+                truthMaxXBounds = np.shape(truthRasterRot.grid)[1]
+                truthMinYBounds = 0
+                truthMaxYBounds = np.shape(truthRasterRot.grid)[0]
+                        
+                # Pre-allocate results data
+                numHorzCombos = np.size(crossTrackOffsets)
+                numVertCombos = np.size(alongTrackOffsets)
+                resultsCrossTrackShift = np.zeros((numVertCombos,numHorzCombos))
+                resultsAlongTrackShift = np.zeros((numVertCombos,numHorzCombos))
+                resultsVerticalShift = np.zeros((numVertCombos,numHorzCombos))
+                resultsMAE = np.zeros((numVertCombos,numHorzCombos))
+                resultsRMSE = np.zeros((numVertCombos,numHorzCombos))
+                resultsME = np.zeros((numVertCombos,numHorzCombos))
+                
+                # Loop through all combos and find min MAE
+                for I in range(0,numHorzCombos):
+                    for J in range(0,numVertCombos):
+                        
+                        # Get cross-track/along-track offset values
+                        crossTrackShift = crossTrackOffsets[I]
+                        alongTrackShift = alongTrackOffsets[J]
+                    
+                        # Get amount to shift X,Y indices
+                        moveIndsX = (crossTrackShift/rasterResolution).astype(int)
+                        moveIndsY = (alongTrackShift/rasterResolution).astype(int)
+                        
+                        # Get new TRUTH data from shifted X,Y indices
+                        truthColsCurrent = truthColsInit + moveIndsX
+                        truthRowsCurrent = truthRowsInit - moveIndsY # y array is inverted
+    
+                        # Determine indices in bounds
+                        colsToKeep = (truthColsCurrent>=truthMinXBounds) & (truthColsCurrent<truthMaxXBounds)
+                        rowsToKeep = (truthRowsCurrent>=truthMinYBounds) & (truthRowsCurrent<truthMaxYBounds)
+                        indsToKeep = colsToKeep & rowsToKeep
+                        
+                        # Get current TRUTH Z points
+                        truthColsCurrent = truthColsCurrent[indsToKeep]
+                        truthRowsCurrent = truthRowsCurrent[indsToKeep]
+                        truthRasterZCurr = np.c_[np.ravel(truthRasterRot.grid[truthRowsCurrent, truthColsCurrent])]
+                        
+                        # Get current MEASURED Z points
+                        measRasterZCurr = measRasterZ_common[indsToKeep]
+                        
+                        # Find Z error
+                        zError = truthRasterZCurr - measRasterZCurr
+                        
+                        # Determine vertical shift
+                        if(offsets.useVerticalShift == 1):
+                                
+                            # Use defined vertical shift
+                            verticalShift = offsets.verticalShift
+                                
+                        else:
+                                
+                            # MAE is tied to median error (RMSE to mean error)
+                            verticalShift = np.nanmedian(zError)
+                                
+                        # Endif
+                        
+                        if(np.logical_not(np.isnan(verticalShift))):
+                        
+                            # Apply vertical shift
+                            measRasterZShifted = measRasterZCurr + verticalShift
+                            
+                            # Get new Z error
+                            zError = truthRasterZCurr - measRasterZShifted
+                            
+                            # Get Mean Absolute Error and RMSE
+                            MAE = np.nanmean(abs(zError))
+                            RMSE = np.sqrt(np.nanmean(zError**2))
+                            ME = np.nanmean(zError)
+                        
+                        else:
+                        
+                            # Populate with default values
+                            verticalShift = np.nan
+                            MAE = np.nan
+                            RMSE = np.nan
+                            ME = np.nan
+                        
+                        # endIf
+                        
+                        # Store results
+                        resultsCrossTrackShift[J,I] = crossTrackShift
+                        resultsAlongTrackShift[J,I] = alongTrackShift
+                        resultsVerticalShift[J,I] = verticalShift
+                        resultsMAE[J,I] = MAE
+                        resultsRMSE[J,I] = RMSE
+                        resultsME[J,I] = ME
+                    
+                    # endFor
+                    
+                # endFor
+            
+    #            # TEST!!!
+    #            # Set first/last rows/columns to NaN on first iteration to avoid choosing edge cases           
+    #            if(i==0):
+    #                resultsMAE[0,:] = np.nan
+    #                resultsMAE[-1,:] = np.nan
+    #                resultsMAE[:,0] = np.nan
+    #                resultsMAE[:,-1] = np.nan
+    #            # endIf
+                
+                # Find row, col for min MAE
+                minRow = np.where(resultsMAE == np.nanmin(resultsMAE))[0]
+                minCol = np.where(resultsMAE == np.nanmin(resultsMAE))[1]
+                if( (len(minRow)==0) or (len(minCol)==0) ):
+                    writeLog('Error: Gridding all NaN, ensure ICESat-2/Reference files are correct', logFileID)
+                    return []
+    
+                if(len(minRow)>1):
+                    minRow = np.array([np.median(minRow)], dtype='int64')
+                # endIf
+                
+                if(len(minCol)>1):
+                    minCol = np.array([np.median(minCol)], dtype='int64')
+                # endIf
+                
+                # Check that estimate is not close to an edge
+                nr, nc = np.shape(resultsMAE)
+                dr, dc = 1, 1 # edge "closeness", index units
+                inBounds = minRow in range(0+dr, nr-dr) and minCol in range(0+dc, nc-dc)
+                if not inBounds:
+                    # estimated an edge
+    
+                    p = np.array([float(resultsCrossTrackShift[minRow,minCol]), float(resultsAlongTrackShift[minRow,minCol])])
+                    mid = np.array([np.mean([crossTrackBoundStart, crossTrackBoundEnd]), np.mean([alongTrackBoundStart, alongTrackBoundEnd])])
+                    vec_diff = p - mid
+    
+                    numErr += 1
+                    if numErr == 5:
+                        writeLog('   Error: Could not determine valid estimate, consider increasing search bounds', logFileID)
+                        return []
+    
+                    else:
+                        crossTrackEdgeError += vec_diff[0] #p[0]
+                        alongTrackEdgeError += vec_diff[1] #p[1]
+                        writeLog('   Warning: Estimate on edge [%4.1f, %4.1f] m, relocating search and re-running test case %d...' % (p[0], p[1], i+1), logFileID)
+                        continue # do not update i
+    
+                # Set edge error to zero if inBounds, this way
+                # we center on estimate and zoom in since estimate is good
+                numErr = 0
+                crossTrackEdgeError = 0
+                alongTrackEdgeError = 0
+    
+                # Get output associated with min MAE            
+                correctionsCrossTrack = resultsCrossTrackShift[minRow, minCol]
+                correctionsAlongTrack = resultsAlongTrackShift[minRow, minCol]
+                correctionsVertical = resultsVerticalShift[minRow, minCol]
+                correctionsMAE = resultsMAE[minRow, minCol]
+                correctionsRMSE = resultsRMSE[minRow, minCol]
+                correctionsME = resultsME[minRow, minCol]
+            
+                # Get CT/AT offsets in Easting/Northing plane
+                R_mat = rotationData.R_mat
+                xRotPt = rotationData.xRotPt
+                yRotPt = rotationData.yRotPt
+                correctionsEasting, correctionsNorthing, _, _, _ = getCoordRotRev(correctionsCrossTrack, correctionsAlongTrack, R_mat, xRotPt, yRotPt)
+                correctionsEasting -= xRotPt
+                correctionsNorthing -= yRotPt
+                
+                # Print results to screen
+                writeLog('   Cross-Track Correction = %d m (Easting = %0.1f m)'  % (correctionsCrossTrack, correctionsEasting), logFileID)
+                writeLog('   Along-Track Correction = %d m (Northing = %0.1f m)' % (correctionsAlongTrack, correctionsNorthing), logFileID)
+                writeLog('   Vertical Correction = %0.1f m' % correctionsVertical, logFileID)
+                writeLog('   MAE = %0.2f m' % correctionsMAE, logFileID)
+                writeLog('   RMSE = %0.2f m' % correctionsRMSE, logFileID)
+                
+                # Get final MEASURED raster data
+                measRasterXRotFinal= measRasterXRot + correctionsCrossTrack
+                measRasterYRotFinal = measRasterYRot + correctionsAlongTrack
+                measRasterZFinal = measRasterZ + correctionsVertical
+                measRasterTFinal = measRasterT
+        
+                # Get amount to shift X,Y indices
+                moveIndsX = (correctionsCrossTrack/rasterResolution).astype(int)
+                moveIndsY = (correctionsAlongTrack/rasterResolution).astype(int)
+                
+                # Get new TRUTH data from shifted X,Y indices
+                truthColsCurrent = truthColsInit + moveIndsX
+                truthRowsCurrent = truthRowsInit - moveIndsY # y array is inverted
+    
+                # Determine indices in bounds
+                colsToKeep = (truthColsCurrent>=truthMinXBounds) & (truthColsCurrent<truthMaxXBounds)
+                rowsToKeep = (truthRowsCurrent>=truthMinYBounds) & (truthRowsCurrent<truthMaxYBounds)
+                indsToKeep = colsToKeep & rowsToKeep
+                
+                # Get final common TRUTH data
+                truthColsCurrent = truthColsCurrent[indsToKeep]
+                truthRowsCurrent = truthRowsCurrent[indsToKeep]
+                truthRasterXRotCommonFinal = np.c_[np.ravel(truthRasterRot.x[truthRowsCurrent, truthColsCurrent])]
+                truthRasterYRotCommonFinal = np.c_[np.ravel(truthRasterRot.y[truthRowsCurrent, truthColsCurrent])]
+                truthRasterZCommonFinal = np.c_[np.ravel(truthRasterRot.grid[truthRowsCurrent, truthColsCurrent])]
+                        
+                # Get final common MEASURED data
+                measRasterXRotCommonFinal = measRasterXRot_common[indsToKeep] + correctionsCrossTrack
+                measRasterYRotCommonFinal = measRasterYRot_common[indsToKeep] + correctionsAlongTrack
+                measRasterZCommonFinal = measRasterZ_common[indsToKeep] + correctionsVertical
+                measRasterTCommonFinal = measRasterT_common[indsToKeep]
+                
+                # Get Z Error raster (MEASURED - TRUTH)
+                zErrorCommonFinal = measRasterZCommonFinal - truthRasterZCommonFinal
+                
+                # Find Z values that are not NaN in both MEASURED and TRUTH data
+                measNotNan = np.logical_not(np.isnan(measRasterZCommonFinal))
+                truthNotNan = np.logical_not(np.isnan(truthRasterZCommonFinal))
+                allNotNan = measNotNan & truthNotNan
+                
+                # Filter out non-NaN values in TRUTH data
+                truthRasterXRotCommonFinal = truthRasterXRotCommonFinal[allNotNan]
+                truthRasterYRotCommonFinal = truthRasterYRotCommonFinal[allNotNan]
+                truthRasterZCommonFinal = truthRasterZCommonFinal[allNotNan]
+                
+                # Filter out non-NaN values in MEASURED data
+                measRasterXRotCommonFinal = measRasterXRotCommonFinal[allNotNan]
+                measRasterYRotCommonFinal = measRasterYRotCommonFinal[allNotNan]
+                measRasterZCommonFinal = measRasterZCommonFinal[allNotNan]
+                measRasterTCommonFinal = measRasterTCommonFinal[allNotNan]
+                  
+                # Filter out non-NaN values in error data
+                zErrorCommonFinal = zErrorCommonFinal[allNotNan]
+                
+                # Get 100 m segment Z Mean Error data
+                errorResolution = 100
+                gridMethod = 'Mean'
+                fillValue = np.nan
+                try:
+                    segmentError = getRaster(np.ravel(measRasterXRotCommonFinal), np.ravel(measRasterYRotCommonFinal), np.ravel(zErrorCommonFinal), errorResolution, gridMethod, fillValue)
+                    segmentErrorX = np.mean(segmentError.x, axis = 1)
+                    segmentErrorY = np.mean(segmentError.y, axis = 1)
+                    segmentErrorZ = np.nanmean(segmentError.grid, axis = 1)
+                except:
+                    segmentErrorX = np.NaN
+                    segmentErrorY = np.NaN
+                    segmentErrorZ = np.NaN
+                # endIf 
+                
+                # Format Y,Z values for plotting
+                segmentErrorXYZ = np.column_stack([segmentErrorX, segmentErrorY, segmentErrorZ])
+                segmentErrorXYZsorted = segmentErrorXYZ[segmentErrorXYZ[:,1].argsort(),]
+                segmentErrorLo = segmentErrorXYZsorted[:,1] - errorResolution*0.5
+                segmentErrorHi = segmentErrorXYZsorted[:,1] + errorResolution*0.5
+                segmentErrorXin = (np.column_stack([segmentErrorXYZsorted[:,0], segmentErrorXYZsorted[:,0]])).flatten()
+                segmentErrorYin = (np.column_stack([segmentErrorLo, segmentErrorHi])).flatten()
+                segmentErrorZin = (np.column_stack([segmentErrorXYZsorted[:,2], segmentErrorXYZsorted[:,2]])).flatten()
+        
+                # Convert to easting/northing plane
+                _, segmentErrorY_plot, _, _, _ = getCoordRotRev(segmentErrorXin, segmentErrorYin, R_mat, xRotPt, yRotPt)        
+                segmentErrorZ_plot = segmentErrorZin
+        
+                # Convert common measured and truth data back to Easting/Northing plane
+                try:
+                    _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                    _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                except:
+                    measRasterYCommonFinal = np.array([])
+                    truthRasterYCommonFinal = np.array([])
+                # endIf 
+                
+                # Get shifted data
+                shiftedEasting = atlMeasuredData.easting + correctionsEasting
+                shiftedNorthing = atlMeasuredData.northing + correctionsNorthing
+                shiftedCrossTrack = atlMeasuredData.crossTrack + correctionsCrossTrack
+                shiftedAlongTrack = atlMeasuredData.alongTrack + correctionsAlongTrack
+                shiftedVertical = atlMeasuredData.z + correctionsVertical
+                shiftedVerticalMsl = atlMeasuredData.zMsl + correctionsVertical
+                
+                # Get lat/lon
+                shiftedLat, shiftedLon = getUTM2LatLon(shiftedEasting, 
+                                                       shiftedNorthing, 
+                                                       atlMeasuredData.zone, 
+                                                       atlMeasuredData.hemi)
+            
+                # Store data in class structure
+                atlCorrections = atlCorrectionsStruct(shiftedEasting, shiftedNorthing, \
+                                                      shiftedCrossTrack, shiftedAlongTrack, \
+                                                      shiftedLat, shiftedLon, \
+                                                      shiftedVertical, shiftedVerticalMsl, \
+                                                      atlMeasuredData.time, atlMeasuredData.deltaTime, \
+                                                      atlMeasuredData.classification, \
+                                                      atlMeasuredData.signalConf, \
+                                                      atlMeasuredData.zone, atlMeasuredData.hemi, \
+                                                      correctionsCrossTrack, correctionsAlongTrack, \
+                                                      correctionsEasting, correctionsNorthing, \
+                                                      correctionsVertical, \
+                                                      correctionsMAE, correctionsRMSE, correctionsME, \
+                                                      measRasterYCommonFinal, \
+                                                      measRasterZCommonFinal, \
+                                                      truthRasterYCommonFinal, \
+                                                      truthRasterZCommonFinal)
+                # Make plots
+                if(makePlots):
+                    
+                    # Make contour plot
+                    writeLog('   Making Plots...', logFileID)
+                    plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, 
+                                atlMeasuredData, atlCorrections, rasterResolution, showPlots, 
+                                outFilePath, i)
+                
+                    # Make ZY scatter plots
+                    plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, 
+                           truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, 
+                           segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, 
+                           useMeasSigConf, filterData, showPlots, outFilePath, i)
+                    
+                    # Make ZT scatter plots
+                    plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, 
+                           atlMeasuredData, atlCorrections, rasterResolution, 
+                           useMeasSigConf, filterData, showPlots, outFilePath, i)
+        
+                # endIf 
+    
+                i += 1
+                
+            # endFor
+            
+        else:
+                
+            # Hard-coded offsets case
+            writeLog('   Using preset values...', logFileID)
+            
+            # Set cross-track/along-track offsets
+            correctionsCrossTrack = crossTrackBounds
+            correctionsAlongTrack = alongTrackBounds
+            
             # Get CT/AT offsets in Easting/Northing plane
             R_mat = rotationData.R_mat
             xRotPt = rotationData.xRotPt
@@ -408,75 +595,95 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
             correctionsEasting -= xRotPt
             correctionsNorthing -= yRotPt
             
-            # Print results to screen
-            writeLog('   Cross-Track Correction = %d m (Easting = %0.1f m)'  % (correctionsCrossTrack, correctionsEasting), logFileID)
-            writeLog('   Along-Track Correction = %d m (Northing = %0.1f m)' % (correctionsAlongTrack, correctionsNorthing), logFileID)
-            writeLog('   Vertical Correction = %0.1f m' % correctionsVertical, logFileID)
-            writeLog('   MAE = %0.2f m' % correctionsMAE, logFileID)
-            writeLog('   RMSE = %0.2f m' % correctionsRMSE, logFileID)
+            # Get vertical offset
+            if(offsets.useVerticalShift):
+                correctionsVertical = np.array([float(offsets.verticalShift)])
+            else:
+                correctionsVertical = np.array([0.0])
+            # endIf
+            
+            # Rasterize MEASURED data
+            rasterResolution = rasterResolutions[-1]
+            gridMethod = 'Mean'
+            fillValue = -999
+            writeLog('   Gridding ICESat-2 Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+            
+            # Add in corrections
+            measXRot += correctionsCrossTrack
+            measYRot += correctionsAlongTrack
+            measZ += correctionsVertical
+            
+            # Raster MEASURED data
+            measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
+            
+            # Reduce TRUTH data to width of cross-track offsets
+    #        measWidth = (np.ceil( ( measXRot.max() - measXRot.min() ) / 2.0 )).astype(int)
+    #        minTruthBound = (crossTrackBounds - measWidth).astype(int) - 5
+    #        maxTruthBound = (crossTrackBounds + measWidth).astype(int) + 5
+    #        truthInOffsetsInds = (truthXRot >= minTruthBound) & (truthXRot <= maxTruthBound)
+    #        truthXRotReduced = truthXRot[truthInOffsetsInds]
+    #        truthYRotReduced = truthYRot[truthInOffsetsInds]
+    #        truthZReduced = truthZ[truthInOffsetsInds]
+            truthXRotReduced = truthXRot
+            truthYRotReduced = truthYRot
+            truthZReduced = truthZ
+                
+            # Rasterize TRUTH data
+            writeLog('   Gridding Reference Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
+            truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
+            
+            # Remove NaN data (-999) in MEASURED raster
+            measIndsToKeep = measRasterRot.grid != -999
+            measRasterXRot = measRasterRot.x[measIndsToKeep]
+            measRasterYRot = measRasterRot.y[measIndsToKeep]
+            measRasterZ    = measRasterRot.grid[measIndsToKeep]
+            measRasterT    = measRasterRot.t[measIndsToKeep]
             
             # Get final MEASURED raster data
-            measRasterXRotFinal= measRasterXRot + correctionsCrossTrack
-            measRasterYRotFinal = measRasterYRot + correctionsAlongTrack
-            measRasterZFinal = measRasterZ + correctionsVertical
+            measRasterXRotFinal= measRasterXRot
+            measRasterYRotFinal = measRasterYRot
+            measRasterZFinal = measRasterZ
             measRasterTFinal = measRasterT
-    
-            # Get amount to shift X,Y indices
-            moveIndsX = (correctionsCrossTrack/rasterResolution).astype(int)
-            moveIndsY = (correctionsAlongTrack/rasterResolution).astype(int)
+                
+            # Remove NaN data (-999) in TRUTH raster
+            truthIndsToKeep = truthRasterRot.grid != -999
+            truthRasterXRot = truthRasterRot.x[truthIndsToKeep]
+            truthRasterYRot = truthRasterRot.y[truthIndsToKeep]
+            truthRasterZ    = truthRasterRot.grid[truthIndsToKeep]
+                
+            # Get common MEASURED and TRUTH raster indices 
+            xyMeasRasterRotFinal = np.concatenate((np.c_[measRasterXRotFinal],np.c_[measRasterYRotFinal]),axis = 1)
+            xyTruthRasterRot = np.concatenate((np.c_[truthRasterXRot],np.c_[truthRasterYRot]),axis = 1)
+            commonValsFinal, xyCommonMeasIndsFinal, xyCommonTruthIndsFinal = getIntersection2d(xyMeasRasterRotFinal, xyTruthRasterRot, assume_unique=True)
             
-            # Get new TRUTH data from shifted X,Y indices
-            truthColsCurrent = truthColsInit + moveIndsX
-            truthRowsCurrent = truthRowsInit - moveIndsY # y array is inverted
-
-            # Determine indices in bounds
-            colsToKeep = (truthColsCurrent>=truthMinXBounds) & (truthColsCurrent<truthMaxXBounds)
-            rowsToKeep = (truthRowsCurrent>=truthMinYBounds) & (truthRowsCurrent<truthMaxYBounds)
-            indsToKeep = colsToKeep & rowsToKeep
+            # Get common MEASURED raster points
+            measRasterXRotCommonFinal = measRasterXRotFinal[xyCommonMeasIndsFinal]
+            measRasterYRotCommonFinal = measRasterYRotFinal[xyCommonMeasIndsFinal]
+            measRasterZCommonFinal = measRasterZFinal[xyCommonMeasIndsFinal]
+            measRasterTCommonFinal = measRasterTFinal[xyCommonMeasIndsFinal]
             
-            # Get final common TRUTH data
-            truthColsCurrent = truthColsCurrent[indsToKeep]
-            truthRowsCurrent = truthRowsCurrent[indsToKeep]
-            truthRasterXRotCommonFinal = np.c_[np.ravel(truthRasterRot.x[truthRowsCurrent, truthColsCurrent])]
-            truthRasterYRotCommonFinal = np.c_[np.ravel(truthRasterRot.y[truthRowsCurrent, truthColsCurrent])]
-            truthRasterZCommonFinal = np.c_[np.ravel(truthRasterRot.grid[truthRowsCurrent, truthColsCurrent])]
-                    
-            # Get final common MEASURED data
-            measRasterXRotCommonFinal = measRasterXRot_common[indsToKeep] + correctionsCrossTrack
-            measRasterYRotCommonFinal = measRasterYRot_common[indsToKeep] + correctionsAlongTrack
-            measRasterZCommonFinal = measRasterZ_common[indsToKeep] + correctionsVertical
-            measRasterTCommonFinal = measRasterT_common[indsToKeep]
+            # Get common TRUTH raster points
+            truthRasterXRotCommonFinal = truthRasterXRot[xyCommonTruthIndsFinal]
+            truthRasterYRotCommonFinal = truthRasterYRot[xyCommonTruthIndsFinal]
+            truthRasterZCommonFinal = truthRasterZ[xyCommonTruthIndsFinal]
             
-            # Get Z Error raster (MEASURED - TRUTH)
+            # Get Z Error raster (TRUTH - MEASURED)
             zErrorCommonFinal = measRasterZCommonFinal - truthRasterZCommonFinal
-            
-            # Find Z values that are not NaN in both MEASURED and TRUTH data
-            measNotNan = np.logical_not(np.isnan(measRasterZCommonFinal))
-            truthNotNan = np.logical_not(np.isnan(truthRasterZCommonFinal))
-            allNotNan = measNotNan & truthNotNan
-            
-            # Filter out non-NaN values in TRUTH data
-            truthRasterXRotCommonFinal = truthRasterXRotCommonFinal[allNotNan]
-            truthRasterYRotCommonFinal = truthRasterYRotCommonFinal[allNotNan]
-            truthRasterZCommonFinal = truthRasterZCommonFinal[allNotNan]
-            
-            # Filter out non-NaN values in MEASURED data
-            measRasterXRotCommonFinal = measRasterXRotCommonFinal[allNotNan]
-            measRasterYRotCommonFinal = measRasterYRotCommonFinal[allNotNan]
-            measRasterZCommonFinal = measRasterZCommonFinal[allNotNan]
-            measRasterTCommonFinal = measRasterTCommonFinal[allNotNan]
-              
-            # Filter out non-NaN values in error data
-            zErrorCommonFinal = zErrorCommonFinal[allNotNan]
             
             # Get 100 m segment Z Mean Error data
             errorResolution = 100
             gridMethod = 'Mean'
             fillValue = np.nan
-            segmentError = getRaster(np.ravel(measRasterXRotCommonFinal), np.ravel(measRasterYRotCommonFinal), np.ravel(zErrorCommonFinal), errorResolution, gridMethod, fillValue)
-            segmentErrorX = np.mean(segmentError.x, axis = 1)
-            segmentErrorY = np.mean(segmentError.y, axis = 1)
-            segmentErrorZ = np.nanmean(segmentError.grid, axis = 1)
+            try:
+                segmentError = getRaster(measRasterXRotCommonFinal, measRasterYRotCommonFinal, zErrorCommonFinal, errorResolution, gridMethod, fillValue)
+                segmentErrorX = np.mean(segmentError.x, axis = 1)
+                segmentErrorY = np.mean(segmentError.y, axis = 1)
+                segmentErrorZ = np.nanmean(segmentError.grid, axis = 1)
+            except:
+                segmentErrorX = np.NaN
+                segmentErrorY = np.NaN
+                segmentErrorZ = np.NaN
+            # endIf 
             
             # Format Y,Z values for plotting
             segmentErrorXYZ = np.column_stack([segmentErrorX, segmentErrorY, segmentErrorZ])
@@ -492,9 +699,23 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
             segmentErrorZ_plot = segmentErrorZin
     
             # Convert common measured and truth data back to Easting/Northing plane
-            _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
-            _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+            try:
+                _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+            except:
+                measRasterYCommonFinal = np.array([])
+                truthRasterYCommonFinal = np.array([])
+            # endIf 
     
+            MAE = np.nanmean(abs(zErrorCommonFinal))
+            RMSE = np.sqrt(np.nanmean(zErrorCommonFinal**2))
+            ME = np.nanmean(zErrorCommonFinal)
+                            
+            # Set error values
+            correctionsMAE = np.array([MAE])
+            correctionsRMSE = np.array([RMSE])
+            correctionsME = np.array([ME])
+        
             # Get shifted data
             shiftedEasting = atlMeasuredData.easting + correctionsEasting
             shiftedNorthing = atlMeasuredData.northing + correctionsNorthing
@@ -508,8 +729,8 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
                                                    shiftedNorthing, 
                                                    atlMeasuredData.zone, 
                                                    atlMeasuredData.hemi)
-        
-            # Store data in class structure
+            
+            # Generate atlCorrections struct
             atlCorrections = atlCorrectionsStruct(shiftedEasting, shiftedNorthing, \
                                                   shiftedCrossTrack, shiftedAlongTrack, \
                                                   shiftedLat, shiftedLon, \
@@ -526,17 +747,18 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
                                                   measRasterZCommonFinal, \
                                                   truthRasterYCommonFinal, \
                                                   truthRasterZCommonFinal)
+                            
             # Make plots
             if(makePlots):
                 
                 # Make contour plot
                 writeLog('   Making Plots...', logFileID)
-                plotContour(resultsCrossTrackShift, resultsAlongTrackShift, resultsMAE, 
-                            atlMeasuredData, atlCorrections, rasterResolution, showPlots, 
-                            outFilePath, i)
+            
+                # Plot counter
+                i = 0
             
                 # Make ZY scatter plots
-                plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal, 
+                plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal,
                        truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, 
                        segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, 
                        useMeasSigConf, filterData, showPlots, outFilePath, i)
@@ -547,240 +769,69 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
                        useMeasSigConf, filterData, showPlots, outFilePath, i)
     
             # endIf 
-
-            i += 1
-            
-        # endFor
+                
+        # endIf
         
+        # Create output file
+        if(createMeasCorrFile): 
+            
+            # Get measured corrected data
+            atlMeasCorrX = atlMeasuredData.easting + atlCorrections.easting
+            atlMeasCorrY = atlMeasuredData.northing + atlCorrections.northing
+            atlMeasCorrZ = atlMeasuredData.z + atlCorrections.z
+            
+            # Get E,N,U text for output file name
+            xDirTxt = 'e' # east
+            yDirTxt = 'n' # north
+            zDirTxt = 'u' # up
+            
+            # Get directional text strings
+            if(atlCorrections.easting < 0):
+                xDirTxt = 'w' # west
+            # endIf
+            
+            if(atlCorrections.northing < 0):
+                yDirTxt = 's' # south
+            # endIf
+            
+            if(atlCorrections.z < 0):
+                zDirTxt = 'd' # down
+            # endIf
+            
+            # Get measured corrected string text
+            enuTxt = xDirTxt + '{0:0.1f}'.format(abs(atlCorrections.easting[0])) + '_' + \
+                     yDirTxt + '{0:0.1f}'.format(abs(atlCorrections.northing[0])) + '_' + \
+                     zDirTxt + '{0:0.1f}'.format(abs(atlCorrections.z[0]))
+                     
+            # Get output path name
+            writeLog('', logFileID)
+            writeLog('   Writing ICESat-2 shifted .las file...', logFileID)
+            outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_SHIFTED_' + enuTxt + '.las'
+            outPath = os.path.normpath(outFilePath + '/' + outName)
+            
+            # If output directory does not exist, create it
+            if(not os.path.exists(os.path.normpath(outFilePath))):
+                os.makedirs(os.path.normpath(outFilePath))
+            # endIf
+            
+            # Write .las file
+            writeLas(np.ravel(atlMeasCorrX),np.ravel(atlMeasCorrY),np.ravel(atlMeasCorrZ),'utm',outPath,np.ravel(atlMeasuredData.classification),np.ravel(atlMeasuredData.intensity),np.ravel(atlMeasuredData.signalConf),atlMeasuredData.hemi,atlMeasuredData.zone)
+        
+        # endIf
+    
     else:
-            
-        # Hard-coded offsets case
-        writeLog('   Using preset values...', logFileID)
         
-        # Set cross-track/along-track offsets
-        correctionsCrossTrack = crossTrackBounds
-        correctionsAlongTrack = alongTrackBounds
+        # Either no measured data or truth data after filtering, so send empty data out
+        atlCorrections = []
         
-        # Get CT/AT offsets in Easting/Northing plane
-        R_mat = rotationData.R_mat
-        xRotPt = rotationData.xRotPt
-        yRotPt = rotationData.yRotPt
-        correctionsEasting, correctionsNorthing, _, _, _ = getCoordRotRev(correctionsCrossTrack, correctionsAlongTrack, R_mat, xRotPt, yRotPt)
-        correctionsEasting -= xRotPt
-        correctionsNorthing -= yRotPt
-        
-        # Get vertical offset
-        if(offsets.useVerticalShift):
-            correctionsVertical = np.array([float(offsets.verticalShift)])
-        else:
-            correctionsVertical = np.array([0.0])
+        if(not measDataExists):
+            writeLog('   WARNING: No ICESat-2 data in selected filter options: %s' %filterData, logFileID)
         # endIf
         
-        # Rasterize MEASURED data
-        rasterResolution = rasterResolutions[-1]
-        gridMethod = 'Mean'
-        fillValue = -999
-        writeLog('   Gridding ICESat-2 Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
-        
-        # Add in corrections
-        measXRot += correctionsCrossTrack
-        measYRot += correctionsAlongTrack
-        measZ += correctionsVertical
-        
-        # Raster MEASURED data
-        measRasterRot = getRaster(measXRot, measYRot, measZ, rasterResolution, gridMethod, fillValue, measT)
-        
-        # Reduce TRUTH data to width of cross-track offsets
-#        measWidth = (np.ceil( ( measXRot.max() - measXRot.min() ) / 2.0 )).astype(int)
-#        minTruthBound = (crossTrackBounds - measWidth).astype(int) - 5
-#        maxTruthBound = (crossTrackBounds + measWidth).astype(int) + 5
-#        truthInOffsetsInds = (truthXRot >= minTruthBound) & (truthXRot <= maxTruthBound)
-#        truthXRotReduced = truthXRot[truthInOffsetsInds]
-#        truthYRotReduced = truthYRot[truthInOffsetsInds]
-#        truthZReduced = truthZ[truthInOffsetsInds]
-        truthXRotReduced = truthXRot
-        truthYRotReduced = truthYRot
-        truthZReduced = truthZ
-            
-        # Rasterize TRUTH data
-        writeLog('   Gridding Reference Data at %s m Resolution using %s Values...' % (rasterResolution, gridMethod), logFileID)
-        truthRasterRot = getRaster(truthXRotReduced, truthYRotReduced, truthZReduced, rasterResolution, gridMethod, fillValue)
-        
-        # Remove NaN data (-999) in MEASURED raster
-        measIndsToKeep = measRasterRot.grid != -999
-        measRasterXRot = measRasterRot.x[measIndsToKeep]
-        measRasterYRot = measRasterRot.y[measIndsToKeep]
-        measRasterZ    = measRasterRot.grid[measIndsToKeep]
-        measRasterT    = measRasterRot.t[measIndsToKeep]
-        
-        # Get final MEASURED raster data
-        measRasterXRotFinal= measRasterXRot
-        measRasterYRotFinal = measRasterYRot
-        measRasterZFinal = measRasterZ
-        measRasterTFinal = measRasterT
-            
-        # Remove NaN data (-999) in TRUTH raster
-        truthIndsToKeep = truthRasterRot.grid != -999
-        truthRasterXRot = truthRasterRot.x[truthIndsToKeep]
-        truthRasterYRot = truthRasterRot.y[truthIndsToKeep]
-        truthRasterZ    = truthRasterRot.grid[truthIndsToKeep]
-            
-        # Get common MEASURED and TRUTH raster indices 
-        xyMeasRasterRotFinal = np.concatenate((np.c_[measRasterXRotFinal],np.c_[measRasterYRotFinal]),axis = 1)
-        xyTruthRasterRot = np.concatenate((np.c_[truthRasterXRot],np.c_[truthRasterYRot]),axis = 1)
-        commonValsFinal, xyCommonMeasIndsFinal, xyCommonTruthIndsFinal = getIntersection2d(xyMeasRasterRotFinal, xyTruthRasterRot, assume_unique=True)
-        
-        # Get common MEASURED raster points
-        measRasterXRotCommonFinal = measRasterXRotFinal[xyCommonMeasIndsFinal]
-        measRasterYRotCommonFinal = measRasterYRotFinal[xyCommonMeasIndsFinal]
-        measRasterZCommonFinal = measRasterZFinal[xyCommonMeasIndsFinal]
-        measRasterTCommonFinal = measRasterTFinal[xyCommonMeasIndsFinal]
-        
-        # Get common TRUTH raster points
-        truthRasterXRotCommonFinal = truthRasterXRot[xyCommonTruthIndsFinal]
-        truthRasterYRotCommonFinal = truthRasterYRot[xyCommonTruthIndsFinal]
-        truthRasterZCommonFinal = truthRasterZ[xyCommonTruthIndsFinal]
-        
-        # Get Z Error raster (TRUTH - MEASURED)
-        zErrorCommonFinal = measRasterZCommonFinal - truthRasterZCommonFinal
-        
-        # Get 100 m segment Z Mean Error data
-        errorResolution = 100
-        gridMethod = 'Mean'
-        fillValue = np.nan
-        segmentError = getRaster(measRasterXRotCommonFinal, measRasterYRotCommonFinal, zErrorCommonFinal, errorResolution, gridMethod, fillValue)
-        segmentErrorX = np.mean(segmentError.x, axis = 1)
-        segmentErrorY = np.mean(segmentError.y, axis = 1)
-        segmentErrorZ = np.nanmean(segmentError.grid, axis = 1)
-        
-        # Format Y,Z values for plotting
-        segmentErrorXYZ = np.column_stack([segmentErrorX, segmentErrorY, segmentErrorZ])
-        segmentErrorXYZsorted = segmentErrorXYZ[segmentErrorXYZ[:,1].argsort(),]
-        segmentErrorLo = segmentErrorXYZsorted[:,1] - errorResolution*0.5
-        segmentErrorHi = segmentErrorXYZsorted[:,1] + errorResolution*0.5
-        segmentErrorXin = (np.column_stack([segmentErrorXYZsorted[:,0], segmentErrorXYZsorted[:,0]])).flatten()
-        segmentErrorYin = (np.column_stack([segmentErrorLo, segmentErrorHi])).flatten()
-        segmentErrorZin = (np.column_stack([segmentErrorXYZsorted[:,2], segmentErrorXYZsorted[:,2]])).flatten()
-
-        # Convert to easting/northing plane
-        _, segmentErrorY_plot, _, _, _ = getCoordRotRev(segmentErrorXin, segmentErrorYin, R_mat, xRotPt, yRotPt)        
-        segmentErrorZ_plot = segmentErrorZin
-
-        # Convert common measured and truth data back to Easting/Northing plane
-        _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
-        _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
-
-
-        MAE = np.mean(abs(zErrorCommonFinal))
-        RMSE = np.sqrt(np.mean(zErrorCommonFinal**2))
-        ME = np.mean(zErrorCommonFinal)
-                        
-        # Set error values
-        correctionsMAE = np.array([MAE])
-        correctionsRMSE = np.array([RMSE])
-        correctionsME = np.array([ME])
-    
-        # Get shifted data
-        shiftedEasting = atlMeasuredData.easting + correctionsEasting
-        shiftedNorthing = atlMeasuredData.northing + correctionsNorthing
-        shiftedCrossTrack = atlMeasuredData.crossTrack + correctionsCrossTrack
-        shiftedAlongTrack = atlMeasuredData.alongTrack + correctionsAlongTrack
-        shiftedVertical = atlMeasuredData.z + correctionsVertical
-        shiftedVerticalMsl = atlMeasuredData.zMsl + correctionsVertical
-        
-        # Get lat/lon
-        shiftedLat, shiftedLon = getUTM2LatLon(shiftedEasting, 
-                                               shiftedNorthing, 
-                                               atlMeasuredData.zone, 
-                                               atlMeasuredData.hemi)
-        
-        # Generate atlCorrections struct
-        atlCorrections = atlCorrectionsStruct(shiftedEasting, shiftedNorthing, \
-                                              shiftedCrossTrack, shiftedAlongTrack, \
-                                              shiftedLat, shiftedLon, \
-                                              shiftedVertical, shiftedVerticalMsl, \
-                                              atlMeasuredData.time, atlMeasuredData.deltaTime, \
-                                              atlMeasuredData.classification, \
-                                              atlMeasuredData.signalConf, \
-                                              atlMeasuredData.zone, atlMeasuredData.hemi, \
-                                              correctionsCrossTrack, correctionsAlongTrack, \
-                                              correctionsEasting, correctionsNorthing, \
-                                              correctionsVertical, \
-                                              correctionsMAE, correctionsRMSE, correctionsME, \
-                                              measRasterYCommonFinal, \
-                                              measRasterZCommonFinal, \
-                                              truthRasterYCommonFinal, \
-                                              truthRasterZCommonFinal)
-                        
-        # Make plots
-        if(makePlots):
-            
-            # Make contour plot
-            writeLog('   Making Plots...', logFileID)
-        
-            # Plot counter
-            i = 0
-        
-            # Make ZY scatter plots
-            plotZY(measRasterYCommonFinal, measRasterZCommonFinal, truthRasterYCommonFinal,
-                   truthRasterZCommonFinal, zErrorCommonFinal, segmentErrorY_plot, 
-                   segmentErrorZ_plot, atlMeasuredData, atlCorrections, rasterResolution, 
-                   useMeasSigConf, filterData, showPlots, outFilePath, i)
-            
-            # Make ZT scatter plots
-            plotZT(measRasterTCommonFinal, measRasterZCommonFinal, zErrorCommonFinal, 
-                   atlMeasuredData, atlCorrections, rasterResolution, 
-                   useMeasSigConf, filterData, showPlots, outFilePath, i)
-
-        # endIf 
-            
-    # endIf
-    
-    # Create output file
-    if(createMeasCorrFile): 
-        
-        # Get measured corrected data
-        atlMeasCorrX = atlMeasuredData.easting + atlCorrections.easting
-        atlMeasCorrY = atlMeasuredData.northing + atlCorrections.northing
-        atlMeasCorrZ = atlMeasuredData.z + atlCorrections.z
-        
-        # Get E,N,U text for output file name
-        xDirTxt = 'e' # east
-        yDirTxt = 'n' # north
-        zDirTxt = 'u' # up
-        
-        # Get directional text strings
-        if(atlCorrections.easting < 0):
-            xDirTxt = 'w' # west
+        if(not truthDataExists):
+            writeLog('   WARNING: No Reference data in selected filter options: %s' %filterData, logFileID)
         # endIf
         
-        if(atlCorrections.northing < 0):
-            yDirTxt = 's' # south
-        # endIf
-        
-        if(atlCorrections.z < 0):
-            zDirTxt = 'd' # down
-        # endIf
-        
-        # Get measured corrected string text
-        enuTxt = xDirTxt + '{0:0.1f}'.format(abs(atlCorrections.easting[0])) + '_' + \
-                 yDirTxt + '{0:0.1f}'.format(abs(atlCorrections.northing[0])) + '_' + \
-                 zDirTxt + '{0:0.1f}'.format(abs(atlCorrections.z[0]))
-                 
-        # Get output path name
-        writeLog('', logFileID)
-        writeLog('   Writing ICESat-2 shifted .las file...', logFileID)
-        outName = atlMeasuredData.atl03FileName + '_' + atlMeasuredData.gtNum + '_SHIFTED_' + enuTxt + '.las'
-        outPath = os.path.normpath(outFilePath + '/' + outName)
-        
-        # If output directory does not exist, create it
-        if(not os.path.exists(os.path.normpath(outFilePath))):
-            os.mkdir(os.path.normpath(outFilePath))
-        # endIf
-        
-        # Write .las file
-        writeLas(np.ravel(atlMeasCorrX),np.ravel(atlMeasCorrY),np.ravel(atlMeasCorrZ),'utm',outPath,np.ravel(atlMeasuredData.classification),np.ravel(atlMeasuredData.intensity),np.ravel(atlMeasuredData.signalConf),atlMeasuredData.hemi,atlMeasuredData.zone)
-    
     # endIf
     
     # End timer
@@ -805,38 +856,9 @@ if __name__ == "__main__":
     
     ##### Start Inputs for getAtlMeasuredSwath
 
-    # Path to ATL03 Input File
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181126114738_08990103_001_01.h5' # FINLAND
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181030110205_04860106_001_01.h5' # SONONMA
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20190101195003_00670202_001_01_sreq_2696.h5' # SONOMA
-    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20190228170214_09510202_001_02_sreq_2696.h5' # SONOMA
-    # atl03FilePath = '//bigtex/laserpewpew/data/release/001/ATL03_r001/ATL03_20190426213703_04370308_001_01.h5' # Brazil    
-    
-    # Path to ATL08 Input File
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181126114738_08990103_952_01.h5' # FINLAND
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181030110205_04860106_952_01.h5' # SONOMA
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20190101195003_00670202_952_01.h5' # SONOMA
-    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20190228170214_09510202_952_02.h5' # SONOMA
-    # atl08FilePath = False    
-    
-    # Path to Output Directory
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_finland_20181126_python' # FINLAND
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20181030_python' # SONOMA
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190101_python' # SONOMA
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190228_python' # SONOMA
-    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test' # TEST
-    
-#    atl03FilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/ATL03_20181030110205_04860106_001_01_sub_218.h5' # WSMR
-#    atl08FilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/ATL08_20181030110205_04860106_001_01_sub_218.h5' # WSMR
-#    outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test'
-    
     atl03FilePath = 'Z:/data/release/002/ATL03_r002/ATL03_20190928175636_00280506_002_01_sreq_3181.h5' # WSMR
     atl08FilePath = []
     outFilePath = 'C:/Users/malonzo/GLAM/delete'
-    
-#    atl03FilePath = 'z:/data/release/002/ATL03_r002/ATL03_20181018202814_03090102_002_01.h5' # N Carolina 20181018 r002
-#    atl08FilePath = []
-#    outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_ncarolina_20181018_test'
     
     # Ground track number to analyze
     gtNum = 'gt2r'
@@ -864,12 +886,7 @@ if __name__ == "__main__":
     
     buffer = 50                 # Distance in cross-track (meters) around ATL03 track to look for truth data 
     useExistingTruth = True     # Option to use existing truth data if it exists
-    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/'  # Path to existing truth data
-    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short_dtm_utm.tif'
     truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/wsmr_ATL03_20190928175636_00280506_R002_01_sreq_3002_gt2r_TRUTH_50L50Rm_buffer.las'
-#    truthSwathDir = 'N:/USERS/mike/iceSat2/atl03_validation/r002_ncarolina_20181018/ATL03_20181018202814_03090102_002_01_gt1r_REFERENCE_50L50Rm_buffer.las'
-    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/wsmr_ATL03_20191031162419_05310506_R002_01_sub_344_gt2r_TRUTH_150L150Rm_buffer.las'
-    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short.las'
     truthFileType = '.las'
     createTruthFile = False      # Option to create output truth .las file
     
@@ -901,7 +918,7 @@ if __name__ == "__main__":
     
     # Call getAtlMeasuredSwath
     print('RUNNING getAtlMeasuredSwath...\n')
-    atl03Data, atl08Data, headerData, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, gtNum, trimInfo, createAtl03LasFile, createAtl03KmlFile, createAtl08KmlFile, createAtl03CsvFile, createAtl08CsvFile)
+    atl03Data, atl08Data, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, gtNum, trimInfo, createAtl03LasFile, createAtl03KmlFile, createAtl08KmlFile, createAtl03CsvFile, createAtl08CsvFile)
           
     # Get input truth file(s)
     truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False)
