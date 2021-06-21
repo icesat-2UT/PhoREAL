@@ -15,10 +15,13 @@ Authors:
 Date: September 20, 2019
 """
 
+# Filter Runtime warnings
+import warnings
+warnings.filterwarnings('ignore')
+
 # Import Python modules
 import os
 import sys
-import warnings
 import csv
 import numpy as np
 import h5py
@@ -28,6 +31,7 @@ from scipy.io import loadmat
 import socket
 import shutil
 import pandas as pd
+import rasterio
 try:
   import laspy
   from laspy.file import File
@@ -54,9 +58,9 @@ except ImportError:
 try:
     from gdalconst import GA_ReadOnly
 except ImportError:
-  laspy_func = ['readTifHeader']
+  gdal_func = ['readTifHeader']
   print('warning: module gdalconst not found')
-  print('affected functions:', laspy_func)
+  print('affected functions:', gdal_func)
 
 # Import ICESat-2 modules
 from gui_addins import (viewerBlank_html, viewerBlankOnline_html)
@@ -130,7 +134,8 @@ class atl03Struct:
     def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, 
                  atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_zMsl, 
                  atl03_time, atl03_deltaTime,
-                 atl03_signalConf, atl03_classification, atl03_intensity, 
+                 atl03_signalConf, atl03_classification, atl03_intensity,
+                 atl03_solar_elev,
                  atl03_segment_id,
                  gtNum, beamNum, beamStrength, zone, hemi,
                  atl03FilePath, atl03FileName, trackDirection, alt03h5Info, dataIsMapped):
@@ -148,6 +153,7 @@ class atl03Struct:
         self.signalConf = np.c_[atl03_signalConf]
         self.classification = np.c_[atl03_classification]
         self.intensity = np.c_[atl03_intensity]
+        self.solar_elev = np.c_[atl03_solar_elev]
         self.segmentID = np.c_[atl03_segment_id]
         self.gtNum = gtNum
         self.beamNum = beamNum
@@ -181,7 +187,7 @@ class atl08Struct:
                  atl08_maxCanopyMsl, atl08_teBestFitMsl, atl08_teMedianMsl,
                  atl08_time, atl08_deltaTime,
                  atl08_signalConf, atl08_classification, atl08_intensity, 
-                 gtNum, zone, hemi, 
+                 gtNum, beamNum, beamStrength, zone, hemi, 
                  atl08FilePath, atl08FileName, trackDirection, alt08h5Info, dataIsMapped):
             
         self.lat = np.c_[atl08_lat]
@@ -202,6 +208,8 @@ class atl08Struct:
         self.classification = np.c_[atl08_classification]
         self.intensity = np.c_[atl08_intensity]
         self.gtNum = gtNum
+        self.beamNum = beamNum
+        self.beamStrength = beamStrength
         self.zone = zone
         self.hemi = hemi
         self.atl08FilePath = atl08FilePath
@@ -788,7 +796,10 @@ def readGeoidFile(geoidFile):
     # Get lats, lons, and geoidal heights
     lats = matData['geoid']['lats'][0][0]
     lons = matData['geoid']['lons'][0][0]
-    geoidalHeights = matData['geoid']['geoidalHeight'][0][0]
+    try:
+        geoidalHeights = matData['geoid']['geoidalHeight'][0][0]
+    except:
+        geoidalHeights = matData['geoid']['fin2005n00'][0][0]        
     
     # Store data as an object
     geoid = geoidStruct(lats, lons, geoidalHeights)
@@ -1295,6 +1306,38 @@ def writeKml(lat, lon, time, kmlName):
 
     # Save output KML file
     kml.save(kmlName)
+    
+    
+##### Functions to write .kml files
+def writeKml2(lats, lons, ptNames, kmlName):
+
+    # Suppress warnings that may come from simple kml
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+    # endif
+    
+    # Open Simple KML
+    kml = simplekml.Kml()
+    
+    # Open Simple KML style editor
+    style = simplekml.Style()
+    style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
+    style.iconstyle.color = 'ff0000ff'  # Red
+    
+    # Loop through all lat/lon values and make KML markers
+    for i in range(0,len(ptNames)):
+        
+        ptName = ptNames[i]
+        
+        # Plot marker points
+        pnt = kml.newpoint(name = ptName, coords=[(lons[i], lats[i])])
+        pnt.style = style
+        
+    # EndFor
+
+    # Save output KML file
+    kml.save(kmlName)
+
 
 ### Function to write variables to CSV file
 def writeArrayToCSV(csv_out,namelist,datalist,header=True):
@@ -1509,12 +1552,16 @@ def getDEMArrays(file):
     ds = gdal.Open(file)
     
     # Read DEM as NP Array
-    data = np.array(ds.GetRasterBand(1).ReadAsArray())
+    # Suppress warnings that may come from rasterio
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+    # endif
+    data = np.array(rasterio.open(file).read(1))
     
     # Get Geotransform Information
     gt = ds.GetGeoTransform()
     
-    #Generate X Array
+    # Generate X Array
     row = (np.arange(data.shape[1])).astype('float')
     for pos in range(0,data.shape[1]):
         row[pos] = gt[0] + (gt[1] * row[pos])
@@ -1863,7 +1910,52 @@ def createShapefiles(xx, yy, width, height, epsg, outfile = "atl08.shp"):
     
     # Save and close everything
     ds = layer = feat = geom = None    
+
+# endDef
+
+
+def writeShp(xx, yy, ids, hemi, zone, outfile = 'untitled.shp'):
     
+    import shapefile
+
+    # Open shapefile writer
+    shp_file = shapefile.Writer(outfile)
+    shp_file.autoBalance = 1
+    
+    # Create shapefile fields
+    shp_file.field('TREE_ID', 'C')
+    shp_file.field('UTME', 'C')
+    shp_file.field('UTMN', 'C')
+    
+    # Store data into shapefile
+    for i in range(0,len(xx)):
+        
+        # Get x,y data and ID
+        xx_curr = xx[i]
+        yy_curr = yy[i]
+        id_curr = ids[i]
+    
+        # Store x,y data
+        shp_file.point(xx_curr, yy_curr)
+    
+        # Store records into shapefile        
+        shp_file.record(id_curr, xx_curr, yy_curr)
+        
+    # endFor
+
+    # Close shapefile
+    shp_file.close()
+
+    # Write .prj file
+    wkt = selectwkt('utm',hemi,zone)
+    wkt = wkt.decode('utf-8')
+    prj = open(outfile + '.prj', 'w')
+    prj.write(wkt)
+    prj.close()
+    
+# endDef
+  
+  
 def read_geotiff(file, read_raster=False):
     # Open DEM
     ds = gdal.Open(file)
@@ -2039,7 +2131,7 @@ def loadTifFile(truthFilePath, atlMeasuredData, rotationData, outFilePath, logFi
             # If EPSG code does not match, use GDAL Warp to create new Tif
             writeLog('      *Reference file EPSG code does not match ICESat-2, reprojecting reference file...', logFileID)
             xarr, yarr = transform(epsg_truth, epsg_atl, xarr0, yarr0)
-    
+            
     #        originalname = os.path.splitext(file)[0]
     #        newname = originalname + "_projected.tif"
     #        truthFilePathTif = os.path.normpath(os.path.join(outFilePath,newname))
@@ -2111,9 +2203,11 @@ def reprojectHeaderData(truthHeaderDF, atlMeasuredData, logFileID=False):
     
     # Loop through all truth file EPSG codes
     for i in range(0,len(truthHeaderDF)):
-        
+#        writeLog(str(i) + ' out of ' + str(len(truthHeaderDF)), logFileID)
         # Reproject EPSG code to match input EPSG if unmatching
         epsg_truth = truthHeaderDF['epsg'][i]
+#        writeLog(epsg_truth, logFileID)
+#        writeLog(epsg_atl, logFileID)
         if(epsg_truth!=epsg_atl):
             
             # Header extents
@@ -2126,6 +2220,7 @@ def reprojectHeaderData(truthHeaderDF, atlMeasuredData, logFileID=False):
             
             # Reproject extents to input EPSG code
             try:
+
                 xout, yout = transform(epsg_truth, epsg_atl, x, y)
                 
                 # Store new extents into output dataframe
@@ -2436,9 +2531,9 @@ def readLasHeader(lasFileInput, outputFilePath = False, logFileID = False):
                 zmax = struct.unpack('d',file.read(8))[0] # double
                 zmin = struct.unpack('d',file.read(8))[0] # double
                     
-                if(np.isin(VersionMinor,[1,2,3])):
+                if(np.isin(VersionMinor,[0,1,2,3])):
                     
-                    # LAS 1.1 - 1.3 Format
+                    # LAS 1.0 - 1.3 Format
         
                     # Move forward in file from beginning
                     file.seek(headerSize, 0)
@@ -2511,40 +2606,8 @@ def readLasHeader(lasFileInput, outputFilePath = False, logFileID = False):
                                         # endIf
                                         
                                         # Get EPSG code
-                                        epsg = 'epsg:' + str(int(projCScode))
-                                        
-#                                        # Analyze the major 3 digits
-#                                        first3 = np.floor(projCScode/100)
-#                                        
-#                                        if(first3 == 322):
-#                                            ellipsoid = 'WGS72'
-#                                            hemi = 'N'
-#                                        elif(first3 == 323):
-#                                            ellipsoid = 'WGS72'
-#                                            hemi = 'S'
-#                                        elif(first3 == 324):
-#                                            ellipsoid = 'WGS72BE'
-#                                            hemi = 'N'
-#                                        elif(first3 == 325):
-#                                            ellipsoid = 'WGS72BE'
-#                                            hemi = 'S'
-#                                        elif(first3 == 326):
-#                                            ellipsoid = 'WGS84'
-#                                            hemi = 'N'
-#                                        elif(first3 == 327):
-#                                            ellipsoid = 'WGS84'
-#                                            hemi = 'S'
-#                                        elif(first3 == 267 or first3 == 320):
-#                                            ellipsoid = 'NAD27'
-#                                            hemi = 'N'
-#                                        elif(first3 == 269 or first3 == 321):
-#                                            ellipsoid = 'NAD83'
-#                                            hemi = 'N'
-#                                        # endIf
-#                                            
-#                                        # Analyze the last 2 digits to get the zone
-#                                        zone = str(int(projCScode % 100)).zfill(2)
-                                
+                                        epsg = 'epsg:' + str(int(projCScode))                                       
+                             
                                     # endIf
                                 # endFor
                             # endIf
@@ -2677,7 +2740,10 @@ def getTruthHeaders(truthFilePath, truthFileType, logFileID=False):
     # Create header file output name
     headerFileName = 'phoReal_headers.csv'
     truthFileDir = ntpath.dirname(truthFilePath[0])
-    headerFilePath = os.path.normpath(truthFileDir + '\\' + headerFileName)
+    if os.name == 'nt':
+        headerFilePath = os.path.normpath(truthFileDir + '\\' + headerFileName)
+    else:
+        headerFilePath = os.path.normpath(truthFileDir + '/' + headerFileName)
 
     # Check if header file exists
     if(os.path.exists(headerFilePath)):
@@ -2961,6 +3027,9 @@ def findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buff
     matchingHeaderYmin = ((truthHeaderNewDF['ymin'][xPtsInFile]).to_numpy()).astype('float')
     matchingHeaderYmax = ((truthHeaderNewDF['ymax'][xPtsInFile]).to_numpy()).astype('float')
     
+    fileNumsAll = np.arange(0,len(truthHeaderNewDF))
+    allFileInds = fileNumsAll[xPtsInFile]
+    
     # Get all MEASURED x,y buffer points
     xAll = np.concatenate((xL, xR))
     yAll = np.concatenate((yL, yR))
@@ -2991,7 +3060,9 @@ def findMatchingTruthFiles(truthHeaderNewDF, atlMeasuredData, rotationData, buff
         matchingFiles = []
     # endIf
     
-    return matchingFiles
+    matchingFileInds = allFileInds[matchTF]
+    
+    return matchingFiles, matchingFileInds
 
 # endDef
     
@@ -3025,7 +3096,10 @@ def getTruthFilePaths(userInput, fileExt, logFileID=False):
                 filePaths = [os.path.normpath(userInput)]
             else:
                 # Get full paths to input files
-                strSearch = os.path.normpath(userInput + '\\*' + fileExt)
+                if os.name == 'nt':
+                    strSearch = os.path.normpath(userInput + '\\*' + fileExt)
+                else:
+                    strSearch = os.path.normpath(userInput + '/*' + fileExt)
                 filePaths = glob.glob(strSearch, recursive = True)   
             # endIf     
         # endIf
@@ -3055,10 +3129,17 @@ def beamNumToGT(atlfilepath, beamNum):
     gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
     fp = h5py.File(atlfilepath,'r')
     for gt in gt_list:
-        fp_a = fp[gt].attrs
-        spot_number = (fp_a['atlas_spot_number']).decode()
+        try:
+            fp_a = fp[gt].attrs
+            spot_number = (fp_a['atlas_spot_number']).decode()
+        except:
+            spot_number = 'none'
+        # endTry
+        
         if(any(np.isin(beamNum,spot_number))):
             gt_out.append(gt.upper())
+        # endIf
+        
     return gt_out
 # endDef
     
@@ -3083,10 +3164,18 @@ def swbeamToGT(atlfilepath, groupNum, sw):
     gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
     fp = h5py.File(atlfilepath,'r')
     for gt in gt_list:
-        fp_a = fp[gt].attrs
-        beam_type = (fp_a['atlas_beam_type']).decode()
+        try:
+            fp_a = fp[gt].attrs
+            beam_type = (fp_a['atlas_beam_type']).decode()
+        except:
+            beam_type = 'none'
+        # endTry
+        
         if(any(np.isin(sw,beam_type) & np.isin(groupNum, gt[2]))):
             gt_out.append(gt.upper())
+        # endIf
+    # endFor
+    
     return gt_out
 # endDef
     

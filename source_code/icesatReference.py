@@ -20,12 +20,13 @@ Created on Fri Aug  2 11:18:58 2019
 import numpy as np
 import time
 
-from getAtlTruthSwath_auto import getAtlTruthSwath
+from getAtlTruthSwath_auto import getAtlTruthSwath, getTruthFilePaths
 
 from getMeasurementError_auto import getMeasurementError, offsetsStruct
 # from icesatReader import read_atl03_geolocation
 # from icesatReader import match_atl_to_atl03
-from icesatUtils import indexMatch
+from icesatUtils import indexMatch, getGeoidHeight
+from icesatIO import getTruthHeaders, readGeoidFile
 
 def estimate_segment_id_legacy(geolocation, gt, atlTruthStructLegacy):
 
@@ -49,23 +50,27 @@ def estimate_segment_id_legacy(geolocation, gt, atlTruthStructLegacy):
     
     return seg_id_truth, include
     
-def legacy_get_truth_swath(atl03legacy, truthSwathDir, outFilePath):
-    buffer = 50 # Distance in cross-track (meters) around ATL03 track 
-    useExistingTruth = False  # Option to use existing truth data if it exists
-    # truthSwathDir = '/laserpewpew/data/validation/data/Finland/LAS_UTM'
-    # outFilePath = '/LIDAR/server/USERS/eric/1_experiment/ecosystem'
-    createTruthFile = True      # Option to create output truth .las file
+def legacy_get_truth_swath(atl03legacy, rotationData, truthSwathDir, truthFileType, 
+                           outFilePath, buffer = 50, useExistingTruth = False,
+                           createTruthFile = True):
 
+    # Get input truth file(s)
+    truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False)
+              
+    # Get truth file header info
+    if(not(useExistingTruth)):
+        truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID=False)
+    else:
+        truthHeaderDF = False
+    # endIf
     
-    # timeStart = time.time()
-
     # Call getAtlTruthSwath
     print('RUNNING getAtlTruthSwath...\n')
-
-    atlTruthData = getAtlTruthSwath(atl03legacy, headerData, 
-                                    rotationData, useExistingTruth, 
-                                    truthSwathDir, buffer, outFilePath, 
-                                    createTruthFile)
+    atlTruthData = getAtlTruthSwath(atl03legacy, rotationData, 
+                                    truthHeaderDF, truthFilePaths,
+                                    buffer, outFilePath, createTruthFile, 
+                                    truthFileType, useExistingTruth, 
+                                    logFileID=False)
 
     # Reclassify anything 
     atlTruthData.classification[atlTruthData.classification == 3] = 4
@@ -73,14 +78,14 @@ def legacy_get_truth_swath(atl03legacy, truthSwathDir, outFilePath):
     
     return atlTruthData
     
-def legacy_get_meas_error(atl03legacy, atlTruthData, rotationData, outFilePath):
-    truthgroundclass = 2
+def legacy_get_meas_error(atl03legacy, atlTruthData, rotationData, outFilePath, truthgroundclass=2):
+    # truthgroundclass = 2
     offsetsCrossTrackBounds = np.array([-48, 48])      # Cross-track limits
     offsetsAlongTrackBounds = np.array([-48, 48 ])      # Along-track limits 
     offsetsRasterResolutions = np.array([8, 4, 2, 1])  # Step-down resolutions
     offsetsUseVerticalShift = False    # Option to use a vertical shift
     offsetsVerticalShift = 0   # Vertical shift to use if above set to True
-    measClassFilter = 1 # Meas Classes (0 = Unclass, 1 = Ground)
+    #measClassFilter = 1 # Meas Classes (0 = Unclass, 1 = Ground)
     filterData = truthgroundclass 
     useMeasSigConf = False # Use measured signal confidence
     offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, 
@@ -89,7 +94,10 @@ def legacy_get_meas_error(atl03legacy, atlTruthData, rotationData, outFilePath):
     createMeasCorrFile = True # Option to create ouput measured corrected .las
     makePlots = False         # Option to make output plots
     showPlots = False         # Option to show output plot windows
+    refHeightType = 'HAE'
+
     atlCorrections = getMeasurementError(atl03legacy, atlTruthData, 
+                                         refHeightType, 
                                          rotationData, outFilePath, 
                                          useMeasSigConf, filterData, offsets, 
                                          createMeasCorrFile, makePlots, 
@@ -149,7 +157,7 @@ if __name__ == "__main__":
     atl03.rotationData = rotation_data
 
     print('Convert Struct to Legacy')    
-    atl03legacy, rotationData, headerData = convert_atl03_to_legacy(atl03)
+    atl03legacy, rotationData = convert_atl03_to_legacy(atl03)
     
     # Legacy Truth Swath Inputs
     buffer = 50                 # Distance in cross-track (meters) around ATL03 track to look for truth data 
@@ -168,9 +176,17 @@ if __name__ == "__main__":
         
     # Call getAtlTruthSwath
     print('Run Legacy Truth Swath')
-    atlTruthData = legacy_get_truth_swath(atl03legacy, truthSwathDir, outFilePath)
+    truthFileType = '.las'
+    atlTruthData = legacy_get_truth_swath(atl03legacy, atl03.rotationData, 
+                                          truthSwathDir, truthFileType, 
+                           outFilePath, buffer = 50, useExistingTruth = False,
+                           createTruthFile = True)
     
     # End timer
+    
+    geoidDataFile = '/laserpewpew/data/validation/geoid/FIN2005N00/geoidFin2005N00_latlon.mat'
+    geoidData = readGeoidFile(geoidDataFile)
+    atlTruthData = getGeoidHeight(geoidData,atlTruthData)
     timeEnd = time.time()
     timeElapsedTotal = timeEnd - timeStart
     timeElapsedMin = np.floor(timeElapsedTotal / 60)
@@ -180,8 +196,11 @@ if __name__ == "__main__":
     print('   Script Completed in %d min %d sec.' % (timeElapsedMin, 
                                                       timeElapsedSec))
     print('\n')
+
+    atlCorrections = legacy_get_meas_error(atl03legacy, atlTruthData, 
+                                           rotationData, outFilePath)
     
-        ##Filter Truth Data by Include
+    ##Filter Truth Data by Include
     alongtrack = atlTruthData.alongTrack.flatten()
     crosstrack = atlTruthData.crossTrack.flatten()
     z = atlTruthData.z.flatten()
@@ -202,12 +221,5 @@ if __name__ == "__main__":
         northing,columns=['northing'])],axis=1)
     df_truth = pd.concat([df_truth,pd.DataFrame(
         classification,columns=['classification'])],axis=1)
-    # df_truth = pd.concat([df_truth,pd.DataFrame(
-    # intensity,columns=['intensity'])],axis=1)
-    # df_truth = pd.concat([df_truth,pd.DataFrame(
-    #     seg_id_truth,columns=['segment_id'])],axis=1)
-# atlCorrections = legacy_get_meas_error(atl03legacy, atlTruthData, rotationData, 
-#                                     outFilePath)
-    
 
     

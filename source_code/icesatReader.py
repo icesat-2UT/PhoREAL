@@ -32,6 +32,7 @@ from icesatUtils import wgs84_to_epsg_transform
 from icesatUtils import getCoordRotFwd
 from icesatUtils import getNameParts
 from icesatUtils import get_h5_meta
+from icesatIO import GtToBeamNum, GtToBeamSW
 from icesatIO import readTruthRegionsTxtFile
 from icesatUtils import identify_hemi_zone
 from icesatIO import writeLas
@@ -55,19 +56,18 @@ class AtlRotationStruct:
 class AtlStruct:
         
     # Define class with designated fields
-    def __init__(self, df, gtNum, epsg, zone, hemi, kmlRegionName, 
-                 headerFilePath, truthFilePath, atlFilePath, atlFileName, 
+    def __init__(self, df, gtNum, beamNum, beamStrength, epsg, zone, hemi, 
+                 atlFilePath, atlFileName, 
                  trackDirection, atlProduct, alth5Info, dataIsMapped, 
                  rotation_data, ancillary=None, orbit_info=None):
             
         self.df = df
         self.gtNum = gtNum
+        self.beamNum = beamNum
+        self.beamStrength = beamStrength
         self.epsg = epsg
         self.zone = zone
         self.hemi = hemi
-        self.kmlRegionName = kmlRegionName
-        self.headerFilePath = headerFilePath
-        self.truthFilePath = truthFilePath
         self.atlFilePath = atlFilePath
         self.atlFileName = atlFileName
         self.trackDirection = trackDirection
@@ -377,43 +377,48 @@ def get_kml_region(lat,lon, kml_bounds_txt):
     headerFilePath = False
     truthFilePath = False
     
-    if kmlBoundsTextFile and (os.path.exists(kmlBoundsTextFile)):
-        
-        # Message to user
-        print('   Finding Truth Region...')
-        
-        # Read kmlBounds.txt file and get contents
-        kmlInfo = readTruthRegionsTxtFile(kmlBoundsTextFile)
-        
-        # Loop through kmlBounds.txt and find matching TRUTH area
-        maxCounter = len(kmlInfo.regionName) - 1
-        counter = 0
-        while(not kmlRegionName):
-            latInFile = (lat >= kmlInfo.latMin[counter]) & \
-                (lat <= kmlInfo.latMax[counter])
-            lonInFile = (lon >= kmlInfo.lonMin[counter]) & \
-                (lon <= kmlInfo.lonMax[counter])
-            trackInRegion = any(latInFile & lonInFile)
-            if(trackInRegion):
-                
-                # Get truth region info
-                kmlRegionName = kmlInfo.regionName[counter]
-                headerFilePath = \
-                    os.path.normpath(kmlInfo.headerFilePath[counter])
-                truthFilePath = \
-                    os.path.normpath(kmlInfo.truthFilePath[counter])
-                
-                # Print truth region
-                print('   Truth File Region: %s' % kmlRegionName)
+    try:
+        if kmlBoundsTextFile and (os.path.exists(kmlBoundsTextFile)):
             
-            if(counter >= maxCounter):
-                print('   No Truth File Region Found in kmlBounds.txt')
-                break
-            counter += 1           
-    else:
-        kmlRegionName = None
-        headerFilePath = None
-        truthFilePath = None
+            # Message to user
+            print('   Finding Truth Region...')
+            
+            # Read kmlBounds.txt file and get contents
+            kmlInfo = readTruthRegionsTxtFile(kmlBoundsTextFile)
+            
+            # Loop through kmlBounds.txt and find matching TRUTH area
+            maxCounter = len(kmlInfo.regionName) - 1
+            counter = 0
+            while(not kmlRegionName):
+                latInFile = (lat >= kmlInfo.latMin[counter]) & \
+                    (lat <= kmlInfo.latMax[counter])
+                lonInFile = (lon >= kmlInfo.lonMin[counter]) & \
+                    (lon <= kmlInfo.lonMax[counter])
+                trackInRegion = any(latInFile & lonInFile)
+                if(trackInRegion):
+                    
+                    # Get truth region info
+                    kmlRegionName = kmlInfo.regionName[counter]
+    #                headerFilePath = \
+    #                    os.path.normpath(kmlInfo.headerFilePath[counter])
+    #                truthFilePath = \
+    #                    os.path.normpath(kmlInfo.truthFilePath[counter])
+                    
+                    # Print truth region
+                    print('   Truth File Region: %s' % kmlRegionName)
+                
+                if(counter >= maxCounter):
+                    print('   No Truth File Region Found in kmlBounds.txt')
+                    break
+                counter += 1           
+        else:
+            kmlRegionName = None
+            headerFilePath = None
+            truthFilePath = None
+    except:
+            kmlRegionName = None
+            headerFilePath = None
+            truthFilePath = None        
         
             # Could not read kmlBounds.txt file
         
@@ -511,13 +516,13 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     atl03_info = getNameParts(atl03filename)
     hemi, zone = identify_hemi_zone(epsg)
 
-    kml_region_name, header_file_path_out, truth_file_path = \
-        get_kml_region(np.array(df.lat_ph),np.array(df.lon_ph), kml_bounds_txt)
+    # kml_region_name, header_file_path_out, truth_file_path = \
+    #     get_kml_region(np.array(df.lat_ph),np.array(df.lon_ph), kml_bounds_txt)
 
-    if header_file_path:
-        del header_file_path_out
-    else:
-        header_file_path = header_file_path_out
+    # if header_file_path:
+    #     del header_file_path_out
+    # else:
+    #     header_file_path = header_file_path_out
 
     if dataIsMapped:
         # for some reason, need to reset nan to -1,
@@ -530,16 +535,20 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
         # df.replace({'classification' : np.nan}, -1)
 
     # Assign everything to the struct
-    atl03Struct = AtlStruct(df, gt, epsg, zone, hemi,kml_region_name, 
-                              header_file_path, truth_file_path, 
+    # kml_region_name = None
+    # header_file_path = None
+    # truth_file_path = None
+    beamNum = GtToBeamNum(atl03filepath, gt)
+    beamStrength = GtToBeamSW(atl03filepath, gt)
+    atl03Struct = AtlStruct(df, gt, beamNum, beamStrength, epsg, zone, hemi,
                               atl03filepath, atl03filename, track_direction,
-                              'ATL03', atl03_info, dataIsMapped, rotation_data)
+                              'ATL03', atl03_info, dataIsMapped,rotation_data)
     
-    if header_file_path:
-        headerData = readHeaderMatFile(header_file_path)
-    else:
-        headerData = None
-    setattr(atl03Struct,'headerData',headerData)
+    # if header_file_path:
+    #     headerData = readHeaderMatFile(header_file_path)
+    # else:
+    #     headerData = None
+    # setattr(atl03Struct,'headerData',headerData)
 
         
     return atl03Struct
@@ -552,9 +561,9 @@ def get_atl08_struct(atl08filepath, gt, atl03struct = None, epsg = None,
     if atl03struct:
         # Calculate Time
         df, rotation_data, epsg = match_atl_to_atl03(df, atl03struct) 
-        kml_region_name = atl03struct.kmlRegionName
-        header_file_path = atl03struct.headerFilePath
-        truth_file_path = atl03struct.truthFilePath
+        # kml_region_name = atl03struct.kmlRegionName
+        # header_file_path = atl03struct.headerFilePath
+        # truth_file_path = atl03struct.truthFilePath
 
     # If ATL03 Struct is not available
     else:
@@ -564,20 +573,21 @@ def get_atl08_struct(atl08filepath, gt, atl03struct = None, epsg = None,
         df, epsg = get_atl_coords(df, epsg)    
         # Calculate Along Track    
         df, rotation_data = get_atl_alongtrack(df)
-        kml_region_name, header_file_path, truth_file_path = \
-            get_kml_region(np.array(df.longitude), np.array(df.latitude),
-                           kml_bounds_txt)
+        # kml_region_name, header_file_path, truth_file_path = \
+        #     get_kml_region(np.array(df.longitude), np.array(df.latitude),
+        #                    kml_bounds_txt)
     track_direction = get_direction(np.array(df.latitude))
     atl08filename = get_file_name(atl08filepath)
     atl08_info = getNameParts(atl08filename)
     hemi, zone = identify_hemi_zone(epsg)
     dataIsMapped = True
+    beamNum = GtToBeamNum(atl08filepath, gt)
+    beamStrength = GtToBeamSW(atl08filepath, gt)
 
     # Assign everything to the struct
-    atl08Struct = AtlStruct(df, gt, epsg, zone, hemi,kml_region_name, 
-                              header_file_path, truth_file_path, 
+    atl08Struct = AtlStruct(df, gt, beamNum, beamStrength, epsg, zone, hemi,
                               atl08filepath, atl08filename, track_direction,
-                              'ATL08', atl08_info, dataIsMapped, rotation_data)
+                              'ATL08', atl08_info, dataIsMapped,rotation_data)
     return atl08Struct
 
 
@@ -589,9 +599,9 @@ def get_atl09_struct(atl09filepath, gt, atl03struct = None, epsg = None,
     # If ATL03 Struct is available
     if atl03struct:
         df, rotation_data, epsg = match_atl_to_atl03(df, atl03struct) 
-        kml_region_name = atl03struct.kmlRegionName
-        header_file_path = atl03struct.headerFilePath
-        truth_file_path = atl03struct.truthFilePath
+        # kml_region_name = atl03struct.kmlRegionName
+        # header_file_path = atl03struct.headerFilePath
+        # truth_file_path = atl03struct.truthFilePath
 
     # If ATL03 Struct is not available
     else:
@@ -601,9 +611,9 @@ def get_atl09_struct(atl09filepath, gt, atl03struct = None, epsg = None,
         df, epsg = get_atl_coords(df, epsg)    
         # Calculate Along Track    
         df, rotation_data = get_atl_alongtrack(df)
-        kml_region_name, header_file_path, truth_file_path = \
-            get_kml_region(np.array(df.longitude), np.array(df.latitude),
-                           kml_bounds_txt)
+        # kml_region_name, header_file_path, truth_file_path = \
+        #     get_kml_region(np.array(df.longitude), np.array(df.latitude),
+        #                    kml_bounds_txt)
     track_direction = get_direction(np.array(df.latitude))
     atl09filename = get_file_name(atl09filepath)
     atl09_info = getNameParts(atl09filename)
@@ -612,10 +622,11 @@ def get_atl09_struct(atl09filepath, gt, atl03struct = None, epsg = None,
     ancillary = read_atl09_ancillary_data(atl09filepath)
     orbit_info =  read_atl09_orbit_info(atl09filepath)
     # Assign everything to the struct
-    atl09Struct = AtlStruct(df, gt, epsg, zone, hemi,kml_region_name, 
-                              header_file_path, truth_file_path, 
+    beamNum = GtToBeamNum(atl03filepath, gt)
+    beamStrength = GtToBeamSW(atl03filepath, gt)
+    atl09Struct = AtlStruct(df, gt, beamNum, beamStrength, epsg, zone, hemi,
                               atl09filepath, atl09filename, track_direction,
-                              'ATL09', atl09_info, dataIsMapped, rotation_data,
+                              'ATL09', atl09_info, dataIsMapped,rotation_data,
                               ancillary, orbit_info)
     setattr(atl09Struct,'ds_layers', ds_layers)
     setattr(atl09Struct,'ds_va_bin_h', ds_va_bin_h)
@@ -648,21 +659,23 @@ def append_atl03_geolocation(heights, geolocation, fields = ['segment_id']):
     
 def convert_atl03_to_legacy(atl03):
     intensity = np.zeros(len(atl03.df))
+    atl03_zMsl = np.zeros(len(atl03.df))
+    segmentID = np.zeros(len(atl03.df))
     atl03h5Info = getNameParts(atl03.atlFileName)
     atl03legacy = Atl03StructLegacy(atl03.df.lat_ph, atl03.df.lon_ph, 
                               atl03.df.easting, atl03.df.northing, 
                               atl03.df.crosstrack, atl03.df.alongtrack, 
-                              atl03.df.h_ph, atl03.df.time, 
+                              atl03.df.h_ph, atl03_zMsl, atl03.df.time, 
                               atl03.df.delta_time, atl03.df.signal_conf_ph, 
-                              atl03.df.classification, intensity, atl03.gtNum,
-                              atl03.zone, atl03.hemi, atl03.kmlRegionName, 
-                              atl03.headerFilePath, atl03.truthFilePath, 
-                              atl03.atlFileName, atl03.atlFileName, 
-                              atl03.trackDirection, atl03h5Info, 
+                              atl03.df.classification, intensity, segmentID, 
+                              atl03.gtNum, atl03.beamNum, atl03.beamStrength,
+                              atl03.zone, atl03.hemi, atl03.atlFilePath, 
+                              atl03.atlFileName, atl03.trackDirection, 
+                              atl03h5Info, 
                               atl03.dataIsMapped)
     rotationData = atl03.rotationData
-    headerData = atl03.headerData
-    return atl03legacy, rotationData, headerData
+    # headerData = atl03.headerData
+    return atl03legacy, rotationData
 
 def write_pickle(data, filename):
     import pickle
@@ -756,4 +769,4 @@ if __name__ == "__main__":
                                        fields = ['segment_id'])
     
     print('Convert ATL03 Struct to Legacy ATL03 Struct')
-    # atl03legacy, rotationData, headerData = convert_atl03_to_legacy(atl03)
+    atl03legacy, rotationData = convert_atl03_to_legacy(atl03)

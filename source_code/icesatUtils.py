@@ -15,12 +15,14 @@ Authors:
 Date: September 20, 2019
 """
 
+# Filter Runtime warnings
+import warnings
+
 # Import Python modules
 import numpy as np
 import sys
 import os
 import pyproj as proj
-import warnings
 from scipy import interpolate
 import pandas as pd
 import h5py
@@ -28,7 +30,7 @@ import ctypes
 from numpy.ctypeslib import ndpointer 
 import copy
 try:
-    from osgeo import ogr
+    from osgeo import ogr, osr
 except ImportError:
     osgeo_func = ['createShapefiles']
     print('warning: module osgeo not found')
@@ -570,14 +572,50 @@ def find_utm_zone_arr(lon, lat, mode=True, module=None, m=None):
         else:
             return epsg_code_arr
 
+def transform_single_point(x, y, coordTransform):
+    point = ogr.Geometry(ogr.wkbPoint)
+    point.AddPoint(x, y)
+    point.Transform(coordTransform)
+    x = point.GetX()
+    y = point.GetY()
+    return x, y
+
 
 # Transform GCS/PCS based on EPSG and x/y. 
 def transform(epsg_in, epsg_out, x, y, use_old_version=False):
+    try:
+        # Using pyproj version 2 and above
+        # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
+        transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
+        xx, yy = transformer.transform(x, y)
+    except:
+        print('PYPROJ failed, attemping with GDAL...')
+        if isinstance(epsg_in, str):
+            epsg_in = int(epsg_in.strip('epsg:'))
+        else:
+            epsg_in = int(epsg_in)
+        if isinstance(epsg_out, str):
+            epsg_out = int(epsg_out.strip('epsg:'))
+        else:
+            epsg_out = int(epsg_out)
+        inSpatialRef = osr.SpatialReference()
+        inSpatialRef.ImportFromEPSG(epsg_in)
+        
+        outSpatialRef = osr.SpatialReference()
+        outSpatialRef.ImportFromEPSG(epsg_out)
 
-    # Using pyproj version 2 and above
-    # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
-    transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
-    xx, yy = transformer.transform(x, y)
+        x = x.astype('float')
+        y = y.astype('float')
+        
+        coordTransform = osr.CoordinateTransformation(inSpatialRef, 
+                                                      outSpatialRef)
+        pts = np.asarray([transform_single_point(x[i], y[i], coordTransform) \
+                          for i in range(0,len(x))])
+        xx = pts[:,0]
+        yy = pts[:,1]
+        print('Projection with GDAL successful!')
+    
+    
     return xx,yy
     # endIf
 
@@ -661,6 +699,8 @@ def getLatLon2UTM(*args):
         
         # Call transform function
         if len(lon) > 0 and len(lat) > 0:
+            print(epsg_in)
+            print(epsg_out)
             xx, yy = transform(epsg_in, epsg_out, lon, lat)
         else:
             xx, yy = np.array([]), np.array([])
@@ -887,7 +927,11 @@ def getGeoidHeight(geoidData,atlTruthData):
     latsIn, lonsIn = getUTM2LatLon(x,y,zone,hemi)
         
     # Interpolate to find geoidal heights
-    geoidData.lons[0][geoidData.lons[0] > 180.] = geoidData.lons[0] - 360
+    lons = geoidData.lons[0]
+    # lats = geoidData.lats[0]
+    # geoidalHeights = geoidData.geoidalHeights[0]
+    lons[lons > 180.] = lons[lons > 180] - 360
+    geoidData.lons[0] = lons
     f = interpolate.interp2d(geoidData.lons, geoidData.lats, geoidData.geoidalHeights, kind='linear')
     geoidalHeights = interpolate.dfitpack.bispeu(f.tck[0], f.tck[1], f.tck[2], f.tck[3], f.tck[4], lonsIn, latsIn)[0]
     geoidalHeights = np.c_[geoidalHeights]
@@ -897,6 +941,27 @@ def getGeoidHeight(geoidData,atlTruthData):
     
     return atlTruthData
 
+
+##### Function to add in geoid model
+def getGeoidHeight2(geoidData,x,y,z_msl,zone,hemi):
+    
+    # Convert truth data from UTM to Lat/Lon
+    latsIn, lonsIn = getUTM2LatLon(x,y,zone,hemi)
+        
+    # Interpolate to find geoidal heights
+    lons = geoidData.lons[0]
+    # lats = geoidData.lats[0]
+    # geoidalHeights = geoidData.geoidalHeights[0]
+    lons[lons > 180.] = lons[lons > 180] - 360
+    geoidData.lons[0] = lons
+    f = interpolate.interp2d(geoidData.lons, geoidData.lats, geoidData.geoidalHeights, kind='linear')
+    geoidalHeights = interpolate.dfitpack.bispeu(f.tck[0], f.tck[1], f.tck[2], f.tck[3], f.tck[4], lonsIn, latsIn)[0]
+    # geoidalHeights = np.c_[geoidalHeights]
+        
+    # Add geoidal heights to find new ellipsoidal heights (HAE)
+    z_hae = z_msl + geoidalHeights
+    
+    return z_hae
 
 ##### Function to grid point cloud data
 def getRaster_legacy(x, y, z, resolution, method, fillValue = -999, time = [], xAllArray = [], yAllArray = []):

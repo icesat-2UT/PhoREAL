@@ -856,9 +856,38 @@ if __name__ == "__main__":
     
     ##### Start Inputs for getAtlMeasuredSwath
 
+    # Path to ATL03 Input File
+    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181126114738_08990103_001_01.h5' # FINLAND
+    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20181030110205_04860106_001_01.h5' # SONONMA
+    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20190101195003_00670202_001_01_sreq_2696.h5' # SONOMA
+    # atl03FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL03_20190228170214_09510202_001_02_sreq_2696.h5' # SONOMA
+    # atl03FilePath = '//bigtex/laserpewpew/data/release/001/ATL03_r001/ATL03_20190426213703_04370308_001_01.h5' # Brazil    
+    
+    # Path to ATL08 Input File
+    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181126114738_08990103_952_01.h5' # FINLAND
+    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20181030110205_04860106_952_01.h5' # SONOMA
+    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20190101195003_00670202_952_01.h5' # SONOMA
+    # atl08FilePath = '//lidar-server/lidar/USERS/eric/benjelly_atl08/ATL08_20190228170214_09510202_952_02.h5' # SONOMA
+    # atl08FilePath = False    
+    
+    # Path to Output Directory
+    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_finland_20181126_python' # FINLAND
+    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20181030_python' # SONOMA
+    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190101_python' # SONOMA
+    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/r001_sonoma_20190228_python' # SONOMA
+    # outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test' # TEST
+    
+#    atl03FilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/ATL03_20181030110205_04860106_001_01_sub_218.h5' # WSMR
+#    atl08FilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/ATL08_20181030110205_04860106_001_01_sub_218.h5' # WSMR
+#    outFilePath = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test'
+    
     atl03FilePath = 'Z:/data/release/002/ATL03_r002/ATL03_20190928175636_00280506_002_01_sreq_3181.h5' # WSMR
     atl08FilePath = []
     outFilePath = 'C:/Users/malonzo/GLAM/delete'
+    
+#    atl03FilePath = 'z:/data/release/002/ATL03_r002/ATL03_20181018202814_03090102_002_01.h5' # N Carolina 20181018 r002
+#    atl08FilePath = []
+#    outFilePath = 'N:/USERS/mike/iceSat2/atl03_validation/r002_ncarolina_20181018_test'
     
     # Ground track number to analyze
     gtNum = 'gt2r'
@@ -886,7 +915,12 @@ if __name__ == "__main__":
     
     buffer = 50                 # Distance in cross-track (meters) around ATL03 track to look for truth data 
     useExistingTruth = True     # Option to use existing truth data if it exists
+    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/'  # Path to existing truth data
+    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short_dtm_utm.tif'
     truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/wsmr_ATL03_20190928175636_00280506_R002_01_sreq_3002_gt2r_TRUTH_50L50Rm_buffer.las'
+#    truthSwathDir = 'N:/USERS/mike/iceSat2/atl03_validation/r002_ncarolina_20181018/ATL03_20181018202814_03090102_002_01_gt1r_REFERENCE_50L50Rm_buffer.las'
+    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/truth_data/wsmr_ATL03_20191031162419_05310506_R002_01_sub_344_gt2r_TRUTH_150L150Rm_buffer.las'
+    # truthSwathDir = '//lidar-server/lidar/USERS/mike/iceSat2/atl03_validation/test/sonoma_ATL03_20181030110205_04860106_001_01_gt2r_TRUTH_50L50Rm_buffer_classified_short.las'
     truthFileType = '.las'
     createTruthFile = False      # Option to create output truth .las file
     

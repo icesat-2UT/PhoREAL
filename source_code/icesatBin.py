@@ -18,6 +18,7 @@ except:
     print('scipy.stats import failed')
 from scipy import interpolate
 import h5py
+import time
 
 
 from icesatReader import get_atl03_struct
@@ -27,7 +28,6 @@ from icesatReader import get_atl08_struct
 root = os.path.dirname(__file__)
 superFilterFile_windows = os.path.join(root,'closest_x64.dll')
 superFilterFile_linux = os.path.join(root,'phorealc.so')
-
 
 def indexMatch(measuredArray,truthArray):
     A = np.array(measuredArray)
@@ -52,7 +52,7 @@ def indexMatch(measuredArray,truthArray):
 
 def get_max100(series):
     try:
-        max98 = np.percentile(series, 100)
+        max98 = np.nanmax(series)
     except:
         max98 = np.nan
     return max98
@@ -246,6 +246,17 @@ def get_mean(series):
         m = np.nan
     return m
 
+def above_op(series):
+    q_list = [0,10,20,25,30,40,50,60,70,75,80,90,98,100]
+    try:
+        all_percent = [np.percentile(series, q_list)]
+    except:
+        # all_percent = np.nan
+        all_percent = np.array([np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,
+                                np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,
+                                np.nan,np.nan])
+    return all_percent
+
 def calculate_seg_meteric(df_in, df_out, classification, operation, field, 
                           outfield, key_field = 'bin_id',
                           classfield = 'classification'):
@@ -308,6 +319,9 @@ def get_target_keys(key_df, df, field, res = -1):
 
 def agg_keys(key_df, df, agg_list, key = 'bin_id'):
     for i in agg_list:
+        print(i)
+        dt2 = time.time()
+       
         agg = i.split(';')
         if 'perfect' in agg[2]:
             c = 'perfect_class'
@@ -317,7 +331,11 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
             c = 'classification'
 
         class_str = agg[4]
-        class_list = class_str.strip('][').split(',')
+        class_list_str = class_str.strip('][').split(',')
+        class_list = []
+        if len(class_list_str) > 0:
+            for j in range(0,len(class_list_str)):
+                class_list.append(int(class_list_str[j]))
         if 'median' in agg[3]:
             key_df = calculate_seg_meteric(df, key_df, class_list, 
                                              np.median,agg[2],agg[1], 
@@ -462,6 +480,31 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
             a = np.asarray(key_df.unique_time)
             key_df[agg[1]] = np.divide(t,a,out=np.zeros_like(t),where=a!=0)
             key_df = key_df.drop(columns=['unique_time','target_time'])
+        elif 'above_percentile' in agg[3]:
+            d3 = time.time()
+            q_list = [10,20,25,30,40,50,60,70,75,80,90,98,100]
+            df_filter = df[df[c].isin(class_list)]
+            zgroup = df_filter.groupby(key)
+            zout = zgroup.aggregate(above_op)
+            zout[key] = zout.index
+            zout = zout.reset_index(drop = True)
+            field = agg[2]
+            outfield = 'outfield'
+            # zout['segment_id_beg'] = zout['seg_id']
+            zout[outfield] = zout[field]
+            zout = zout.filter([outfield,key])
+            print(zout.outfield[0][0])
+            print(time.time() - d3)
+            for i in range(0,len(q_list)):
+                arr = []
+                for j in range(0,len(zout.outfield)):
+                    arr.append(zout.outfield[j][0][i])
+                title = agg[1] + str(q_list[i])
+                print(title)
+                zout[title] = np.array(arr)
+            zout.drop(columns=['outfield'], inplace=True)
+            key_df = key_df.merge(zout, on=key,how='left')  
+        print(time.time() - dt2)
     return key_df
 
 def orient_df(df, field):
@@ -567,7 +610,9 @@ def compute_rh(canopy, ground):
     return rh
 
 def create_atl08_bin(atl03, atl08, res_at = 30):
+    import time
     #Create Key DF based on ATL08
+    dt = time.time()
     atl03_df = orient_df(atl03.df, 'alongtrack')
     atl08_df = orient_df(atl08.df, 'alongtrack')
     
@@ -585,9 +630,13 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
 
     key_id = key_df.bin_id
     atl08_id = atl08_df.alongtrack
+    print('Part1')
+    print(time.time() - dt)
+    dt = time.time()
+
     
     minInd = indexMatch(atl08_id,key_id)
-    res = 50
+    res = res_at
     datalen = len(atl08_id)
     minInd[minInd >= datalen] = (datalen - 1)
     include = np.zeros(len(key_id))
@@ -599,6 +648,9 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     atl08_df = atl08_df.loc[minInd]
     atl08_df = atl08_df.drop(columns = domain_list)
 
+    print('Part2')
+    print(time.time() - dt)
+    dt = time.time()
 
     df_bin_08 = pd.concat([key_df.reset_index(drop=True),
                      atl08_df.reset_index(drop=True)], axis=1)
@@ -608,76 +660,72 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     
     #Compute the ATL03 
     
+    print(time.time() - dt)
+    dt = time.time()
+    print('Part3')
+    
     agg_list = ['atl03;atl03_ground_median;h_ph;median;[1]',
-            'atl03;atl03_canopy_h;h_ph;get_max98;[2,3]',
-            'atl03;gedi_rh_100;h_ph;get_max100;[1,2,3]',
-            'atl03;gedi_rh_98;h_ph;get_max98;[1,2,3]',
-            'atl03;gedi_rh_90;h_ph;get_max90;[1,2,3]',
-            'atl03;gedi_rh_80;h_ph;get_max80;[1,2,3]',
-            'atl03;gedi_rh_75;h_ph;get_max75;[1,2,3]',
-            'atl03;gedi_rh_70;h_ph;get_max70;[1,2,3]',
-            'atl03;gedi_rh_60;h_ph;get_max60;[1,2,3]',
-            'atl03;gedi_rh_50;h_ph;get_max50;[1,2,3]',
-            'atl03;gedi_rh_40;h_ph;get_max40;[1,2,3]',
-            'atl03;gedi_rh_30;h_ph;get_max30;[1,2,3]',
-            'atl03;gedi_rh_25;h_ph;get_max25;[1,2,3]',
-            'atl03;gedi_rh_20;h_ph;get_max20;[1,2,3]',
-            'atl03;gedi_rh_10;h_ph;get_max10;[1,2,3]',
-            'atl03;atl03_rh_100;h_ph;get_max100;[2,3]',
-            'atl03;atl03_rh_98;h_ph;get_max98;[2,3]',
-            'atl03;atl03_rh_90;h_ph;get_max90;[2,3]',
-            'atl03;atl03_rh_80;h_ph;get_max80;[2,3]',
-            'atl03;atl03_rh_75;h_ph;get_max75;[2,3]',
-            'atl03;atl03_rh_70;h_ph;get_max70;[2,3]',
-            'atl03;atl03_rh_60;h_ph;get_max60;[2,3]',
-            'atl03;atl03_rh_50;h_ph;get_max50;[2,3]',
-            'atl03;atl03_rh_40;h_ph;get_max40;[2,3]',
-            'atl03;atl03_rh_30;h_ph;get_max30;[2,3]',
-            'atl03;atl03_rh_25;h_ph;get_max25;[2,3]',
-            'atl03;atl03_rh_20;h_ph;get_max20;[2,3]',
-            'atl03;atl03_rh_10;h_ph;get_max10;[2,3]',
+            'atl03;atl03_canopy_h;h_ph;get_max98;[2,3]',                
+            'atl03;gedi_rh_;h_ph;above_percentile;[1,2,3]',
+            'atl03;atl03_rh_;h_ph;above_percentile;[2,3]',
             'atl03;atl03_n_unclass;h_ph;get_len;[0]',
             'atl03;atl03_n_ground;h_ph;get_len;[1]',
             'atl03;atl03_n_canopy;h_ph;get_len;[2]',
-            'atl03;atl03_n_hi_canopy;h_ph;get_len;[3]']
+            'atl03;atl03_n_hi_canopy;h_ph;get_len;[3]',
+            'atl03;atl03_radiometry_ground;h_ph;radiometry;[1]',
+            'atl03;atl03_radiometry_canopy;h_ph;radiometry;[2,3]',
+            'atl03;atl03_radiometry_all;h_ph;radiometry;[1,2,3]']
     
     target_key, include = get_target_keys(key_df, atl03_df, 'alongtrack')
     atl03_df = atl03_df.reset_index(drop = True)
     atl03_df = pd.concat([atl03_df,pd.DataFrame(target_key,columns=['bin_id'])],axis=1)
     atl03_df = pd.concat([atl03_df,pd.DataFrame(include,columns=['include'])],axis=1)
     atl03_df = atl03_df[atl03_df.include == 1]
+    
+    print(time.time() - dt)
+    dt = time.time()
+    print('Part4a')
         
     df_bin_03 = agg_keys(key_df, atl03_df, agg_list, key = 'bin_id')
 
+    print(time.time() - dt)
+    dt = time.time()
+    print('Part4b')
+
     atl03_df = pd.concat([atl03_df,pd.DataFrame(target_key,columns=['bin_id'])],axis=1)
 
+    print(time.time() - dt)
+    dt = time.time()
+    print('Part5')
     
     df_bin_03.drop(df_bin_03.columns.difference(['bin_id','atl03_ground_median',
-                                         'atl03_canopy_h',
-                                         'gedi_rh_100','gedi_rh_98',
-                                         'gedi_rh_90','gedi_rh_80',
-                                         'gedi_rh_75','gedi_rh_70',
-                                         'gedi_rh_60','gedi_rh_50',
-                                         'gedi_rh_40','gedi_rh_30',
-                                         'gedi_rh_25','gedi_rh_20',
-                                         'gedi_rh_10','atl03_rh_100',
-                                         'atl03_rh_98','atl03_rh_90',
-                                         'atl03_rh_80','atl03_rh_75',
-                                         'atl03_rh_70','atl03_rh_60',
-                                         'atl03_rh_50','atl03_rh_40',
-                                         'atl03_rh_30','atl03_rh_25',
-                                         'atl03_rh_20','atl03_rh_10',
+                                                 'atl03_canopy_h',
+                                          'gedi_rh_100','gedi_rh_98',
+                                           'gedi_rh_90','gedi_rh_80',
+                                           'gedi_rh_75','gedi_rh_70',
+                                           'gedi_rh_60','gedi_rh_50',
+                                           'gedi_rh_40','gedi_rh_30',
+                                           'gedi_rh_25','gedi_rh_20',
+                                           'gedi_rh_10','atl03_rh_100',
+                                           'atl03_rh_98','atl03_rh_90',
+                                           'atl03_rh_80','atl03_rh_75',
+                                           'atl03_rh_70','atl03_rh_60',
+                                           'atl03_rh_50','atl03_rh_40',
+                                           'atl03_rh_30','atl03_rh_25',
+                                           'atl03_rh_20','atl03_rh_10',
                                          'atl03_n_unclass','atl03_n_ground',
                                          'atl03_n_canopy','atl03_n_hi_canopy'
                                          ]),
                    1,inplace=True)
         
+    print(time.time() - dt)
+    dt = time.time()
+    print('Part6')
     
-    df_bin = pd.merge(df_bin_08, df_bin_03, on="bin_id",how='left')   
-    
+    df_bin = pd.merge(df_bin_08, df_bin_03, on="bin_id",how='left')       
     
     df_bin['gedi_rh_100'] = compute_rh(df_bin['gedi_rh_100'], 
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['gedi_rh_98'] = compute_rh(df_bin['gedi_rh_98'],
                                       df_bin['atl03_ground_median'])
     df_bin['gedi_rh_90'] = compute_rh(df_bin['gedi_rh_90'],
@@ -705,39 +753,213 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     df_bin['atl03_rh_100'] = compute_rh(df_bin['atl03_rh_100'],
                                         df_bin['atl03_ground_median'])
     df_bin['atl03_rh_98'] = compute_rh(df_bin['atl03_rh_98'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_90'] = compute_rh(df_bin['atl03_rh_90'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_80'] = compute_rh(df_bin['atl03_rh_80'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_75'] = compute_rh(df_bin['atl03_rh_75'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_70'] = compute_rh(df_bin['atl03_rh_70'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_60'] = compute_rh(df_bin['atl03_rh_60'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_50'] = compute_rh(df_bin['atl03_rh_50'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_40'] = compute_rh(df_bin['atl03_rh_40'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_30'] = compute_rh(df_bin['atl03_rh_30'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_25'] = compute_rh(df_bin['atl03_rh_25'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_20'] = compute_rh(df_bin['atl03_rh_20'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_rh_10'] = compute_rh(df_bin['atl03_rh_10'],
-                                       df_bin['atl03_ground_median'])
+                                        df_bin['atl03_ground_median'])
     df_bin['atl03_trad_cc'] = (df_bin['atl03_n_canopy'] +\
         df_bin['atl03_n_hi_canopy']) / (df_bin['atl03_n_canopy'] +\
                         df_bin['atl03_n_hi_canopy'] + df_bin['atl03_n_ground'])
+
+    print('Part7')
+    print(time.time() - dt)
+    dt = time.time()
+                                        
+    # df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id', 'res','bin_id',
+    #                        'time','easting','northing','crosstrack',
+    #                        'alongtrack'], axis = 1, inplace = True)
     
-    df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id', 'res','bin_id',
-                           'time','easting','northing','crosstrack',
-                           'alongtrack'], axis = 1, inplace = True)
-    
+    df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id'],
+                axis = 1, inplace = True)
+
+    print('Part8')
+    print(time.time() - dt)
+    dt = time.time()
     
     return df_bin
+
+def create_truth_bin(df_truth, atl08, res_at = 30):
+    import time
+    #Create Key DF based on ATL08
+    dt = time.time()
+    df_truth = orient_df(df_truth, 'alongtrack')
+    atl08_df = orient_df(atl08.df, 'alongtrack')
+    
+    key_df = create_key_df(atl08_df, 'alongtrack', res_at)
+
+    domain_list = [
+               'delta_time','delta_time_beg','delta_time_end','latitude',
+               'longitude','segment_id_beg','segment_id_end','crosstrack']
+    
+    for domain in domain_list:
+        domain_interp = interpolate_domain(atl08_df.alongtrack, 
+                                           atl08_df[domain], key_df.bin_id)
+        key_df = pd.concat([key_df,pd.DataFrame(domain_interp,
+                                                columns=[domain])],axis=1)
+
+    key_id = key_df.bin_id
+    atl08_id = atl08_df.alongtrack
+
+    print(dt - time.time())
+    dt = time.time()
+
+    
+    minInd = indexMatch(atl08_id,key_id)
+    res = res_at
+    datalen = len(atl08_id)
+    minInd[minInd >= datalen] = (datalen - 1)
+    include = np.zeros(len(key_id))
+    seg_at_comp = np.array([atl08_id[x] for x in minInd])
+    diff = np.abs(seg_at_comp - key_id)
+    
+    include[diff <= (res)] = 1  
+    
+    atl08_df = atl08_df.loc[minInd]
+    atl08_df = atl08_df.drop(columns = domain_list)
+
+    print(dt - time.time())
+    dt = time.time()
+
+    df_bin_08 = pd.concat([key_df.reset_index(drop=True),
+                     atl08_df.reset_index(drop=True)], axis=1)
+    
+    
+    df_bin_08 = df_bin_08[include == 1]
+    
+    #Compute the ATL03 
+    
+    print(dt - time.time())
+    dt = time.time()
+    print('part4')
+    
+    agg_list = ['truth;truth_ground_median;z;median;[2]',
+            'truth;truth_canopy_max98;z;get_max98;[4]',
+            'atl03;gedi_rh_;z;above_percentile;[2,4]',
+            'atl03;truth_rh_;z;above_percentile;[4]',
+            'truth;truth_n_ground;z;get_len;[2]',
+            'truth;truth_n_canopy;z;get_len;[4]']
+    
+    target_key, include = get_target_keys(key_df, df_truth, 'alongtrack')
+    df_truth = df_truth.reset_index(drop = True)
+    df_truth = pd.concat([df_truth,pd.DataFrame(target_key,columns=['bin_id'])],axis=1)
+    df_truth = pd.concat([df_truth,pd.DataFrame(include,columns=['include'])],axis=1)
+    df_truth = df_truth[df_truth.include == 1]
+    
+    print(dt - time.time())
+    dt = time.time()
+    print('part5')
+        
+    df_bin_truth = agg_keys(key_df, df_truth, agg_list, key = 'bin_id')
+    
+    df_truth = pd.concat([df_truth,pd.DataFrame(target_key,columns=['bin_id'])],axis=1)
+
+    print(dt - time.time())
+    dt = time.time()
+    print('part6')
+    
+    df_bin_truth.drop(df_bin_truth.columns.difference(['bin_id','truth_ground_median',
+                                         'truth_canopy_max98',
+                                          'gedi_rh_100','gedi_rh_98',
+                                          'gedi_rh_90','gedi_rh_80',
+                                          'gedi_rh_75','gedi_rh_70',
+                                          'gedi_rh_60','gedi_rh_50',
+                                          'gedi_rh_40','gedi_rh_30',
+                                          'gedi_rh_25','gedi_rh_20',
+                                          'gedi_rh_10','truth_rh_100',
+                                          'truth_rh_98','truth_rh_90',
+                                          'truth_rh_80','truth_rh_75',
+                                          'truth_rh_70','truth_rh_60',
+                                          'truth_rh_50','truth_rh_40',
+                                          'truth_rh_30','truth_rh_25',
+                                          'truth_rh_20','truth_rh_10',
+                                         'truth_n_ground','truth_n_canopy'
+                                         ]),
+                   1,inplace=True)
+
+    df_bin_truth['gedi_rh_100'] = compute_rh(df_bin_truth['gedi_rh_100'], 
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_98'] = compute_rh(df_bin_truth['gedi_rh_98'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_90'] = compute_rh(df_bin_truth['gedi_rh_90'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_80'] = compute_rh(df_bin_truth['gedi_rh_80'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_75'] = compute_rh(df_bin_truth['gedi_rh_75'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_70'] = compute_rh(df_bin_truth['gedi_rh_70'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_60'] = compute_rh(df_bin_truth['gedi_rh_60'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_50'] = compute_rh(df_bin_truth['gedi_rh_50'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_40'] = compute_rh(df_bin_truth['gedi_rh_40'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_30'] = compute_rh(df_bin_truth['gedi_rh_30'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_25'] = compute_rh(df_bin_truth['gedi_rh_25'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_20'] = compute_rh(df_bin_truth['gedi_rh_20'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['gedi_rh_10'] = compute_rh(df_bin_truth['gedi_rh_10'],
+                                      df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_100'] = compute_rh(df_bin_truth['truth_rh_100'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_98'] = compute_rh(df_bin_truth['truth_rh_98'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_90'] = compute_rh(df_bin_truth['truth_rh_90'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_80'] = compute_rh(df_bin_truth['truth_rh_80'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_75'] = compute_rh(df_bin_truth['truth_rh_75'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_70'] = compute_rh(df_bin_truth['truth_rh_70'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_60'] = compute_rh(df_bin_truth['truth_rh_60'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_50'] = compute_rh(df_bin_truth['truth_rh_50'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_40'] = compute_rh(df_bin_truth['truth_rh_40'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_30'] = compute_rh(df_bin_truth['truth_rh_30'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_25'] = compute_rh(df_bin_truth['truth_rh_25'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_20'] = compute_rh(df_bin_truth['truth_rh_20'],
+                                        df_bin_truth['truth_ground_median'])
+    df_bin_truth['truth_rh_10'] = compute_rh(df_bin_truth['truth_rh_10'],
+                                        df_bin_truth['truth_ground_median'])
+        
+    df_bin_truth['truth_trad_cc'] = df_bin_truth['truth_n_canopy'] /\
+        (df_bin_truth['truth_n_canopy'] + df_bin_truth['truth_n_ground'])
+
+
+    print(dt - time.time())
+    dt = time.time()
+    print('part6')
+    
+    df_bin_truth = pd.merge(df_bin_08, df_bin_truth, on="bin_id",how='left')       
+    
+    return df_bin_truth
+
 '''
 Function to read copy ATL08 and append 30m segment information
 '''    
@@ -805,15 +1027,15 @@ if __name__ == "__main__":
 
     # Required positional argument
     parser.add_argument("atl03", metavar="atl03",
-                        nargs="+", help="Input ATL03 File")
+                         nargs="+", help="Input ATL03 File")
     
     # Required positional argument
     parser.add_argument("atl08", metavar="atl08",
-                        nargs="+", help="Input ATL08 File")
+                         nargs="+", help="Input ATL08 File")
     
     # Required positional argument
     parser.add_argument("outdir", metavar="outdir",
-                        nargs="+", help="Output ATL08 Location")
+                         nargs="+", help="Output ATL08 Location")
 
     args = parser.parse_args()
     main(args)
