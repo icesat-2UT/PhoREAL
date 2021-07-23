@@ -65,7 +65,7 @@ print('\n')
 window = tk.Tk()
 
 # GUI title
-phoRealVersion = 'v3.27'
+phoRealVersion = 'v3.28'
 window.title('PhoREAL %s - Applied Research Labs (The University of Texas at Austin)' %phoRealVersion)
 
 # GUI size
@@ -2097,10 +2097,10 @@ lbl = tk.Label(statsLabelframeRH, text='Available Stats:', font=('Arial Bold', 1
 lbl.place(x=10, y=150)
 statsListBoxRH = tk.Listbox(statsLabelframeRH, width=36, height=14, selectmode='multiple') 
 statsListBoxRH.place(x=10, y=180)
-yScroll1 = tk.Scrollbar(statsLabelframeRH, orient=tk.VERTICAL)
+yScroll1 = tk.Scrollbar(statsListBoxRH, orient=tk.VERTICAL)
 yScroll1.config(command=statsListBoxRH.yview)
-yScroll1.place(x=230, y=180)
-statsListBoxRH.config(yscrollcommand=yScroll1)
+yScroll1.place(relx=1, rely=0, anchor='ne', relheight=1)
+statsListBoxRH.config(yscrollcommand=yScroll1.set)
 statsColNamesRH = ['Ground Height Count','Ground Height Count (Unique)','Ground Height Range',
                    'Ground Height Median','Ground Height Mode','Ground Height Mean',
                    'Ground Height Standard Deviation','Ground Height Min','Ground Height Max',
@@ -2123,10 +2123,10 @@ lbl = tk.Label(statsLabelframeRH, text='Selected Stats:', font=('Arial Bold', 12
 lbl.place(x=350, y=150)
 statsCompListBoxRH = tk.Listbox(statsLabelframeRH, width=36, height=14, selectmode='multiple') 
 statsCompListBoxRH.place(x=350, y=180)
-yScroll2 = tk.Scrollbar(statsLabelframeRH, orient=tk.VERTICAL)
-yScroll2.config(command=statsListBoxRH.yview)
-yScroll2.place(x=570, y=180)
-statsCompListBoxRH.config(yscrollcommand=yScroll2)
+yScroll2 = tk.Scrollbar(statsCompListBoxRH, orient=tk.VERTICAL)
+yScroll2.config(command=statsCompListBoxRH.yview)
+yScroll2.place(relx=1, rely=0, anchor='ne', relheight=1)
+statsCompListBoxRH.config(yscrollcommand=yScroll2.set)
 
 ### Export Stats button
 statsButtonRH = tk.Button(statsLabelframeRH, text='Export Stats', font=('Arial Bold', 16), width = 13, command=computeStatsRH_callback) 

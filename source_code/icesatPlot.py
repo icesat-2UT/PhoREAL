@@ -16,6 +16,8 @@ Date: September 20, 2019
 """
 
 # Import modules
+import matplotlib
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import os
 import numpy as np
@@ -1046,23 +1048,26 @@ def addStatsToPlot(indsToPlotTuple,xParam,yParam,yVar,yHt,statsDF):
         # Determine whether to plot data or flag error
         if(xDataGood and yDataGood and yBinGood):  
             
-            # Append arrays and sort
-            col1_inds = (np.arange(0,len(xData_start)*2,2)).astype('float')
-            col2_inds = (np.arange(1,len(xData_start)*2,2)).astype('float')
-            allDataCol0 = np.concatenate([col1_inds, col2_inds], axis=0)
-            allDataCol1 = np.concatenate([xData_start, xData_end], axis=0)
-            allDataCol2 = np.concatenate([yData, yData], axis=0)
-            allData = np.column_stack([allDataCol0, allDataCol1, allDataCol2])
-            allData_sorted = allData[np.argsort(allData[:, 0])]
-
-            # Get x,y stats data to plot
-            xDataPlot = allData_sorted[:,1]
-            yDataPlot = allData_sorted[:,2]
+#            # Create line segments to plot for stats
+#            col1_inds = (np.arange(0,len(xData_start)*2,2)).astype('float')
+#            col2_inds = (np.arange(1,len(xData_start)*2,2)).astype('float')
+#            allDataCol0 = np.concatenate([col1_inds, col2_inds], axis=0)
+#            allDataCol1 = np.concatenate([xData_start, xData_end], axis=0)
+#            allDataCol2 = np.concatenate([yData, yData], axis=0)
+#            allData = np.column_stack([allDataCol0, allDataCol1, allDataCol2])
+#            allData_sorted = allData[np.argsort(allData[:, 0])]
+#            xDataPlot = allData_sorted[:,1]
+#            yDataPlot = allData_sorted[:,2]
             
-            # Plot stats line data
-            plt.plot(xDataPlot, yDataPlot, 
-                    color=binEdgeColor,
-                    zorder = 1)
+            # Create midpoints to plot for stats
+            all_x_data = np.column_stack([xData_start, xData_end])
+            xDataPlot = np.mean(all_x_data, axis=1)
+            yDataPlot = yData
+            
+#            # Plot stats line data
+#            plt.plot(xDataPlot, yDataPlot, 
+#                    color=binEdgeColor,
+#                    zorder = 1)
             
             # Plot stats point data
             plt.scatter(xDataPlot, yDataPlot, 

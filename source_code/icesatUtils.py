@@ -1131,6 +1131,7 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     #   - max
     #   - mean (default)
     #   - median
+    #   - mode
     #   - range
     #   - std (standard deviation)
     #   - numel (number of elements)
@@ -1191,6 +1192,8 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
         npOperation = np.nanmean
     elif(method.lower() == 'median'):
         npOperation = np.nanmedian
+    elif(method.lower() == 'mode'):
+        npOperation = mode
     elif(method.lower() == 'range'):
         npOperation = np.range
     elif(method.lower() == 'std'):
@@ -1202,14 +1205,8 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     # EndIf
             
     # Round all incoming X,Y data
-    # if type(origin) == type(None):
-    xRnd = (np.round(x/xResolution)*xResolution).astype(int)
-    yRnd = (np.round(y/yResolution)*yResolution).astype(int)
-    # else:
-    #     x_corner, y_corner = origin[0], origin[1]
-    #     xRnd = np.floor((x - x_corner) / xResolution).astype(int)
-    #     yRnd = np.floor((y - y_corner) / yResolution).astype(int)
-    #     # yRnd = np.floor(-(y - y_corner) / res_y).astype(int)
+    xRnd = (np.round(x/xResolution)*xResolution)
+    yRnd = (np.round(y/yResolution)*yResolution)
     
     # Get output X,Y grid cells
     if(any(xAllArray) and any(yAllArray)):
@@ -1234,9 +1231,20 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     xAllArray, yAllArray = np.meshgrid(xAll,yAll)
     
     # Get raster X, Y, Z space
-    rasterDataX = xAllArray;
-    rasterDataY = yAllArray;
-    rasterDataZ = fillValue*np.ones((np.shape(rasterDataX)))
+    rasterDataX = xAllArray.astype('float')
+    rasterDataY = yAllArray.astype('float')
+    rasterDataZ = fillValue*np.ones((np.shape(rasterDataX))).astype('float')
+    
+    # Make sure input data is of type float
+    if(xRnd.dtype!='float64'):
+        xRnd = xRnd.astype('float')
+    # endIf
+    if(yRnd.dtype!='float64'):
+        yRnd = yRnd.astype('float')
+    # endIf
+    if(z.dtype!='float64'):
+        z = z.astype('float')
+    # endIf
     
     # Get x-rastered, y-rastered, and z data into array
     data = np.column_stack([xRnd, yRnd, z])
@@ -1251,19 +1259,10 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     zValsNew = np.array(groupedData['z_agg'])
     
     # Determine new row, column indices to place rastered Z data into
-    # if discrete_res:
     df_xRnd_min = np.min(groupedData['xRnd'])
     df_yRnd_min = np.min(groupedData['yRnd'])
     colIndsNew = ((np.array(groupedData['xRnd']) - df_xRnd_min)/xResolution).astype(int)
     rowIndsNew = ((np.array(groupedData['yRnd']) - df_yRnd_min)/yResolution).astype(int)
-
-    # else:
-    #     xRndRange = np.arange(min(xRnd), max(xRnd)+1, 1)
-    #     yRndRange = np.arange(min(yRnd), max(yRnd)+1, 1)
-    #     xRnd0 = xRndRange[0] # min(xRnd)
-    #     yRnd0 = yRndRange[0] # min(yRnd)
-    #     colIndsNew = np.array(groupedData['xRnd'] - xRnd0).astype(int)
-    #     rowIndsNew = np.array(groupedData['yRnd'] - yRnd0).astype(int)
 
     # Populate rastered Z data into array
     rasterDataZ[rowIndsNew, colIndsNew] = zValsNew
@@ -1273,6 +1272,9 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     if(any(time)):
         
         # Get x-rastered, y-rastered, and time data into array
+        if(time.dtype!='float64'):
+            time = time.astype('float')
+        # endIf
         dataTime = np.column_stack([xRnd, yRnd, time])
         
         # Put array into Pandas dataframe
@@ -1297,6 +1299,8 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
 
     # Return output
     return GridStruct(rasterDataX, rasterDataY, rasterDataZ, rasterDataT)
+
+# endDef
 
 
 ##### Function to find closest points in an array
@@ -2396,4 +2400,5 @@ def interp_vals2d(input_x, input_y, input_z, interp_x, interp_y, removeThresh=Fa
 # endDef
 
 if __name__ == "__main__":
-    print("Test")    
+    print("Test")
+# end

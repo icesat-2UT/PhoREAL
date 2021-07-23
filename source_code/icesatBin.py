@@ -319,7 +319,7 @@ def get_target_keys(key_df, df, field, res = -1):
 
 def agg_keys(key_df, df, agg_list, key = 'bin_id'):
     for i in agg_list:
-        print(i)
+        # print(i)
         dt2 = time.time()
        
         agg = i.split(';')
@@ -504,7 +504,7 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
                 zout[title] = np.array(arr)
             zout.drop(columns=['outfield'], inplace=True)
             key_df = key_df.merge(zout, on=key,how='left')  
-        print(time.time() - dt2)
+        # print(time.time() - dt2)
     return key_df
 
 def orient_df(df, field):

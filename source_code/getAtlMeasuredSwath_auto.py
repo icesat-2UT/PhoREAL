@@ -702,6 +702,13 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                         os.makedirs(os.path.normpath(outFilePath))
                     # EndIf
                     
+                    # Create arrays for GT Num, Beam Num, and Beam Type
+                    gtNumArray = np.c_[np.tile(atl08Data.gtNum, len(atl08Data.lat))]
+                    beamNumArray = np.c_[np.tile(atl08Data.beamNum, len(atl08Data.lat))]
+                    beamTypeArray = np.c_[np.tile(atl08Data.beamStrength, len(atl08Data.lat))]
+                    zoneArray = np.c_[np.tile(atl08Data.zone, len(atl08Data.lat))]
+                    hemiArray = np.c_[np.tile(atl08Data.hemi, len(atl08Data.lat))]
+                    
                     # Write .csv file
                     if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
                         
@@ -726,10 +733,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     # endIf
                 
                     datalist = [atl08Data.time, atl08Data.deltaTime, \
-                                atl08Data.gtNum, atl08Data.beamNum, atl08Data.beamStrength, \
+                                gtNumArray, beamNumArray, beamTypeArray, \
                                 atl08Data.lat, atl08Data.lon, \
                                 atl08Data.easting, atl08Data.northing, \
-                                atl08Data.zone, atl08Data.hemi, \
+                                zoneArray, hemiArray, \
                                 atl08Data.crossTrack, atl08Data.alongTrack,\
                                 atl08Data.maxCanopy, \
                                 atl08Data.teBestFit, atl08Data.teMedian] 
