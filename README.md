@@ -24,7 +24,7 @@ the Linux command line
 
 
 <h3>Download PhoREAL_v3.28_init.exe (for Windows)</h3>
-Update (June 21, 2021): PhoREAL v3.28 released
+Update (July 23, 2021): PhoREAL v3.28 released
 https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.28.png)
