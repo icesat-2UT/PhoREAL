@@ -27,7 +27,7 @@ the Linux command line
 Update (July 23, 2021): PhoREAL v3.28 released
 https://utexas.box.com/v/DownloadPhoREALGUI
 
-![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.28.png)
+![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.30.png)
 
 <h4>Copyright 2020 Applied Research Laboratories, University of Texas at Austin
 
