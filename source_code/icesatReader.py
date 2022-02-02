@@ -36,7 +36,7 @@ from icesatIO import GtToBeamNum, GtToBeamSW
 from icesatIO import readTruthRegionsTxtFile
 from icesatUtils import identify_hemi_zone
 from icesatIO import writeLas
-from icesatIO import readHeaderMatFile                           
+# from icesatIO import readHeaderMatFile                           
 from getAtlMeasuredSwath_auto import atl03Struct as Atl03StructLegacy
 
 
@@ -231,7 +231,7 @@ def read_atl09_orbit_info(atl09filepath):
 
     subgroup = '/orbit_info/'
     keys = getH5Keys(atl09filepath, subgroup)
-    key_info = get_H5_keys_info(atl09filepath, subgroup)
+    # key_info = get_H5_keys_info(atl09filepath, subgroup)
 
     # Read each key, put it in pandas df
     for idx, key in enumerate(keys):

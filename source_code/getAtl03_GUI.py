@@ -43,7 +43,7 @@ from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 from getAtlTruthSwath_auto import getAtlTruthSwath
 from getMeasurementError_auto import getMeasurementError, offsetsStruct
 
-from icesatPlot import (getPlot, getPlot_atl08, getPlot_truth, 
+from icesatPlot import (getPlot, getPlot_atl08, getPlotDEM, getPlot_truth, 
                         getPlot_measCorr, getPklPlot, addStatsToPlot)
 from icesatIO import (createHTMLChart, writeLog, write_mat, getTruthFilePaths,
                       getTruthHeaders, swbeamToGT, beamNumToGT)
@@ -65,7 +65,7 @@ print('\n')
 window = tk.Tk()
 
 # GUI title
-phoRealVersion = 'v3.28'
+phoRealVersion = 'v3.30'
 window.title('PhoREAL %s - Applied Research Labs (The University of Texas at Austin)' %phoRealVersion)
 
 # GUI size
@@ -1073,7 +1073,8 @@ def loadAtl03_info():
                          'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
                          'Cross-Track (m)', 'Along-Track (m)', \
                          'Height (m HAE)', 'Height (m MSL)', \
-                         'Classification', 'Signal Confidence')
+                         'Classification', 'Signal Confidence', \
+                         'YAPC Signal Conf', 'YAPC SNR', 'YAPC SNR Norm')
         
     else:
         
@@ -1082,7 +1083,8 @@ def loadAtl03_info():
                          'UTM Easting (m)', 'UTM Northing (m)', \
                          'Cross-Track (m)', 'Along-Track (m)', \
                          'Height (m HAE)', 'Height (m MSL)', \
-                         'Classification', 'Signal Confidence')
+                         'Classification', 'Signal Confidence', \
+                         'YAPC Signal Conf', 'YAPC SNR', 'YAPC SNR Norm')
         
     # endIf
         
@@ -1108,9 +1110,9 @@ def loadAtl03_info():
     
     # Set Vals to filter on
     if(atl03Data[0].dataIsMapped):
-        filterTuple = ('  ','Classification', 'Signal Confidence')
+        filterTuple = ('  ', 'Classification', 'Signal Confidence', 'YAPC Signal Conf')
     else:
-        filterTuple = ('  ', 'Signal Confidence')
+        filterTuple = ('  ', 'Signal Confidence', 'YAPC Signal Conf')
     # endIf
     filterBox['values'] = filterTuple
     filterBox.current(0)
@@ -1556,24 +1558,26 @@ def runAtl03():
                         mat_me = np.array([np.round(atlCorrectionsSingle.me[0],2)])                      
                         mat_measX_raster = np.c_[atlCorrectionsSingle.measX_raster]
                         mat_measY_raster = np.c_[atlCorrectionsSingle.measY_raster]
+                        mat_measZ_raster = np.c_[atlCorrectionsSingle.measZ_raster]
                         mat_truthX_raster = np.c_[atlCorrectionsSingle.truthX_raster]
                         mat_truthY_raster = np.c_[atlCorrectionsSingle.truthY_raster]
+                        mat_truthZ_raster = np.c_[atlCorrectionsSingle.truthZ_raster]
             
                         # Concatenate .mat file data
                         matData = [mat_atl03FileName, mat_gtNum, mat_trackDirection, \
                                    mat_eastingCorrection, mat_northingCorrection, mat_verticalCorrection, \
                                    mat_crossTrackCorrection, mat_alongTrackCorrection, \
                                    mat_mae, mat_rmse, mat_me, \
-                                   mat_measX_raster, mat_measY_raster, \
-                                   mat_truthX_raster, mat_truthY_raster]
+                                   mat_measX_raster, mat_measY_raster, mat_measZ_raster, \
+                                   mat_truthX_raster, mat_truthY_raster, mat_truthZ_raster]
                     
                         # Make .mat file variable names
                         matNames = ['atl03FileName','gtNum','trackDirection', \
                                     'eastingCorrection','northingCorrection','verticalCorrection', \
                                     'crossTrackCorrection','alongTrackCorrection', \
                                     'meanAbsError','rmse','meanError', \
-                                    'icesat2_corrected_utmn_raster','icesat2_corrected_z_raster', \
-                                    'reference_utmn_raster','reference_z_raster']
+                                    'icesat2_corrected_utme_raster','icesat2_corrected_utmn_raster','icesat2_corrected_z_raster', \
+                                    'reference_utme_raster','reference_utmn_raster','reference_z_raster']
                         
                         # Write output .mat file
                         try:
@@ -2342,7 +2346,8 @@ filterBox.bind("<<ComboboxSelected>>", filterChoiceCallback)
 
 # Itialize lists
 plotList = ('time', 'deltaTime', 'lat', 'lon', 'easting', 'northing', \
-            'crossTrack', 'alongTrack', 'z', 'zMsl', 'classification', 'signalConf')
+            'crossTrack', 'alongTrack', 'z', 'zMsl', 'classification', 'signalConf', \
+            'yapcConf', 'yapcSnr', 'yapcSnrNorm')
 filterState = np.array([0,1,2,3,4])
 
 # Plot Button Callback
@@ -2380,9 +2385,14 @@ def plotAtl03():
             filterData = eval('atl03Data[' + str(gtNumToPlot) + '].classification')
             filterTF = [filter0ChkState.get(), filter1ChkState.get(), filter2ChkState.get(), filter3ChkState.get(), filter4ChkState.get()]    
             filterNum = filterState[filterTF]
-        elif('signal' in filterChoice.lower()):
+        elif('signal confidence' in filterChoice.lower()):
             filterType = filterChoice
             filterData = eval('atl03Data[' + str(gtNumToPlot) + '].signalConf')
+            filterTF = [filter0ChkState.get(), filter1ChkState.get(), filter2ChkState.get(), filter3ChkState.get(), filter4ChkState.get()]    
+            filterNum = filterState[filterTF]
+        elif('yapc' in filterChoice.lower()):
+            filterType = filterChoice
+            filterData = eval('atl03Data[' + str(gtNumToPlot) + '].yapcConf')
             filterTF = [filter0ChkState.get(), filter1ChkState.get(), filter2ChkState.get(), filter3ChkState.get(), filter4ChkState.get()]    
             filterNum = filterState[filterTF]
         # endIf
@@ -2940,7 +2950,63 @@ def plotAtl08():
     
 # Plot ATL08 Button
 btn = tk.Button(dataLayersLabelframe, text='Add ATL08', font=('Arial Bold', 16), width = 15, command=plotAtl08) 
-btn.place(x=320, y=25)
+btn.place(x=320, y=20)
+
+
+###############################################################################
+#
+# TAB 3: PLOT DATA - ATL03 REFERENCE DEM
+#
+###############################################################################
+
+# Reference Data text
+refdemText = ['Add ATL03 Reference DEM to plot.']
+    
+# Add text        
+lbl = tk.Label(dataLayersLabelframe, text=refdemText[0], font=('Arial', 12), anchor = 'w', justify='left')
+lbl.place(x=10, y=84)
+
+# Plot Reference DEM Button Callback
+def plotRefDem():
+    
+    # Try plot code
+    try:
+                
+        if(len(atl03Data)>0):
+        
+            # Get
+            gtNumToPlot = gtNumPlotBox.current()
+            
+            # Get x,y combo box number selections
+            xVarNum = xValsBox.current()
+            
+            # x,y param names
+            xParam = plotList_truth[xVarNum]
+              
+            # Get x,y combo box text selections
+            xData = eval('atl03Data[' + str(gtNumToPlot) + '].' + xParam)
+            yData = eval('atl03Data[' + str(gtNumToPlot) + '].refDem')
+                        
+            # Call getPlot function
+            getPlotDEM(xData, yData)
+                
+        
+        else:
+            
+            messagebox.showinfo('Error','No Reference DEM data to plot.')
+            
+        # endIf
+    
+    except:
+        
+        messagebox.showinfo('Error','Cannot plot data. Please check inputs.')
+        
+    # endTry
+# endDef
+
+# Plot Truth Button
+btn = tk.Button(dataLayersLabelframe, text='Add ATL03 DEM', font=('Arial Bold', 16), width = 15, command=plotRefDem) 
+btn.place(x=320, y=75)
 
 
 ###############################################################################
@@ -2954,13 +3020,12 @@ btn.place(x=320, y=25)
 #truthPlotLabelframe.place(x=580, y=10)
 
 # Reference Data text
-truthText = ['Add reference data to plot, note:\n' \
-             'Reference Time and Delta Time are\n' \
-             'calculated using linear interpolation.']
+truthText = ['Add reference data to plot, note: times\n' \
+             'are calculated using linear interpolation.']
     
 # Add text        
 lbl = tk.Label(dataLayersLabelframe, text=truthText[0], font=('Arial', 12), anchor = 'w', justify='left')
-lbl.place(x=10, y=90)
+lbl.place(x=10, y=130)
 
 # Itialize Reference data plot lists
 plotList_truth = ('time', 'deltaTime', \
@@ -3034,7 +3099,7 @@ def plotTruth():
 
 # Plot Truth Button
 btn = tk.Button(dataLayersLabelframe, text='Add Reference', font=('Arial Bold', 16), width = 15, command=plotTruth) 
-btn.place(x=320, y=105)
+btn.place(x=320, y=130)
 
 
 ###############################################################################
@@ -3048,26 +3113,27 @@ btn.place(x=320, y=105)
 #measCorrPlotLabelframe.place(x=580, y=150)
 
 # Corrected Measured text
-measCorrText = ['Plot shifted ICESat-2 track that has\n'\
-                'been corrected in XYZ relative to the\n' \
-                'reference data.']
+measCorrText = ['Add ICESat-2 data that has been shifted\n'\
+                'in XYZ relative to the reference data.']
 
 # Corrected Measured Data Y Axis Combo Box
 lbl = tk.Label(dataLayersLabelframe, text=measCorrText[0], font=('Arial', 12), anchor = 'w', justify='left')
-lbl.place(x=10, y=170)
+lbl.place(x=10, y=185)
 
 plotList_measCorr = ('time', 'deltaTime', \
                      'latArray', 'lonArray', \
                      'eastingArray', 'northingArray', \
                      'crossTrackArray', 'alongTrackArray', \
-                     'zArray', 'zMslArray', 'classification', 'signalConf')
+                     'zArray', 'zMslArray', 'classification', 'signalConf', \
+                     'yapcConf', 'yapcSnr', 'yapcSnrNorm')
 
 plotList_measCorrNames = ('Shifted ATL03 Time', 'Shifted ATL03 Delta Time',\
                           'Shifted ATL03 Lat', 'Shifted ATL03 Lon', \
                           'Shifted ATL03 Easting', 'Shifted ATL03 Northing', \
                           'Shifted ATL03 Cross-Track', 'Shifted ATL03 Along-Track', \
                           'Shifted ATL03 Height HAE', 'Shifted ATL03 Height MSL', \
-                          'Shifted ATL03 Classification', 'Shifted ATL03 Signal Confidence') 
+                          'Shifted ATL03 Classification', 'Shifted ATL03 Signal Confidence', \
+                          'Shifted ATL03 YAPC Signal Conf', 'Shifted ATL03 YAPC SNR', 'Shifted ATL03 YAPC SNR Norm') 
 
 # Plot Corrected Measured Button Callback
 def plotMeasCorr():

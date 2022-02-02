@@ -16,8 +16,6 @@ Date: September 20, 2019
 """
 
 # Import modules
-import matplotlib
-matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import os
 import numpy as np
@@ -553,31 +551,35 @@ def getPlot(xData, yData, xLabel, yLabel, title, outPath, origTitle,
                 if('class' in filterType.lower()):
                     if(matchVal < 1):
                         matchStr = 'ATL03 Unclassified'
-                        myColor = [194/255, 197/255, 204/255]
+                        myColor = [194/255, 197/255, 204/255] # Gray
                     elif(matchVal==1):
                         matchStr = 'ATL03 Ground'
-                        myColor = [210/255, 184/255, 38/255]
+                        myColor = [210/255, 184/255, 38/255] # Brown
                     elif(matchVal==2):
                         matchStr = 'ATL03 Canopy'
-                        myColor = [69/255, 129/255, 26/255]
+                        myColor = [69/255, 129/255, 26/255] # Dark Green
                     elif(matchVal==3):
                         matchStr = 'ATL03 Top of Canopy'
-                        myColor = [133/255, 243/255, 52/255]
+                        myColor = [133/255, 243/255, 52/255] # Light Green
                     # endIf
                 else:
                     if(matchVal==0):
-                        myColor = [194/255, 197/255, 204/255]
+                        myColor = [194/255, 197/255, 204/255] # Gray
                     elif(matchVal==1):
-                        myColor = [0, 0, 0]
+                        myColor = [0, 0, 0] # Black
                     elif(matchVal==2):
-                        myColor = [69/255, 129/255, 26/255]
+                        myColor = [69/255, 129/255, 26/255] # Green
                     elif(matchVal==3):
-                        myColor = [1, 0, 0]
+                        myColor = [1, 0, 0] # Red
                     elif(matchVal==4):
-                        myColor = [0, 0, 1]
+                        myColor = [0, 0, 1] # Blue
                     # endIf
                     
-                    matchStr = 'ATL03 Sig Conf = ' + str(matchVal)
+                    if('yapc' in filterType.lower()):
+                        matchStr = 'YAPC Sig Conf = ' + str(matchVal)
+                    else:
+                        matchStr = 'ATL03 Sig Conf = ' + str(matchVal)
+                    # endIf
                     
                 # endIf
                             
@@ -659,6 +661,42 @@ def getPlot_atl08(xData, yData, xLabel, yLabel, title, yName):
     plt.xlabel(xLabel)
     plt.ylabel(yLabel)
     plt.title(title)
+    plt.draw()
+    fig1.show()
+    if(len(figsExist)>0):
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+    # endIf
+# endDef
+    
+    
+# Function to plot ATL03 reference DEM data from getAtlMeasuredSwath_auto.py
+def getPlotDEM(xData, yData):
+
+    # Get figure window
+    figsExist = [x.num for x in plt._pylab_helpers.Gcf.get_all_fig_managers()]
+
+    # Open figure window
+    plt.ion()
+    figNum = plt.gcf().number
+    fig1 = plt.figure(figNum)
+    if(len(figsExist)>0):
+        ax = plt.gca()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+    # endIf
+    
+    # Get string and color
+    matchStr = 'ATL03 Ref DEM'
+    myColor = [148/255, 0/255, 211/255] # Purple
+
+    # Plot all data
+    plt.plot(xData, yData, 's', color=myColor, label=matchStr, markersize=2, zorder=0)
+    
+    # Figure properties
+    plt.legend(loc = 'upper left')
+    plt.axis('tight')
+    plt.grid(b = True, which = 'major', axis = 'both')
     plt.draw()
     fig1.show()
     if(len(figsExist)>0):

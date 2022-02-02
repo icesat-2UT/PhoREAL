@@ -22,7 +22,8 @@ import warnings
 import numpy as np
 import sys
 import os
-import pyproj as proj
+# import pyproj as proj
+from fiona._transform import _transform
 from scipy import interpolate
 import pandas as pd
 import h5py
@@ -584,10 +585,16 @@ def transform_single_point(x, y, coordTransform):
 # Transform GCS/PCS based on EPSG and x/y. 
 def transform(epsg_in, epsg_out, x, y, use_old_version=False):
     try:
-        # Using pyproj version 2 and above
-        # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
-        transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
-        xx, yy = transformer.transform(x, y)
+        # # Using pyproj version 2 and above
+        # # https://pyproj4.github.io/pyproj/stable/gotchas.html#upgrading-to-pyproj-2-from-pyproj-1
+        # transformer = proj.Transformer.from_crs(epsg_in, epsg_out, always_xy=True)
+        # xx, yy = transformer.transform(x, y)
+        
+        # Using fiona
+        xx_list, yy_list = _transform(epsg_in, epsg_out, x, y)
+        xx = np.array(xx_list)
+        yy = np.array(yy_list)
+        
     except:
         print('PYPROJ failed, attemping with GDAL...')
         if isinstance(epsg_in, str):
@@ -1137,8 +1144,8 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     #   - numel (number of elements)
     # fillValue = value to fill in empty grid cells
     # time = secondary array (like z) to perform operation on in each grid cell
-    # xAllArray = force output X grid cells (use np.arange(start, stop + 1, step))
-    # yAllArray = force output Y grid cells (use np.arange(start, stop + 1, step))
+    # xAllArray = force output X grid cells (input like this: [min_x, max_x])
+    # yAllArray = force output Y grid cells (input like this: [min_y, max_y])
     #
     # OUTPUTS
     # -------------
@@ -1211,21 +1218,36 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     # Get output X,Y grid cells
     if(any(xAllArray) and any(yAllArray)):
         
-        xAll = xAllArray
-        yAll = np.flipud(yAllArray)
+        manual_xy = True
+        
+        # Get xy limits
+        xRndMin = (np.round(xAllArray[0]/xResolution)*xResolution)
+        xRndMax = (np.round(xAllArray[1]/xResolution)*xResolution)
+        yRndMin = (np.round(yAllArray[0]/yResolution)*yResolution)
+        yRndMax = (np.round(yAllArray[1]/yResolution)*yResolution)
+        
+        xInside = np.logical_and(xRnd>=xRndMin, xRnd<=xRndMax)
+        yInside = np.logical_and(yRnd>=yRndMin, yRnd<=yRndMax)
+        indsInside = np.logical_and(xInside, yInside)
+        xRnd = xRnd[indsInside]
+        yRnd = yRnd[indsInside]
+        z = z[indsInside]
         
     else:
+        
+        manual_xy = False
+        
         # Get min,max of rounded X,Y data
         xRndMin = xRnd.min()
         xRndMax = xRnd.max()
         yRndMin = yRnd.min()
         yRndMax = yRnd.max()
-        
-        # Get all possible grid combinations
-        xAll = np.arange(xRndMin, xRndMax + xResolution, xResolution)
-        yAll = np.arange(yRndMax, yRndMin - yResolution, -yResolution)
 
     # endIf
+        
+    # Get all possible grid combinations
+    xAll = np.arange(xRndMin, xRndMax + xResolution, xResolution)
+    yAll = np.arange(yRndMax, yRndMin - yResolution, -yResolution)
         
     # Get X,Y array of all pts
     xAllArray, yAllArray = np.meshgrid(xAll,yAll)
@@ -1259,8 +1281,8 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     zValsNew = np.array(groupedData['z_agg'])
     
     # Determine new row, column indices to place rastered Z data into
-    df_xRnd_min = np.min(groupedData['xRnd'])
-    df_yRnd_min = np.min(groupedData['yRnd'])
+    df_xRnd_min = np.min(rasterDataX)
+    df_yRnd_min = np.min(rasterDataY)
     colIndsNew = ((np.array(groupedData['xRnd']) - df_xRnd_min)/xResolution).astype(int)
     rowIndsNew = ((np.array(groupedData['yRnd']) - df_yRnd_min)/yResolution).astype(int)
 
@@ -1270,6 +1292,10 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     
     # Grid 'time' array if necessary
     if(any(time)):
+        
+        if(manual_xy):
+            time = time[indsInside]
+        # endIf
         
         # Get x-rastered, y-rastered, and time data into array
         if(time.dtype!='float64'):
@@ -2396,6 +2422,126 @@ def interp_vals2d(input_x, input_y, input_z, interp_x, interp_y, removeThresh=Fa
     interp_z = f1(interp_x, interp_y)
     
     return interp_z
+
+# endDef
+    
+
+# Function to build output dataframe for csv file
+def build_dataframe_for_csv(atl03Data, namelist):
+    
+    # Gather data together
+    datalist_df = pd.DataFrame()
+    datalist_df[namelist[0]]  = np.ravel(atl03Data.time)
+
+    if(len(atl03Data.deltaTime)>0):
+        datalist_df[namelist[1]]  = np.ravel(atl03Data.deltaTime)
+    else:
+        datalist_df[namelist[1]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.segmentID)>0):
+        datalist_df[namelist[2]]  = np.ravel(atl03Data.segmentID)
+    else:
+        datalist_df[namelist[2]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.gtNum)>0):
+        datalist_df[namelist[3]]  = atl03Data.gtNum
+    else:
+        datalist_df[namelist[3]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.beamNum)>0):
+        datalist_df[namelist[4]]  = atl03Data.beamNum
+    else:
+        datalist_df[namelist[4]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.beamStrength)>0):
+        datalist_df[namelist[5]]  = atl03Data.beamStrength
+    else:
+        datalist_df[namelist[5]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.lat)>0):
+        datalist_df[namelist[6]]  = np.ravel(atl03Data.lat)
+    else:
+        datalist_df[namelist[6]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.lon)>0):
+        datalist_df[namelist[7]]  = np.ravel(atl03Data.lon)
+    else:
+        datalist_df[namelist[7]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.easting)>0):
+        datalist_df[namelist[8]]  = np.ravel(atl03Data.easting)
+    else:
+        datalist_df[namelist[8]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.northing)>0):
+        datalist_df[namelist[9]]  = np.ravel(atl03Data.northing)
+    else:
+        datalist_df[namelist[9]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.zone)>0):
+        datalist_df[namelist[10]] = atl03Data.zone
+    else:
+        datalist_df[namelist[10]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.hemi)>0):
+        datalist_df[namelist[11]] = atl03Data.hemi
+    else:
+        datalist_df[namelist[11]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.crossTrack)>0):
+        datalist_df[namelist[12]] = np.ravel(atl03Data.crossTrack)
+    else:
+        datalist_df[namelist[12]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.alongTrack)>0):
+        datalist_df[namelist[13]] = np.ravel(atl03Data.alongTrack)
+    else:
+        datalist_df[namelist[13]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.z)>0):
+        datalist_df[namelist[14]] = np.ravel(atl03Data.z)
+    else:
+        datalist_df[namelist[14]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.zMsl)>0):
+        datalist_df[namelist[15]] = np.ravel(atl03Data.zMsl)
+    else:
+        datalist_df[namelist[15]] = np.nan
+    # endIf
+    
+    if(len(atl03Data.classification)>0):
+        datalist_df[namelist[16]] = np.ravel(atl03Data.classification)
+    else:
+        datalist_df[namelist[16]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.signalConf)>0):
+        datalist_df[namelist[17]] = np.ravel(atl03Data.signalConf)
+    else:
+        datalist_df[namelist[17]]  = np.nan
+    # endIf
+    
+    if(len(atl03Data.solar_elev)>0):
+        datalist_df[namelist[18]] = np.ravel(atl03Data.solar_elev)
+    else:
+        datalist_df[namelist[18]]  = np.nan
+    # endIf
+    
+    return datalist_df
 
 # endDef
 

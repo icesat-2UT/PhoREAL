@@ -22,11 +22,11 @@ import time as runTime
 from icesatIO import (readAtl03H5, readAtl08H5,
                       readAtl03DataMapping, readAtl08DataMapping,
                       readTruthRegionsTxtFile,
-                      writeLas, writeKml, writeArrayToCSV, writeLog,
-                      GtToBeamNum, GtToBeamSW,
+                      writeLas, writeKml, writeArrayToCSV, writeArrayToCSV_new, 
+                      writeLog, GtToBeamNum, GtToBeamSW,
                       atlRotationStruct, atl03Struct, atl08Struct)
 from icesatUtils import (getNameParts, getAtl08Mapping, getLatLon2UTM, 
-                         getCoordRotFwd, getClosest, interp_vals)
+                         getCoordRotFwd, getClosest, interp_vals, build_dataframe_for_csv)
 
      
 # Function to read ICESat-2 data
@@ -93,19 +93,36 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
         deltaTime_all = readAtl03H5(atl03FilePath, '/heights/delta_time', gtNum)
         signalConf_all = readAtl03H5(atl03FilePath, '/heights/signal_conf_ph', gtNum)
         zGeoidal = readAtl03H5(atl03FilePath, '/geophys_corr/geoid', gtNum)
-        zGeoidal_deltaTime = readAtl03H5(atl03FilePath, '/geophys_corr/delta_time', gtNum)
+        refDem = readAtl03H5(atl03FilePath, '/geophys_corr/dem_h', gtNum)
+        geophys_time = readAtl03H5(atl03FilePath, '/geophys_corr/delta_time', gtNum)
         solar_elev = readAtl03H5(atl03FilePath, '/geolocation/solar_elevation', gtNum)
-        solar_time = readAtl03H5(atl03FilePath, '/geolocation/delta_time', gtNum)
+        geolocation_time = readAtl03H5(atl03FilePath, '/geolocation/delta_time', gtNum)
         atl03_ph_index_beg, atl03_segment_id, atl03_seg_deltaTime = readAtl03DataMapping(atl03FilePath, gtNum, return_delta_time=True)
+        
+        # Try to read new NASA fields for yapc
         try:
-            zGeoidal_all = interp_vals(zGeoidal_deltaTime, zGeoidal, deltaTime_all, removeThresh=True)
+            yapcConf_all = readAtl03H5(atl03FilePath, '/heights/yapc_conf', gtNum)
+            yapcSnr_all = readAtl03H5(atl03FilePath, '/heights/yapc_snr', gtNum)
+            yapcSnrNorm = readAtl03H5(atl03FilePath, '/geolocation/yapc_snr_norm', gtNum)
+            yapcSnrNorm_all = interp_vals(geolocation_time, yapcSnrNorm, deltaTime_all, removeThresh=True)
+        except:
+            yapcConf_all = np.empty(np.shape(signalConf_all))
+            yapcSnr_all = np.empty(np.shape(signalConf_all))
+            yapcSnrNorm_all = np.empty(np.shape(signalConf_all))
+        # endTry
+        
+        # Try to interpolate values from geolocation field resolution to heights resolution
+        try:
+            zGeoidal_all = interp_vals(geophys_time, zGeoidal, deltaTime_all, removeThresh=True)
             zMsl_all = z_all - zGeoidal_all
+            refDem_all = interp_vals(geophys_time, refDem, deltaTime_all, removeThresh=True)
             atl03_segment_id_interp = interp_vals(atl03_seg_deltaTime, atl03_segment_id, deltaTime_all)
             atl03_segment_id_interp = np.round(atl03_segment_id_interp)
-            solar_elev_all = interp_vals(solar_time, solar_elev, deltaTime_all, removeThresh=True)
+            solar_elev_all = interp_vals(geolocation_time, solar_elev, deltaTime_all, removeThresh=True)
         except:
             zGeoidal_all = []            
             zMsl_all = np.empty(np.shape(z_all))
+            refDem_all = np.empty(np.shape(z_all))
             zMsl_all[:] = np.NaN
             atl03_segment_id_interp = []
             solar_elev_all = []
@@ -134,6 +151,21 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
         
         if(len(signalConf_all)==0):
             badVar = 'Signal Confidence (signal_conf_ph)'
+            badVars.append(badVar) 
+        # endIf
+        
+        if(len(yapcConf_all)==0):
+            badVar = 'YAPC Signal Confidence (yapc_conf)'
+            badVars.append(badVar) 
+        # endIf
+        
+        if(len(yapcSnr_all)==0):
+            badVar = 'YAPC SNR (yapc_snr)'
+            badVars.append(badVar) 
+        # endIf
+        
+        if(len(yapcSnrNorm_all)==0):
+            badVar = 'YAPC SNR NORM (yapc_snr_norm)'
             badVars.append(badVar) 
         # endIf
         
@@ -171,7 +203,7 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl08_teBestFit = readAtl08H5(atl08FilePath, '/land_segments/terrain/h_te_best_fit', gtNum)
                 atl08_teMedian = readAtl08H5(atl08FilePath, '/land_segments/terrain/h_te_median', gtNum)
                 atl08_deltaTime = readAtl08H5(atl08FilePath, '/land_segments/delta_time', gtNum)
-                atl08_zGeoidal = interp_vals(zGeoidal_deltaTime, zGeoidal, atl08_deltaTime, removeThresh=True)
+                atl08_zGeoidal = interp_vals(geophys_time, zGeoidal, atl08_deltaTime, removeThresh=True)
                 atl08_maxCanopyMsl = atl08_maxCanopy - atl08_zGeoidal
                 atl08_teBestFitMsl = atl08_teBestFit - atl08_zGeoidal
                 atl08_teMedianMsl = atl08_teMedian - atl08_zGeoidal
@@ -208,6 +240,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     atl03_time = time_all[0:data_length]
                     atl03_deltaTime = deltaTime_all[0:data_length]
                     atl03_signalConf = signalConf_all[0:data_length]
+                    atl03_yapcConf = yapcConf_all[0:data_length]
+                    atl03_yapcSnr = yapcSnr_all[0:data_length]
+                    atl03_yapcSnrNorm = yapcSnrNorm_all[0:data_length] 
+                    atl03_refDem = refDem_all[0:data_length]                     
                     atl03_classification = classification_all[0:data_length]
                     atl03_intensity = np.zeros(np.size(atl03_lat))
                     atl03_solar_elev = solar_elev_all[0:data_length]
@@ -228,6 +264,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     atl03_time = time_all
                     atl03_deltaTime = deltaTime_all
                     atl03_signalConf = signalConf_all
+                    atl03_yapcConf = yapcConf_all
+                    atl03_yapcSnr = yapcSnr_all
+                    atl03_yapcSnrNorm = yapcSnrNorm_all 
+                    atl03_refDem = refDem_all
                     atl03_classification = np.zeros(np.size(atl03_lat))
                     atl03_intensity = np.zeros(np.size(atl03_lat))
                     atl03_solar_elev = solar_elev_all
@@ -249,6 +289,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl03_time = time_all
                 atl03_deltaTime = deltaTime_all
                 atl03_signalConf = signalConf_all
+                atl03_yapcConf = yapcConf_all
+                atl03_yapcSnr = yapcSnr_all
+                atl03_yapcSnrNorm = yapcSnrNorm_all
+                atl03_refDem = refDem_all
                 atl03_classification = np.zeros(np.size(atl03_lat))
                 atl03_intensity = np.zeros(np.size(atl03_lat))
                 atl03_solar_elev = solar_elev_all
@@ -333,6 +377,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 atl03_time = atl03_time[atl03IndsToKeep]
                 atl03_deltaTime = atl03_deltaTime[atl03IndsToKeep]
                 atl03_signalConf = atl03_signalConf[atl03IndsToKeep]
+                atl03_yapcConf = atl03_yapcConf[atl03IndsToKeep]
+                atl03_yapcSnr = atl03_yapcSnr[atl03IndsToKeep]
+                atl03_yapcSnrNorm = atl03_yapcSnrNorm[atl03IndsToKeep]
+                atl03_refDem = atl03_refDem[atl03IndsToKeep]
                 atl03_classification = atl03_classification[atl03IndsToKeep]
                 atl03_intensity = atl03_intensity[atl03IndsToKeep]
                 atl03_solar_elev = atl03_solar_elev[atl03IndsToKeep]
@@ -451,6 +499,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     atl03_time = atl03_time[atl03IndsInRegion]
                     atl03_deltaTime = atl03_deltaTime[atl03IndsInRegion]
                     atl03_signalConf = atl03_signalConf[atl03IndsInRegion]
+                    atl03_yapcConf = atl03_yapcConf[atl03IndsInRegion]
+                    atl03_yapcSnr = atl03_yapcSnr[atl03IndsInRegion]
+                    atl03_yapcSnrNorm = atl03_yapcSnrNorm[atl03IndsInRegion] 
+                    atl03_refDem = atl03_refDem[atl03IndsInRegion] 
                     atl03_classification = atl03_classification[atl03IndsInRegion]
                     atl03_intensity = atl03_intensity[atl03IndsInRegion]
                     atl03_solar_elev = atl03_solar_elev[atl03IndsInRegion]
@@ -514,7 +566,10 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                                     atl03_zMsl,
                                     atl03_time, \
                                     atl03_deltaTime, \
-                                    atl03_signalConf, atl03_classification, atl03_intensity, \
+                                    atl03_signalConf, \
+                                    atl03_yapcConf, atl03_yapcSnr, atl03_yapcSnrNorm, \
+                                    atl03_refDem, \
+                                    atl03_classification, atl03_intensity, \
                                     atl03_solar_elev, \
                                     atl03_segment_id_interp, \
                                     gtNum, beamNum, beamStrength, zone, hemi, \
@@ -543,68 +598,47 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
             # Create output ATL03 .las file
             if(createAtl03LasFile): 
                 
-                writeLog('   Writing ATL03 .las file...', logFileID)
-                outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.las'
-                outPath = os.path.normpath(outFilePath + '/' + outName)
-                
-                # If output directory does not exist, create it
-                if(not os.path.exists(os.path.normpath(outFilePath))):
-                    os.makedirs(os.path.normpath(outFilePath))
-                # EndIf
-                
-                # Get projection
-                if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
+                try:
+                    writeLog('   Writing ATL03 .las file...', logFileID)
+                    outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.las'
+                    outPath = os.path.normpath(outFilePath + '/' + outName)
                     
-                    # NSIDC Polar Stereographic North/South cases (3413 = Arctic, 3976 = Antarctic)
-                    lasProjection = atl03Data.hemi
+                    # If output directory does not exist, create it
+                    if(not os.path.exists(os.path.normpath(outFilePath))):
+                        os.makedirs(os.path.normpath(outFilePath))
+                    # EndIf
                     
-                    # Write .las file
-                    writeLas(np.ravel(atl03Data.easting),np.ravel(atl03Data.northing),np.ravel(atl03Data.z),lasProjection,outPath,np.ravel(atl03Data.classification),np.ravel(atl03Data.intensity),np.ravel(atl03Data.signalConf))
+                    # Get projection
+                    if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
+                        
+                        # NSIDC Polar Stereographic North/South cases (3413 = Arctic, 3976 = Antarctic)
+                        lasProjection = atl03Data.hemi
+                        
+                        # Write .las file
+                        writeLas(np.ravel(atl03Data.easting),np.ravel(atl03Data.northing),np.ravel(atl03Data.z),lasProjection,outPath,np.ravel(atl03Data.classification),np.ravel(atl03Data.intensity),np.ravel(atl03Data.signalConf))
+                        
+                    else:
                     
-                else:
-                
-                    # Write .las file for UTM projection case
-                    writeLas(np.ravel(atl03Data.easting),np.ravel(atl03Data.northing),np.ravel(atl03Data.z),'utm',outPath,np.ravel(atl03Data.classification),np.ravel(atl03Data.intensity),np.ravel(atl03Data.signalConf),atl03Data.hemi,atl03Data.zone)
-                
-                # endIf
+                        # Write .las file for UTM projection case
+                        writeLas(np.ravel(atl03Data.easting),np.ravel(atl03Data.northing),np.ravel(atl03Data.z),'utm',outPath,np.ravel(atl03Data.classification),np.ravel(atl03Data.intensity),np.ravel(atl03Data.signalConf),atl03Data.hemi,atl03Data.zone)
+                    
+                    # endIf
+                    
+                except:
+                    
+                    print('WARNING: Could not write ouptut LAS file.')
+                    
+                # endTry
                 
             # endIf
             
             # Create output ATL03 .kml file
             if(createAtl03KmlFile):
                 
-                writeLog('   Writing ATL03 .kml file...', logFileID)
-                outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.kml'
-                outPath = os.path.normpath(outFilePath + '/' + outName)
-                
-                # If output directory does not exist, create it
-                if(not os.path.exists(os.path.normpath(outFilePath))):
-                    os.makedirs(os.path.normpath(outFilePath))
-                # EndIf
-                
-                # Get array of input time values
-                timeStep = 1 # seconds
-                timeVals = np.arange(np.min(atl03Data.time), np.max(atl03Data.time) + 1, timeStep)
-            
-                # Get closest time values from IceSat MEASURED data
-                timeIn, indsToUse = getClosest(atl03Data.time, timeVals)
-            
-                # Reduce lat/lon values to user-specified time scale
-                lonsIn = atl03Data.lon[indsToUse]
-                latsIn = atl03Data.lat[indsToUse]
-        
-                # Write .kml file
-                writeKml(latsIn, lonsIn, timeIn, outPath)
-            
-            # endIf
-            
-            # Create output ATL08 .kml file
-            if(createAtl08KmlFile):
-                
-                if(atl08FilePath):
-                
-                    writeLog('   Writing ATL08 .kml file...', logFileID)
-                    outName = atl08Data.atl08FileName + '_' + atl08Data.gtNum + '.kml'
+                try:
+                    
+                    writeLog('   Writing ATL03 .kml file...', logFileID)
+                    outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.kml'
                     outPath = os.path.normpath(outFilePath + '/' + outName)
                     
                     # If output directory does not exist, create it
@@ -614,17 +648,61 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                     
                     # Get array of input time values
                     timeStep = 1 # seconds
-                    timeVals = np.arange(np.min(atl08Data.time), np.max(atl08Data.time) + 1, timeStep)
+                    timeVals = np.arange(np.min(atl03Data.time), np.max(atl03Data.time) + 1, timeStep)
                 
                     # Get closest time values from IceSat MEASURED data
-                    timeIn, indsToUse = getClosest(atl08Data.time, timeVals)
+                    timeIn, indsToUse = getClosest(atl03Data.time, timeVals)
                 
                     # Reduce lat/lon values to user-specified time scale
-                    lonsIn = atl08Data.lon[indsToUse]
-                    latsIn = atl08Data.lat[indsToUse]
+                    lonsIn = atl03Data.lon[indsToUse]
+                    latsIn = atl03Data.lat[indsToUse]
             
                     # Write .kml file
                     writeKml(latsIn, lonsIn, timeIn, outPath)
+                    
+                except:
+                    
+                    print('WARNING: Could not write ouptut KML file.')
+                    
+                # endTry
+            
+            # endIf
+            
+            # Create output ATL08 .kml file
+            if(createAtl08KmlFile):
+                
+                if(atl08FilePath):
+                
+                    try: 
+                        
+                        writeLog('   Writing ATL08 .kml file...', logFileID)
+                        outName = atl08Data.atl08FileName + '_' + atl08Data.gtNum + '.kml'
+                        outPath = os.path.normpath(outFilePath + '/' + outName)
+                        
+                        # If output directory does not exist, create it
+                        if(not os.path.exists(os.path.normpath(outFilePath))):
+                            os.makedirs(os.path.normpath(outFilePath))
+                        # EndIf
+                        
+                        # Get array of input time values
+                        timeStep = 1 # seconds
+                        timeVals = np.arange(np.min(atl08Data.time), np.max(atl08Data.time) + 1, timeStep)
+                    
+                        # Get closest time values from IceSat MEASURED data
+                        timeIn, indsToUse = getClosest(atl08Data.time, timeVals)
+                    
+                        # Reduce lat/lon values to user-specified time scale
+                        lonsIn = atl08Data.lon[indsToUse]
+                        latsIn = atl08Data.lat[indsToUse]
+                
+                        # Write .kml file
+                        writeKml(latsIn, lonsIn, timeIn, outPath)
+                        
+                    except:
+                        
+                        print('WARNING: Could not write ouptut KML file.')
+                        
+                    # endTry
                 
                 # endIf
             
@@ -633,58 +711,52 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
             # Create output ATL03 .csv file
             if(createAtl03CsvFile):
                 
-                writeLog('   Writing ATL03 .csv file...', logFileID)
-                outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.csv'
-                outPath = os.path.normpath(outFilePath + '/' + outName)
-                
-                # If output directory does not exist, create it
-                if(not os.path.exists(os.path.normpath(outFilePath))):
-                    os.makedirs(os.path.normpath(outFilePath))
-                # EndIf
-                
-                # Create arrays for GT Num, Beam Num, and Beam Type
-                gtNumArray = np.c_[np.tile(atl03Data.gtNum, len(atl03Data.lat))]
-                beamNumArray = np.c_[np.tile(atl03Data.beamNum, len(atl03Data.lat))]
-                beamTypeArray = np.c_[np.tile(atl03Data.beamStrength, len(atl03Data.lat))]
-                zoneArray = np.c_[np.tile(atl03Data.zone, len(atl03Data.lat))]
-                hemiArray = np.c_[np.tile(atl03Data.hemi, len(atl03Data.lat))]
-                
-                # Write .csv file
-                if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
+                try:
                     
-                    namelist = ['Time (sec)', 'Delta Time (sec)', 'Segment ID', \
-                                'GT Num', 'Beam Num', 'Beam Type', \
-                                'Latitude (deg)', 'Longitude (deg)', \
-                                'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
-                                'EPSG Code', 'Hemisphere', \
-                                'Cross-Track (m)', 'Along-Track (m)', \
-                                'Height (m HAE)', 'Height (m MSL)', \
-                                'Classification', 'Signal Confidence', \
-                                'Solar Elevation (deg)']
-                else:
+                    writeLog('   Writing ATL03 .csv file...', logFileID)
+                    outName = atl03Data.atl03FileName + '_' + atl03Data.gtNum + '.csv'
+                    outPath = os.path.normpath(outFilePath + '/' + outName)
                     
-                    namelist = ['Time (sec)', 'Delta Time (sec)', 'Segment ID', \
-                                'GT Num', 'Beam Num', 'Beam Type', \
-                                'Latitude (deg)', 'Longitude (deg)', \
-                                'UTM Easting (m)', 'UTM Northing (m)', \
-                                'UTM Zone', 'UTM Hemisphere', \
-                                'Cross-Track (m)', 'Along-Track (m)', \
-                                'Height (m HAE)', 'Height (m MSL)', \
-                                'Classification', 'Signal Confidence', \
-                                'Solar Elevation (deg)']
-                # endIf
-                
-                datalist = [atl03Data.time, atl03Data.deltaTime, atl03Data.segmentID, \
-                            gtNumArray, beamNumArray, beamTypeArray, \
-                            atl03Data.lat, atl03Data.lon, \
-                            atl03Data.easting, atl03Data.northing, \
-                            zoneArray, hemiArray, \
-                            atl03Data.crossTrack, atl03Data.alongTrack,\
-                            atl03Data.z, atl03Data.zMsl, \
-                            atl03Data.classification, atl03Data.signalConf, \
-                            atl03Data.solar_elev] 
-                
-                writeArrayToCSV(outPath, namelist, datalist)
+                    # If output directory does not exist, create it
+                    if(not os.path.exists(os.path.normpath(outFilePath))):
+                        os.makedirs(os.path.normpath(outFilePath))
+                    # EndIf
+                    
+                    # Write .csv file
+                    if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
+                        
+                        namelist = ['Time (sec)', 'Delta Time (sec)', 'Segment ID', \
+                                    'GT Num', 'Beam Num', 'Beam Type', \
+                                    'Latitude (deg)', 'Longitude (deg)', \
+                                    'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
+                                    'EPSG Code', 'Hemisphere', \
+                                    'Cross-Track (m)', 'Along-Track (m)', \
+                                    'Height (m HAE)', 'Height (m MSL)', \
+                                    'Classification', 'Signal Confidence', \
+                                    'Solar Elevation (deg)']
+                    else:
+                        
+                        namelist = ['Time (sec)', 'Delta Time (sec)', 'Segment ID', \
+                                    'GT Num', 'Beam Num', 'Beam Type', \
+                                    'Latitude (deg)', 'Longitude (deg)', \
+                                    'UTM Easting (m)', 'UTM Northing (m)', \
+                                    'UTM Zone', 'UTM Hemisphere', \
+                                    'Cross-Track (m)', 'Along-Track (m)', \
+                                    'Height (m HAE)', 'Height (m MSL)', \
+                                    'Classification', 'Signal Confidence', \
+                                    'Solar Elevation (deg)']
+                    # endIf
+                    
+                    datalist_df = build_dataframe_for_csv(atl03Data, namelist)
+                    
+                    # Write data to csv file
+                    writeArrayToCSV_new(outPath, namelist, datalist_df)
+                    
+                except:
+                    
+                    print('WARNING: Could not write ouptut CSV file.')
+                    
+                # endTry
                 
             # endIf
             
@@ -693,55 +765,63 @@ def getAtlMeasuredSwath(atl03FilePath = False, atl08FilePath = False,
                 
                 if(atl08FilePath):
                     
-                    writeLog('   Writing ATL08 .csv file...', logFileID)
-                    outName = atl08Data.atl08FileName + '_' + atl08Data.gtNum + '.csv'
-                    outPath = os.path.normpath(outFilePath + '/' + outName)
-                    
-                    # If output directory does not exist, create it
-                    if(not os.path.exists(os.path.normpath(outFilePath))):
-                        os.makedirs(os.path.normpath(outFilePath))
-                    # EndIf
-                    
-                    # Create arrays for GT Num, Beam Num, and Beam Type
-                    gtNumArray = np.c_[np.tile(atl08Data.gtNum, len(atl08Data.lat))]
-                    beamNumArray = np.c_[np.tile(atl08Data.beamNum, len(atl08Data.lat))]
-                    beamTypeArray = np.c_[np.tile(atl08Data.beamStrength, len(atl08Data.lat))]
-                    zoneArray = np.c_[np.tile(atl08Data.zone, len(atl08Data.lat))]
-                    hemiArray = np.c_[np.tile(atl08Data.hemi, len(atl08Data.lat))]
-                    
-                    # Write .csv file
-                    if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
+                    try: 
                         
-                        namelist = ['Time (sec)', 'Delta Time (sec)', \
-                                    'GT Num', 'Beam Num', 'Beam Type', \
-                                    'Latitude (deg)', 'Longitude (deg)', \
-                                    'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
-                                    'EPSG Code', 'Hemisphere', \
-                                    'Cross-Track (m)', 'Along-Track (m)', \
-                                    'Max Canopy (m)', \
-                                    'Terrain Best Fit (m)', 'Terrain Median (m)']
-                    else:
+                        writeLog('   Writing ATL08 .csv file...', logFileID)
+                        outName = atl08Data.atl08FileName + '_' + atl08Data.gtNum + '.csv'
+                        outPath = os.path.normpath(outFilePath + '/' + outName)
                         
-                        namelist = ['Time (sec)', 'Delta Time (sec)', \
-                                    'GT Num', 'Beam Num', 'Beam Type', \
-                                    'Latitude (deg)', 'Longitude (deg)', \
-                                    'UTM Easting (m)', 'UTM Northing (m)', \
-                                    'UTM Zone', 'UTM Hemisphere', \
-                                    'Cross-Track (m)', 'Along-Track (m)', \
-                                    'Max Canopy (m)', \
-                                    'Terrain Best Fit (m)', 'Terrain Median (m)']
-                    # endIf
-                
-                    datalist = [atl08Data.time, atl08Data.deltaTime, \
-                                gtNumArray, beamNumArray, beamTypeArray, \
-                                atl08Data.lat, atl08Data.lon, \
-                                atl08Data.easting, atl08Data.northing, \
-                                zoneArray, hemiArray, \
-                                atl08Data.crossTrack, atl08Data.alongTrack,\
-                                atl08Data.maxCanopy, \
-                                atl08Data.teBestFit, atl08Data.teMedian] 
+                        # If output directory does not exist, create it
+                        if(not os.path.exists(os.path.normpath(outFilePath))):
+                            os.makedirs(os.path.normpath(outFilePath))
+                        # EndIf
+                        
+                        # Create arrays for GT Num, Beam Num, and Beam Type
+                        gtNumArray = np.c_[np.tile(atl08Data.gtNum, len(atl08Data.lat))]
+                        beamNumArray = np.c_[np.tile(atl08Data.beamNum, len(atl08Data.lat))]
+                        beamTypeArray = np.c_[np.tile(atl08Data.beamStrength, len(atl08Data.lat))]
+                        zoneArray = np.c_[np.tile(atl08Data.zone, len(atl08Data.lat))]
+                        hemiArray = np.c_[np.tile(atl08Data.hemi, len(atl08Data.lat))]
+                        
+                        # Write .csv file
+                        if(atl03Data.zone=='3413' or atl03Data.zone=='3976'):
+                            
+                            namelist = ['Time (sec)', 'Delta Time (sec)', \
+                                        'GT Num', 'Beam Num', 'Beam Type', \
+                                        'Latitude (deg)', 'Longitude (deg)', \
+                                        'Polar Stereo X (m)', 'Polar Stereo Y (m)', \
+                                        'EPSG Code', 'Hemisphere', \
+                                        'Cross-Track (m)', 'Along-Track (m)', \
+                                        'Max Canopy (m)', \
+                                        'Terrain Best Fit (m)', 'Terrain Median (m)']
+                        else:
+                            
+                            namelist = ['Time (sec)', 'Delta Time (sec)', \
+                                        'GT Num', 'Beam Num', 'Beam Type', \
+                                        'Latitude (deg)', 'Longitude (deg)', \
+                                        'UTM Easting (m)', 'UTM Northing (m)', \
+                                        'UTM Zone', 'UTM Hemisphere', \
+                                        'Cross-Track (m)', 'Along-Track (m)', \
+                                        'Max Canopy (m)', \
+                                        'Terrain Best Fit (m)', 'Terrain Median (m)']
+                        # endIf
                     
-                    writeArrayToCSV(outPath, namelist, datalist)
+                        datalist = [atl08Data.time, atl08Data.deltaTime, \
+                                    gtNumArray, beamNumArray, beamTypeArray, \
+                                    atl08Data.lat, atl08Data.lon, \
+                                    atl08Data.easting, atl08Data.northing, \
+                                    zoneArray, hemiArray, \
+                                    atl08Data.crossTrack, atl08Data.alongTrack,\
+                                    atl08Data.maxCanopy, \
+                                    atl08Data.teBestFit, atl08Data.teMedian] 
+                        
+                        writeArrayToCSV(outPath, namelist, datalist)
+                        
+                    except:
+                        
+                        print('WARNING: Could not write ouptut CSV file.')
+                        
+                    # endTry
                 
                 # endIf
                 

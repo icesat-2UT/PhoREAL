@@ -134,7 +134,10 @@ class atl03Struct:
     def __init__(self, atl03_lat, atl03_lon, atl03_easting, atl03_northing, 
                  atl03_crossTrack, atl03_alongTrack, atl03_z, atl03_zMsl, 
                  atl03_time, atl03_deltaTime,
-                 atl03_signalConf, atl03_classification, atl03_intensity,
+                 atl03_signalConf, 
+                 atl03_yapcConf, atl03_yapcSnr, atl03_yapcSnrNorm,
+                 atl03_refDem,
+                 atl03_classification, atl03_intensity,
                  atl03_solar_elev,
                  atl03_segment_id,
                  gtNum, beamNum, beamStrength, zone, hemi,
@@ -151,6 +154,10 @@ class atl03Struct:
         self.time = np.c_[atl03_time]
         self.deltaTime = np.c_[atl03_deltaTime]
         self.signalConf = np.c_[atl03_signalConf]
+        self.yapcConf = np.c_[atl03_yapcConf]
+        self.yapcSnr = np.c_[atl03_yapcSnr]
+        self.yapcSnrNorm = np.c_[atl03_yapcSnrNorm]
+        self.refDem = np.c_[atl03_refDem]
         self.classification = np.c_[atl03_classification]
         self.intensity = np.c_[atl03_intensity]
         self.solar_elev = np.c_[atl03_solar_elev]
@@ -333,8 +340,8 @@ class atlCorrectionsStruct:
                  correctionsEasting, correctionsNorthing, 
                  correctionsVertical, 
                  correctionsMAE, correctionsRMSE, correctionsME, 
-                 measRasterYCommonFinal, measRasterZCommonFinal,
-                 truthRasterYCommonFinal, truthRasterZCommonFinal):
+                 measRasterXCommonFinal, measRasterYCommonFinal, measRasterZCommonFinal,
+                 truthRasterXCommonFinal, truthRasterYCommonFinal, truthRasterZCommonFinal):
         
         self.eastingArray = shiftedEasting
         self.northingArray = shiftedNorthing
@@ -358,10 +365,12 @@ class atlCorrectionsStruct:
         self.mae = correctionsMAE
         self.rmse = correctionsRMSE
         self.me = correctionsME
-        self.measX_raster = measRasterYCommonFinal
-        self.measY_raster = measRasterZCommonFinal
-        self.truthX_raster = truthRasterYCommonFinal
-        self.truthY_raster = truthRasterZCommonFinal
+        self.measX_raster = measRasterXCommonFinal
+        self.measY_raster = measRasterYCommonFinal
+        self.measZ_raster = measRasterZCommonFinal
+        self.truthX_raster = truthRasterXCommonFinal
+        self.truthY_raster = truthRasterYCommonFinal
+        self.truthZ_raster = truthRasterZCommonFinal
     # endDef
 # endClass
     
@@ -415,96 +424,96 @@ def readTruthRegionsTxtFile(kmlBoundsTextFile):
 
 # endDef
 
-##### Function to read header truth .mat file
-def readHeaderMatFile(headerFilePath):
-
-    if headerFilePath.endswith('.mat'):
-
-        # Initialize output data
-        coordType = []
-        zone = []
-        hemi = [] 
-        
-        # Get coordinate type from header .mat file (1 = UTM, 2 = Lat/Lon)
-        matData = loadmat(headerFilePath)
-        coordNum= matData['headerData'][0][0][10][0][0]
-        
-        # Convert lat/lon data to UTM coordinates
-        if(coordNum==1):
-            
-            coordType = 'UTM'
-            
-            # Get UTM zone and hemisphere
-            zone = str(matData['headerData'][0][0][7][0][0])
-            hemi = matData['headerData'][0][0][8][0][0]
-            ellipsoid = matData['headerData'][0][0][9][0][0:]
-            
-        else:
-            
-            coordType = 'Lat/Lon'
-            
-        # Endif
-        
-        # Get x/y min/max data and truth tile name for each truth tile
-        xmin = [matData['headerData'][0][i][0][0][0] for i in range(len(matData['headerData'][0]))]
-        xmax = [matData['headerData'][0][i][1][0][0] for i in range(len(matData['headerData'][0]))]
-        ymin = [matData['headerData'][0][i][2][0][0] for i in range(len(matData['headerData'][0]))]
-        ymax = [matData['headerData'][0][i][3][0][0] for i in range(len(matData['headerData'][0]))]
-        tileName = [matData['headerData'][0][i][12][0] for i in range(len(matData['headerData'][0]))]
-        
-        # Store data as object
-        headerData = headerStruct(coordType, zone, hemi, ellipsoid, xmin, xmax, ymin, ymax, tileName)
-        
-        # Return data
-        return headerData
-
-    elif headerFilePath.endswith('.pkl'):
-
-        from icesatReader import read_pickle
-        from icesatUtils import mode, transform
-        import pyproj
-
-        df = read_pickle(headerFilePath)
-
-        proj4_all = list(df['proj4'])
-        proj4_mode = mode(proj4_all)
-        zone0, hemi0, ellipsoid0, coordNum0 = get_params(proj4_mode)
-        tileName_v = list(df['name'])
-
-        coordType0 = 'UTM'
-        if coordNum0 != 1:
-            coordType0 = 'Lat/Lon'
-
-        xmin = np.array(df['xmin'])
-        xmax = np.array(df['xmax'])
-        ymin = np.array(df['ymin'])
-        ymax = np.array(df['ymax'])
-
-        crs_mode = pyproj.CRS.from_proj4(proj4_mode)
-        epsg_mode = crs_mode.to_epsg()
-
-        for k, proj4 in enumerate(proj4_all):
-            crs_las = pyproj.CRS.from_proj4(proj4)
-            epsg_las = crs_las.to_epsg()
-
-            epsg_in = int(epsg_las)
-            epsg_out = int(epsg_mode)
-            if epsg_in != epsg_out:
-                xmin0, ymin0 = transform(epsg_in, epsg_out, xmin[k], ymin[k])
-                xmax0, ymax0 = transform(epsg_in, epsg_out, xmax[k], ymax[k])
-                xmin[k], ymin[k] = xmin0, ymin0
-                xmax[k], ymax[k] = xmax0, ymax0
-
-        xmin_v = list(xmin)
-        xmax_v = list(xmax)
-        ymin_v = list(ymin)
-        ymax_v = list(ymax)
-
-        headerData = headerStruct(coordType0, zone0, hemi0, ellipsoid0, xmin_v, xmax_v, ymin_v, ymax_v, tileName_v)
-
-        return headerData
-    # endIf
-# endDef
+###### Function to read header truth .mat file
+#def readHeaderMatFile(headerFilePath):
+#
+#    if headerFilePath.endswith('.mat'):
+#
+#        # Initialize output data
+#        coordType = []
+#        zone = []
+#        hemi = [] 
+#        
+#        # Get coordinate type from header .mat file (1 = UTM, 2 = Lat/Lon)
+#        matData = loadmat(headerFilePath)
+#        coordNum= matData['headerData'][0][0][10][0][0]
+#        
+#        # Convert lat/lon data to UTM coordinates
+#        if(coordNum==1):
+#            
+#            coordType = 'UTM'
+#            
+#            # Get UTM zone and hemisphere
+#            zone = str(matData['headerData'][0][0][7][0][0])
+#            hemi = matData['headerData'][0][0][8][0][0]
+#            ellipsoid = matData['headerData'][0][0][9][0][0:]
+#            
+#        else:
+#            
+#            coordType = 'Lat/Lon'
+#            
+#        # Endif
+#        
+#        # Get x/y min/max data and truth tile name for each truth tile
+#        xmin = [matData['headerData'][0][i][0][0][0] for i in range(len(matData['headerData'][0]))]
+#        xmax = [matData['headerData'][0][i][1][0][0] for i in range(len(matData['headerData'][0]))]
+#        ymin = [matData['headerData'][0][i][2][0][0] for i in range(len(matData['headerData'][0]))]
+#        ymax = [matData['headerData'][0][i][3][0][0] for i in range(len(matData['headerData'][0]))]
+#        tileName = [matData['headerData'][0][i][12][0] for i in range(len(matData['headerData'][0]))]
+#        
+#        # Store data as object
+#        headerData = headerStruct(coordType, zone, hemi, ellipsoid, xmin, xmax, ymin, ymax, tileName)
+#        
+#        # Return data
+#        return headerData
+#
+#    elif headerFilePath.endswith('.pkl'):
+#
+#        from icesatReader import read_pickle
+#        from icesatUtils import mode, transform
+#        import pyproj
+#
+#        df = read_pickle(headerFilePath)
+#
+#        proj4_all = list(df['proj4'])
+#        proj4_mode = mode(proj4_all)
+#        zone0, hemi0, ellipsoid0, coordNum0 = get_params(proj4_mode)
+#        tileName_v = list(df['name'])
+#
+#        coordType0 = 'UTM'
+#        if coordNum0 != 1:
+#            coordType0 = 'Lat/Lon'
+#
+#        xmin = np.array(df['xmin'])
+#        xmax = np.array(df['xmax'])
+#        ymin = np.array(df['ymin'])
+#        ymax = np.array(df['ymax'])
+#
+#        crs_mode = pyproj.CRS.from_proj4(proj4_mode)
+#        epsg_mode = crs_mode.to_epsg()
+#
+#        for k, proj4 in enumerate(proj4_all):
+#            crs_las = pyproj.CRS.from_proj4(proj4)
+#            epsg_las = crs_las.to_epsg()
+#
+#            epsg_in = int(epsg_las)
+#            epsg_out = int(epsg_mode)
+#            if epsg_in != epsg_out:
+#                xmin0, ymin0 = transform(epsg_in, epsg_out, xmin[k], ymin[k])
+#                xmax0, ymax0 = transform(epsg_in, epsg_out, xmax[k], ymax[k])
+#                xmin[k], ymin[k] = xmin0, ymin0
+#                xmax[k], ymax[k] = xmax0, ymax0
+#
+#        xmin_v = list(xmin)
+#        xmax_v = list(xmax)
+#        ymin_v = list(ymin)
+#        ymax_v = list(ymax)
+#
+#        headerData = headerStruct(coordType0, zone0, hemi0, ellipsoid0, xmin_v, xmax_v, ymin_v, ymax_v, tileName_v)
+#
+#        return headerData
+#    # endIf
+## endDef
 
 def get_params(proj4):
     from icesatUtils import identify_hemi_zone
@@ -526,64 +535,64 @@ def get_params(proj4):
 
 # endDef
 
-def writeHeaderMatFile(regionName, PKL_DIR, LAS_DIR):
-    writeHeaderFile(regionName, PKL_DIR, LAS_DIR)
-# endDef
-
-def writeHeaderFile(regionName, PKL_DIR, LAS_DIR):
-
-    regionName = regionName + '_HeaderData.pkl'
-    file_pkl = os.path.join(PKL_DIR, regionName)
-
-    from icesatReader import write_pickle
-    from icesatIO import readLas
-    import laspy as las
-    import pandas as pd
-
-    files_las = [fn for fn in os.listdir(LAS_DIR) if fn.endswith('.las')]
-    files_las = sorted(files_las)
-    files_las = [os.path.join(LAS_DIR, fn) for fn in files_las]
-
-    df = pd.DataFrame(columns=['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax',
-                                        'pointcount', 'zone', 'hemi', 'ellipsoid',
-                                        'coordNum', 'numRegs', 'name', 'proj4'])
-
-    for f, file_las in enumerate(files_las):
-
-        file_las_sub = os.path.basename(file_las)
-        print(file_las_sub)
-
-        fp = las.file.File(file_las, mode='r')
-
-        min_bounds = fp.get_header().get_min()
-        max_bounds = fp.get_header().get_max()
-        xb_las = np.array([min_bounds[0], max_bounds[0]])
-        yb_las = np.array([min_bounds[1], max_bounds[1]])
-        zb_las = np.array([min_bounds[2], max_bounds[2]])
-
-        xmin, xmax = xb_las[0], xb_las[1]
-        ymin, ymax = yb_las[0], yb_las[1]
-        zmin, zmax = zb_las[0], zb_las[1]
-
-        pointcount = len(fp.points) #readLas(file_las, metadata='count')
-        proj4_las = readLas(file_las, metadata='proj4')
-        zone, hemi, ellipsoid, coordNum = get_params(proj4_las)
-
-        numRegs = 0
-        name = file_las
-
-        df.loc[f] = [xmin, xmax, ymin, ymax, zmin, zmax,
-                            pointcount, zone, hemi, ellipsoid, coordNum, numRegs, name, proj4_las]
-
-        fp.close()
-
-    # save header file
-    # convert_df_to_mat(df_mat, file_mat)
-    write_pickle(df, file_pkl)
-
-    # return df
-
-# endDef
+#def writeHeaderMatFile(regionName, PKL_DIR, LAS_DIR):
+#    writeHeaderFile(regionName, PKL_DIR, LAS_DIR)
+## endDef
+#
+#def writeHeaderFile(regionName, PKL_DIR, LAS_DIR):
+#
+#    regionName = regionName + '_HeaderData.pkl'
+#    file_pkl = os.path.join(PKL_DIR, regionName)
+#
+#    from icesatReader import write_pickle
+#    from icesatIO import readLas
+#    import laspy as las
+#    import pandas as pd
+#
+#    files_las = [fn for fn in os.listdir(LAS_DIR) if fn.endswith('.las')]
+#    files_las = sorted(files_las)
+#    files_las = [os.path.join(LAS_DIR, fn) for fn in files_las]
+#
+#    df = pd.DataFrame(columns=['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax',
+#                                        'pointcount', 'zone', 'hemi', 'ellipsoid',
+#                                        'coordNum', 'numRegs', 'name', 'proj4'])
+#
+#    for f, file_las in enumerate(files_las):
+#
+#        file_las_sub = os.path.basename(file_las)
+#        print(file_las_sub)
+#
+#        fp = las.file.File(file_las, mode='r')
+#
+#        min_bounds = fp.get_header().get_min()
+#        max_bounds = fp.get_header().get_max()
+#        xb_las = np.array([min_bounds[0], max_bounds[0]])
+#        yb_las = np.array([min_bounds[1], max_bounds[1]])
+#        zb_las = np.array([min_bounds[2], max_bounds[2]])
+#
+#        xmin, xmax = xb_las[0], xb_las[1]
+#        ymin, ymax = yb_las[0], yb_las[1]
+#        zmin, zmax = zb_las[0], zb_las[1]
+#
+#        pointcount = len(fp.points) #readLas(file_las, metadata='count')
+#        proj4_las = readLas(file_las, metadata='proj4')
+#        zone, hemi, ellipsoid, coordNum = get_params(proj4_las)
+#
+#        numRegs = 0
+#        name = file_las
+#
+#        df.loc[f] = [xmin, xmax, ymin, ymax, zmin, zmax,
+#                            pointcount, zone, hemi, ellipsoid, coordNum, numRegs, name, proj4_las]
+#
+#        fp.close()
+#
+#    # save header file
+#    # convert_df_to_mat(df_mat, file_mat)
+#    write_pickle(df, file_pkl)
+#
+#    # return df
+#
+## endDef
 
 
 ##### Functions to read ATL03 .h5 files
@@ -1340,6 +1349,15 @@ def writeKml2(lats, lons, ptNames, kmlName):
 
 
 ### Function to write variables to CSV file
+def writeArrayToCSV_new(csv_out, namelist, datalist_df):
+    
+    # Write to csv file
+    datalist_df.to_csv(csv_out, mode='w', index=False, header=True)
+    
+# endDef
+    
+    
+### Function to write variables to CSV file
 def writeArrayToCSV(csv_out,namelist,datalist,header=True):
     if datalist:
         in_data = datalist[0]
@@ -1356,6 +1374,8 @@ def writeArrayToCSV(csv_out,namelist,datalist,header=True):
     csvFile.close
     
 # endDef
+
+    
     
 def writeATL08toCSV(in_file08,groundtrack,csv_out):
     delta_time = readAtl08H5(in_file08, '/land_segments/delta_time', 
@@ -1589,6 +1609,9 @@ def formatDEM(file, epsg_backup = 0):
     data, xarr, yarr = getDEMArrays(file)
     
     epsg = readDEMepsg(file)
+    
+#    print('TEST!!! OVERRIDING TIF EPSG')
+#    epsg = '32652'
     
     if epsg == None:
         if epsg_backup == 0:

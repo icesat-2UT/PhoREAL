@@ -514,10 +514,12 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
         
                 # Convert common measured and truth data back to Easting/Northing plane
                 try:
-                    _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
-                    _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                    measRasterXCommonFinal, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                    truthRasterXCommonFinal, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
                 except:
+                    measRasterXCommonFinal = np.array([])
                     measRasterYCommonFinal = np.array([])
+                    truthRasterXCommonFinal = np.array([])
                     truthRasterYCommonFinal = np.array([])
                 # endIf 
                 
@@ -548,8 +550,10 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
                                                       correctionsEasting, correctionsNorthing, \
                                                       correctionsVertical, \
                                                       correctionsMAE, correctionsRMSE, correctionsME, \
+                                                      measRasterXCommonFinal, \
                                                       measRasterYCommonFinal, \
                                                       measRasterZCommonFinal, \
+                                                      truthRasterXCommonFinal, \
                                                       truthRasterYCommonFinal, \
                                                       truthRasterZCommonFinal)
                 # Make plots
@@ -700,10 +704,12 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
     
             # Convert common measured and truth data back to Easting/Northing plane
             try:
-                _, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
-                _, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                measRasterXCommonFinal, measRasterYCommonFinal, _, _, _ = getCoordRotRev(measRasterXRotCommonFinal, measRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
+                truthRasterXCommonFinal, truthRasterYCommonFinal, _, _, _ = getCoordRotRev(truthRasterXRotCommonFinal, truthRasterYRotCommonFinal, R_mat, xRotPt, yRotPt)
             except:
+                measRasterXCommonFinal = np.array([])
                 measRasterYCommonFinal = np.array([])
+                truthRasterXCommonFinal = np.array([])
                 truthRasterYCommonFinal = np.array([])
             # endIf 
     
@@ -743,8 +749,10 @@ def getMeasurementError(atlMeasuredData, atlTruthData, refHeightType,
                                                   correctionsEasting, correctionsNorthing, \
                                                   correctionsVertical, \
                                                   correctionsMAE, correctionsRMSE, correctionsME, \
+                                                  measRasterXCommonFinal, \
                                                   measRasterYCommonFinal, \
                                                   measRasterZCommonFinal, \
+                                                  truthRasterXCommonFinal, \
                                                   truthRasterYCommonFinal, \
                                                   truthRasterZCommonFinal)
                             
