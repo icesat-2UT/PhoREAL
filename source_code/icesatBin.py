@@ -319,7 +319,7 @@ def get_target_keys(key_df, df, field, res = -1):
 
 def agg_keys(key_df, df, agg_list, key = 'bin_id'):
     for i in agg_list:
-        # print(i)
+        print(i)
         dt2 = time.time()
        
         agg = i.split(';')
@@ -493,8 +493,8 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
             # zout['segment_id_beg'] = zout['seg_id']
             zout[outfield] = zout[field]
             zout = zout.filter([outfield,key])
-            print(zout.outfield[0][0])
-            print(time.time() - d3)
+            # print(zout.outfield[0][0])
+            # print(time.time() - d3)
             for i in range(0,len(q_list)):
                 arr = []
                 for j in range(0,len(zout.outfield)):
@@ -504,7 +504,7 @@ def agg_keys(key_df, df, agg_list, key = 'bin_id'):
                 zout[title] = np.array(arr)
             zout.drop(columns=['outfield'], inplace=True)
             key_df = key_df.merge(zout, on=key,how='left')  
-        # print(time.time() - dt2)
+        print(time.time() - dt2)
     return key_df
 
 def orient_df(df, field):
@@ -616,11 +616,14 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     atl03_df = orient_df(atl03.df, 'alongtrack')
     atl08_df = orient_df(atl08.df, 'alongtrack')
     
+
+    
     key_df = create_key_df(atl08_df, 'alongtrack', res_at)
 
     domain_list = [
                'delta_time','delta_time_beg','delta_time_end','latitude',
-               'longitude','segment_id_beg','segment_id_end']
+               'longitude','segment_id_beg','segment_id_end','northing',
+               'easting','crosstrack']
     
     for domain in domain_list:
         domain_interp = interpolate_domain(atl08_df.alongtrack, 
@@ -787,7 +790,7 @@ def create_atl08_bin(atl03, atl08, res_at = 30):
     # df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id', 'res','bin_id',
     #                        'time','easting','northing','crosstrack',
     #                        'alongtrack'], axis = 1, inplace = True)
-    
+    df_bin.alongtrack = df_bin.bin_id
     df_bin.drop(columns = ['beg_id', 'mid_id', 'end_id'],
                 axis = 1, inplace = True)
 
@@ -853,7 +856,7 @@ def create_truth_bin(df_truth, atl08, res_at = 30):
     
     agg_list = ['truth;truth_ground_median;z;median;[2]',
             'truth;truth_canopy_max98;z;get_max98;[4]',
-            'atl03;gedi_rh_;z;above_percentile;[2,4]',
+            'atl03;t_gedi_rh_;z;above_percentile;[2,4]',
             'atl03;truth_rh_;z;above_percentile;[4]',
             'truth;truth_n_ground;z;get_len;[2]',
             'truth;truth_n_canopy;z;get_len;[4]']
@@ -878,13 +881,13 @@ def create_truth_bin(df_truth, atl08, res_at = 30):
     
     df_bin_truth.drop(df_bin_truth.columns.difference(['bin_id','truth_ground_median',
                                          'truth_canopy_max98',
-                                          'gedi_rh_100','gedi_rh_98',
-                                          'gedi_rh_90','gedi_rh_80',
-                                          'gedi_rh_75','gedi_rh_70',
-                                          'gedi_rh_60','gedi_rh_50',
-                                          'gedi_rh_40','gedi_rh_30',
-                                          'gedi_rh_25','gedi_rh_20',
-                                          'gedi_rh_10','truth_rh_100',
+                                          't_gedi_rh_100','t_gedi_rh_98',
+                                          't_gedi_rh_90','t_gedi_rh_80',
+                                          't_gedi_rh_75','t_gedi_rh_70',
+                                          't_gedi_rh_60','t_gedi_rh_50',
+                                          't_gedi_rh_40','t_gedi_rh_30',
+                                          't_gedi_rh_25','t_gedi_rh_20',
+                                          't_gedi_rh_10','truth_rh_100',
                                           'truth_rh_98','truth_rh_90',
                                           'truth_rh_80','truth_rh_75',
                                           'truth_rh_70','truth_rh_60',
@@ -895,31 +898,31 @@ def create_truth_bin(df_truth, atl08, res_at = 30):
                                          ]),
                    1,inplace=True)
 
-    df_bin_truth['gedi_rh_100'] = compute_rh(df_bin_truth['gedi_rh_100'], 
+    df_bin_truth['t_gedi_rh_100'] = compute_rh(df_bin_truth['t_gedi_rh_100'], 
                                         df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_98'] = compute_rh(df_bin_truth['gedi_rh_98'],
+    df_bin_truth['t_gedi_rh_98'] = compute_rh(df_bin_truth['t_gedi_rh_98'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_90'] = compute_rh(df_bin_truth['gedi_rh_90'],
+    df_bin_truth['t_gedi_rh_90'] = compute_rh(df_bin_truth['t_gedi_rh_90'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_80'] = compute_rh(df_bin_truth['gedi_rh_80'],
+    df_bin_truth['t_gedi_rh_80'] = compute_rh(df_bin_truth['t_gedi_rh_80'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_75'] = compute_rh(df_bin_truth['gedi_rh_75'],
+    df_bin_truth['t_gedi_rh_75'] = compute_rh(df_bin_truth['t_gedi_rh_75'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_70'] = compute_rh(df_bin_truth['gedi_rh_70'],
+    df_bin_truth['t_gedi_rh_70'] = compute_rh(df_bin_truth['t_gedi_rh_70'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_60'] = compute_rh(df_bin_truth['gedi_rh_60'],
+    df_bin_truth['t_gedi_rh_60'] = compute_rh(df_bin_truth['t_gedi_rh_60'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_50'] = compute_rh(df_bin_truth['gedi_rh_50'],
+    df_bin_truth['t_gedi_rh_50'] = compute_rh(df_bin_truth['t_gedi_rh_50'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_40'] = compute_rh(df_bin_truth['gedi_rh_40'],
+    df_bin_truth['t_gedi_rh_40'] = compute_rh(df_bin_truth['t_gedi_rh_40'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_30'] = compute_rh(df_bin_truth['gedi_rh_30'],
+    df_bin_truth['t_gedi_rh_30'] = compute_rh(df_bin_truth['t_gedi_rh_30'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_25'] = compute_rh(df_bin_truth['gedi_rh_25'],
+    df_bin_truth['t_gedi_rh_25'] = compute_rh(df_bin_truth['t_gedi_rh_25'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_20'] = compute_rh(df_bin_truth['gedi_rh_20'],
+    df_bin_truth['t_gedi_rh_20'] = compute_rh(df_bin_truth['t_gedi_rh_20'],
                                       df_bin_truth['truth_ground_median'])
-    df_bin_truth['gedi_rh_10'] = compute_rh(df_bin_truth['gedi_rh_10'],
+    df_bin_truth['t_gedi_rh_10'] = compute_rh(df_bin_truth['t_gedi_rh_10'],
                                       df_bin_truth['truth_ground_median'])
     df_bin_truth['truth_rh_100'] = compute_rh(df_bin_truth['truth_rh_100'],
                                         df_bin_truth['truth_ground_median'])
@@ -955,8 +958,7 @@ def create_truth_bin(df_truth, atl08, res_at = 30):
     print(dt - time.time())
     dt = time.time()
     print('part6')
-    
-    df_bin_truth = pd.merge(df_bin_08, df_bin_truth, on="bin_id",how='left')       
+    #df_bin_truth = pd.merge(df_bin_08, df_bin_truth, on="bin_id",how='left')       
     
     return df_bin_truth
 
@@ -1022,20 +1024,73 @@ def main(args):
 
     
 if __name__ == "__main__":
-    """ Command line entry point """
-    parser = argparse.ArgumentParser()
+    # """ Command line entry point """
+    # parser = argparse.ArgumentParser()
 
-    # Required positional argument
-    parser.add_argument("atl03", metavar="atl03",
-                         nargs="+", help="Input ATL03 File")
+    # # Required positional argument
+    # parser.add_argument("atl03", metavar="atl03",
+    #                       nargs="+", help="Input ATL03 File")
     
-    # Required positional argument
-    parser.add_argument("atl08", metavar="atl08",
-                         nargs="+", help="Input ATL08 File")
+    # # Required positional argument
+    # parser.add_argument("atl08", metavar="atl08",
+    #                       nargs="+", help="Input ATL08 File")
     
-    # Required positional argument
-    parser.add_argument("outdir", metavar="outdir",
-                         nargs="+", help="Output ATL08 Location")
+    # # Required positional argument
+    # parser.add_argument("outdir", metavar="outdir",
+    #                       nargs="+", help="Output ATL08 Location")
 
-    args = parser.parse_args()
-    main(args)
+    # args = parser.parse_args()
+    # main(args)
+    
+    if os.name == 'nt':
+        basepath03 = 'Z:/data/release/002/ATL03_r002/Finland/'
+        basepath08 = 'Z:/data/release/002/ATL08_r002/Finland/'
+    else:
+        basepath03 = '/laserpewpew/data/release/002/ATL03_r002/Finland/'
+        basepath08 = '/laserpewpew/data/release/002/ATL08_r002/Finland/'
+    
+    atl03file = 'ATL03_20181118120428_07770103_002_01.h5'
+    atl08file = 'ATL08_20181118120428_07770103_002_01.h5'
+    
+    if os.name == 'nt':
+        basepath03 = 'Z:/data/release/002/ATL03_r002/Finland/'
+        basepath08 = 'Z:/data/release/002/ATL08_r002/Finland/'
+    else:
+        basepath03 = '/LIDAR/server/USERS/eric/1_experiment/test/'
+        basepath08 = '/LIDAR/server/USERS/eric/1_experiment/test/'
+    
+    atl03file = 'ATL03_20190602095033_09950302_003_01.h5'
+    atl08file = 'ATL08_20190602095033_09950302_003_01.h5'
+    # Inputs
+    atl03filepath = basepath03 + atl03file
+    atl08filepath = basepath08 + atl08file
+    gt = 'gt1l'
+    
+    # Inputs
+    atl03filepath = basepath03 + atl03file
+    atl08filepath = basepath08 + atl08file
+    # gt_list = ['gt1r','gt1l','gt2l','gt2r','gt3l','gt3r']
+    gt_list = ['gt1r']
+
+    upsampled_list = []
+    for gt in gt_list:
+        gt = 'gt1l'
+        
+        header_file_path =\
+            '/LIDAR/server/USERS/eric/1_experiment/Finland_HeaderData.mat'
+            
+        kml_bounds_txt1 = '/LIDAR/server/USERS/eric/2_production/kmlBounds.txt'
+           
+        print('Generate ATL03 Struct')
+        atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath, 
+                                  epsg = '32635', kml_bounds_txt = kml_bounds_txt1, 
+                                  header_file_path = header_file_path)
+        
+        print('Generate ATL08 Struct')
+        atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+        
+        print('Match ATL08 to ATL03 by segment')
+        upsampled_atl08_bin = create_atl08_bin(atl03, atl08, res_at = 100)
+        
+        upsampled_list.append(upsampled_atl08_bin)
+    
