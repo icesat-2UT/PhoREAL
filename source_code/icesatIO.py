@@ -255,7 +255,7 @@ class atlTruthStruct:
         
     # Define class with designated fields
     def __init__(self, easting, northing, crossTrack, alongTrack, lat, lon, z, 
-                 classification, intensity, zone, hemi, epsg=False):
+                 classification, intensity, year, month, day, zone, hemi, epsg=False):
             
         self.easting = np.c_[easting]
         self.northing = np.c_[northing]
@@ -268,9 +268,14 @@ class atlTruthStruct:
         self.intensity = np.c_[intensity]
         self.time = np.zeros(np.shape(self.easting))
         self.deltaTime = np.zeros(np.shape(self.easting))
+        self.year = year
+        self.month = month
+        self.day = day
         self.zone = zone
         self.hemi = hemi
         self.epsg = epsg
+
+
     # endDef
     
     # Define append method
@@ -287,6 +292,9 @@ class atlTruthStruct:
         self.intensity = np.concatenate((self.intensity, newClass.intensity), axis=0)
         self.time = np.concatenate((self.time, newClass.time), axis=0)
         self.deltaTime = np.concatenate((self.deltaTime, newClass.deltaTime), axis=0)
+        self.year = np.concatenate((self.year, newClass.year), axis=0)
+        self.month = np.concatenate((self.month, newClass.month), axis=0)
+        self.day = np.concatenate((self.day, newClass.day), axis=0)
         self.zone = newClass.zone
         self.hemi = newClass.hemi
         self.epsg = newClass.epsg
@@ -830,7 +838,7 @@ def readLas(lasFilePath, metadata=None):
             z = lasFile.z
             classification = lasFile.classification
             intensity = lasFile.intensity
-            headerData = lasFile.header
+            headerData = lasFile.headerdate = lasFile.header.get_date()
             
             # Store output into class structure
             lasData = lasStruct(x, y, z, classification, intensity, headerData)
@@ -2077,6 +2085,28 @@ def loadLasFile(truthFilePath, atlMeasuredData, rotationData, logFileID=False):
     # Get easting/northing
     lasTruthData_x = lasTruthData.x
     lasTruthData_y = lasTruthData.y
+    
+    if lasTruthData.headerData is not None:
+        if len(lasTruthData.headerData) > 0:
+            lasTruthData_year = np.zeros(lasTruthData_x.shape[0])
+            lasTruthData_year = lasTruthData_year + lasTruthData.headerData[0][0].year
+            lasTruthData_month = np.zeros(lasTruthData_x.shape[0])
+            lasTruthData_month = lasTruthData_month + lasTruthData.headerData[0][0].month
+            lasTruthData_day = np.zeros(lasTruthData_x.shape[0])
+            lasTruthData_day = lasTruthData_day + lasTruthData.headerData[0][0].day
+        else:
+            lasTruthData_year = np.zeros(lasTruthData_x.shape[0])
+            lasTruthData_month = np.zeros(lasTruthData_x.shape[0])
+            lasTruthData_day = np.zeros(lasTruthData_x.shape[0])
+
+    else:
+        lasTruthData_year = np.zeros(lasTruthData_x.shape[0])
+        lasTruthData_month = np.zeros(lasTruthData_x.shape[0])
+        lasTruthData_day = np.zeros(lasTruthData_x.shape[0])       
+        
+    lasTruthData_year = np.c_[lasTruthData_year].astype(int)
+    lasTruthData_month = np.c_[lasTruthData_month].astype(int)
+    lasTruthData_day = np.c_[lasTruthData_day].astype(int)
         
     # Reproject if necessary
     if(epsg_truth == 'None'):
@@ -2107,10 +2137,13 @@ def loadLasFile(truthFilePath, atlMeasuredData, rotationData, logFileID=False):
         # Store data as object
         atlTruthData = atlTruthStruct(lasTruthData_x, lasTruthData_y, 
                                       lasTruthData_x_newRot, lasTruthData_y_newRot, 
-                                      lasTruth_lat, lasTruth_lon,
+                                      lasTruth_lon, lasTruth_lat,
                                       lasTruthData.z, 
                                       lasTruthData.classification, 
-                                      lasTruthData.intensity, 
+                                      lasTruthData.intensity,
+                                      lasTruthData_year,
+                                      lasTruthData_month,
+                                      lasTruthData_day,                                      
                                       atlMeasuredData.zone, 
                                       atlMeasuredData.hemi,
                                       epsg_atl)
@@ -2183,12 +2216,22 @@ def loadTifFile(truthFilePath, atlMeasuredData, rotationData, outFilePath, logFi
         # Get reference lat/lon
         lat, lon = getUTM2LatLon(xarr, yarr, atlMeasuredData.zone, atlMeasuredData.hemi)
         
+        lasTruthData_year = np.zeros(xarr.shape[0])
+        lasTruthData_month = np.zeros(xarr.shape[0])
+        lasTruthData_day = np.zeros(xarr.shape[0]) 
+    
+        lasTruthData_year = np.c_[lasTruthData_year].astype(int)
+        lasTruthData_month = np.c_[lasTruthData_month].astype(int)
+        lasTruthData_day = np.c_[lasTruthData_day].astype(int)
+        
         # Store Data as Object
-        atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, lat, lon,
+        atlTruthData = atlTruthStruct(xarr, yarr, x_newRot, y_newRot, lon, lat,
                                       zarr, classification, intensity, 
+                                      lasTruthData_year, lasTruthData_month,
+                                      lasTruthData_day,
                                       atlMeasuredData.zone, 
                                       atlMeasuredData.hemi,
-                                      epsg_atl)
+                                      epsg_atl, '')
           
     # endIf
       
@@ -2482,7 +2525,17 @@ def readLasHeader(lasFileInput, outputFilePath = False, logFileID = False):
     import os
 
     # Get input .las files
-    lasFiles, inputFileCheck = getFilesFromInput(lasFileInput, '.las', logFileID)
+    if isinstance(lasFileInput,str):
+        if lasFileInput[-4:] == '.laz':
+            lasFiles, inputFileCheck = getFilesFromInput(lasFileInput, '.laz', logFileID)
+        elif lasFileInput[-4:] == '.las':
+            lasFiles, inputFileCheck = getFilesFromInput(lasFileInput, '.las', logFileID)
+
+    if isinstance(lasFileInput,list):
+        if lasFileInput[0][-4:] == '.laz':
+            lasFiles, inputFileCheck = getFilesFromInput(lasFileInput, '.laz', logFileID)
+        elif lasFileInput[0][-4:] == '.las':
+            lasFiles, inputFileCheck = getFilesFromInput(lasFileInput, '.las', logFileID)
         
     # Set dataframe column names
     columnNames = ['fileName','version','xmin','xmax','ymin','ymax','zmin','zmax', 
@@ -2917,11 +2970,14 @@ def makeBuffer(atlTruthData, atlMeasuredData, rotationData, buffer):
                                         atlTruthDataFiltered.northing, 
                                         atlTruthDataFiltered.crossTrack,
                                         atlTruthDataFiltered.alongTrack,
-                                        atlTruthDataFiltered.lat, 
                                         atlTruthDataFiltered.lon, 
+                                        atlTruthDataFiltered.lat, 
                                         atlTruthDataFiltered.z, 
                                         atlTruthDataFiltered.classification, 
                                         atlTruthDataFiltered.intensity, 
+                                        atlTruthDataFiltered.year, 
+                                        atlTruthDataFiltered.month, 
+                                        atlTruthDataFiltered.day, 
                                         atlTruthDataFiltered.zone, 
                                         atlTruthDataFiltered.hemi,
                                         atlTruthDataFiltered.epsg)
@@ -2962,14 +3018,22 @@ def makeBuffer_legacy(atlTruthData, atlMeasuredData, rotationData, buffer):
     subData_z = atlTruthData.z[xyBufferInds]
     subData_classification = atlTruthData.classification[xyBufferInds]
     subData_intensity = atlTruthData.intensity[xyBufferInds]
+    subData_year = atlTruthData.year[xyBufferInds]
+    subData_month = atlTruthData.month[xyBufferInds]
+    subData_day = atlTruthData.day[xyBufferInds]
+
+
 
     # Store data as object
     atlTruthDataBuffer = atlTruthStruct(subData_easting, subData_northing, 
                                         subData_crossTrack, subData_alongTrack,
-                                        subData_lat, subData_lon,
+                                        subData_lon, subData_lat,
                                         subData_z, 
                                         subData_classification, 
-                                        subData_intensity, 
+                                        subData_intensity,
+                                        subData_year,
+                                        subData_month,
+                                        subData_day,
                                         atlTruthData.zone, 
                                         atlTruthData.hemi,
                                         atlTruthData.epsg)
@@ -3207,7 +3271,6 @@ def GtToBeamSW(atlfilepath, GT):
     gt = GT.lower()
     fp_a = fp[gt].attrs
     beamSW = (fp_a['atlas_beam_type']).decode()
-    
     return beamSW
 # endDef
 

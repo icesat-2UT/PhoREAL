@@ -21,7 +21,7 @@ import numpy as np
 import os
 import h5py
 
-from icesatUtils import getH5Keys
+from icesatUtils import getH5Keys, ismember
 from icesatIO import readAtl03H5
 from icesatIO import readAtlH5
 from icesatIO import readAtl03DataMapping
@@ -245,14 +245,17 @@ def read_atl09_orbit_info(atl09filepath):
     return df
 
 # Map classifications from ATL08, map back to ATL03 Photons
-def get_atl03_classification(atl03filepath, atl08filepath, df, gt):
+def get_atl03_classification(atl03filepath, atl08filepath, gt):
     # Read ATL03 metrics for class mapping
-    atl03_ph_index_beg, atl03_segment_id = \
-    readAtl03DataMapping(atl03filepath,gt)
+    f = h5py.File(atl03filepath, 'r')
+    atl03_ph_index_beg  = np.array(f[gt + '/geolocation/ph_index_beg'])
+    atl03_segment_id = np.array(f[gt + '/geolocation/segment_id'])
     
     # Read ATL08 for class mapping
-    atl08_classed_pc_indx, atl08_classed_pc_flag, atl08_segment_id = \
-    readAtl08DataMapping(atl08filepath, gt)
+    f = h5py.File(atl08filepath, 'r')
+    atl08_classed_pc_indx = np.array(f[gt + '/signal_photons/classed_pc_indx'])
+    atl08_classed_pc_flag = np.array(f[gt + '/signal_photons/classed_pc_flag'])
+    atl08_segment_id = np.array(f[gt + '/signal_photons/ph_segment_id'])
     
     # Map ATL08 classifications to ATL03 Photons
     allph_classed = getAtl08Mapping(atl03_ph_index_beg, atl03_segment_id, 
@@ -260,12 +263,112 @@ def get_atl03_classification(atl03filepath, atl08filepath, df, gt):
                                     atl08_classed_pc_flag, 
                                     atl08_segment_id)
     
+    return allph_classed
+
+def merge_label_to_df(atl03filepath, atl08filepath, gt, df):
+    allph_classed = get_atl03_classification(atl03filepath, atl08filepath, gt)
     # Add classifications to ATL03 DF
     df = pd.concat([df,pd.DataFrame(allph_classed,
                                     columns=['classification'])],axis=1)
     
     # Replace nan with -1 (unclassified)
     df.replace({'classification' : np.nan}, -1)
+    return df
+
+def get_atl03_heights_offset(atl03filepath, atl08filepath, gt):
+    # Read ATL03 metrics for class mapping
+    f = h5py.File(atl03filepath, 'r')
+    atl03_ph_index_beg  = np.array(f[gt + '/geolocation/ph_index_beg'])
+    atl03_segment_id = np.array(f[gt + '/geolocation/segment_id'])
+    
+    # Read ATL08 for class mapping
+    f = h5py.File(atl08filepath, 'r')
+    atl08_classed_pc_indx = np.array(f[gt + '/signal_photons/classed_pc_indx'])
+    atl08_heights = np.array(f[gt + '/signal_photons/ph_h'])
+    atl08_segment_id = np.array(f[gt + '/signal_photons/ph_segment_id'])
+            
+    # Get ATL03 data
+    indsNotZero = atl03_ph_index_beg != 0
+    atl03_ph_index_beg = atl03_ph_index_beg[indsNotZero];
+    atl03_segment_id = atl03_segment_id[indsNotZero];
+    
+    # Find ATL08 segments that have ATL03 segments
+    atl03SegsIn08TF, atl03SegsIn08Inds = ismember(atl08_segment_id,atl03_segment_id)
+    
+    # Get ATL08 classed indices and values
+    atl08classed_inds = atl08_classed_pc_indx[atl03SegsIn08TF]
+    atl08classed_vals = atl08_heights[atl03SegsIn08TF]
+
+    # Determine new mapping into ATL03 data
+    atl03_ph_beg_inds = atl03SegsIn08Inds;
+    atl03_ph_beg_val = atl03_ph_index_beg[atl03_ph_beg_inds]
+    newMapping = atl08classed_inds + atl03_ph_beg_val - 2
+    
+    # Get max size of output array
+    sizeOutput = newMapping[-1]
+    
+    # Pre-populate all photon classed array with zeroes
+    allph_heights = (np.zeros(sizeOutput + 1)) 
+    
+    # Populate all photon classed array from ATL08 classifications
+    allph_heights[newMapping] = atl08classed_vals
+    allph_heights[allph_heights == 3.4028234663852886e+38] = np.nan
+    return allph_heights
+
+def get_atl03_rate(atl03filepath, gt):
+    f = h5py.File(atl03filepath, 'r')   
+    bihr = np.asarray(f[gt + '/bckgrd_atlas/bckgrd_int_height_reduced'])
+    bcr = np.asarray(f[gt + '/bckgrd_atlas/bckgrd_counts_reduced'])
+    bapmc = np.asarray(f[gt + '/bckgrd_atlas/pce_mframe_cnt'])
+    hpmc = np.asarray(f[gt + '/heights/pce_mframe_cnt'])
+   
+    # Calculate rate and assign to the bckgrd_atlas rate
+    rate = bcr / bihr
+
+    # Assign bckgrd_atlas attributes to photon level    
+    tf, inds = ismember(hpmc, bapmc)
+    
+    ph_bihr = bihr[inds]
+    ph_bcr = bcr[inds]
+    ph_rate = rate[inds]
+
+    ph_bihr = np.concatenate([np.zeros(len(tf[tf == False])),ph_bihr])
+    ph_bcr = np.concatenate([np.zeros(len(tf[tf == False])),ph_bcr])
+    ph_rate = np.concatenate([np.zeros(len(tf[tf == False])),ph_rate])
+    
+    return ph_bihr, ph_bcr, ph_rate
+
+def merge_norm_h_to_df(atl03filepath, atl08filepath, gt, df):
+    # Get allph_heights
+    allph_heights = get_atl03_heights_offset(atl03filepath, atl08filepath, gt)
+    # Add classifications to ATL03 DF
+    df = pd.concat([df,pd.DataFrame(allph_heights,
+                                    columns=['norm_h'])],axis=1)
+    return df
+
+def get_atl03_segment_id(atl03filepath, gt):
+    f = h5py.File(atl03filepath, 'r')
+    h_ph = np.asarray(f[gt + '/heights/h_ph'])
+    segment_ph_count = np.array(f[gt + '/geolocation/segment_ph_cnt'])
+    atl03_segment_id = np.array(f[gt + '/geolocation/segment_id'])
+    atl03_ph_index_beg = np.array(f[gt + '/geolocation/ph_index_beg'])    
+ 
+    # Get segment ID to photon level
+    h_seg = np.zeros(len(h_ph))
+    for i in range(0,len(atl03_segment_id)):
+        if atl03_ph_index_beg[i] > 0:
+            h_seg[atl03_ph_index_beg[i]-1:atl03_ph_index_beg[i]-1 +\
+                      segment_ph_count[i]] = atl03_segment_id[i]
+    h_seg = np.int32(h_seg) 
+    return h_seg
+
+def merge_seg_id_to_df(atl03filepath, gt, df):
+    # Get Segment ID per photon
+    h_seg = get_atl03_segment_id(atl03filepath, gt)
+    
+    # Add classifications to ATL03 DF
+    df = pd.concat([df,pd.DataFrame(h_seg,
+                                    columns=['seg_id'])],axis=1)
     return df
 
 # Calculate alongtrack time
@@ -294,9 +397,9 @@ def get_atl_coords(df, epsg = None):
     
     # Specify EPSG Code or automatically find zone
     if epsg:
-        xcoord, ycoord = wgs84_to_epsg_transform(epsg, lon, lat)
+        xcoord, ycoord = wgs84_to_epsg_transform(epsg,  lat, lon)
     else:
-        xcoord, ycoord, epsg = wgs84_to_utm_find_and_transform(lon, lat)
+        xcoord, ycoord, epsg = wgs84_to_utm_find_and_transform(lat, lon)
         
     if 'easting' not in columns:
         df = pd.concat([df,pd.DataFrame(xcoord,
@@ -350,13 +453,16 @@ def get_atl_alongtrack(df, atl03struct = None):
     
     return df, rotation_data
     
-def get_atl03_df(atl03filepath, atl08filepath, gt, epsg = None):
-    df = read_atl03_heights_data(atl03filepath, gt)
-    df = get_atl03_classification(atl03filepath, atl08filepath, df, gt)
-    df = get_atl_time(df)
-    df, epsg = get_atl_coords(df, epsg = None)
-    df, rotationData = get_atl_alongtrack(df)
-    return df
+# def get_atl03_df(atl03filepath, atl08filepath, gt, epsg = None):
+#     df = read_atl03_heights_data(atl03filepath, gt)
+#     df = merge_label_to_df(atl03filepath, atl08filepath, gt, df)
+#     df = merge_norm_h_to_df(atl03filepath, atl08filepath, gt, df)
+#     df = merge_seg_id_to_df(atl03filepath, gt, df)
+
+#     df = get_atl_time(df)
+#     df, epsg = get_atl_coords(df, epsg = None)
+#     df, rotationData = get_atl_alongtrack(df)
+#     return df
 
 def get_direction(lat):
     if(np.abs(lat[-1]) > np.abs(lat[0])):
@@ -502,12 +608,18 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     df = read_atl03_heights_data(atl03filepath, gt)
     if atl08filepath:
         try:
-            df = get_atl03_classification(atl03filepath, atl08filepath, df, gt)
+            df = merge_label_to_df(atl03filepath, atl08filepath, gt, df)
             dataIsMapped = True
         except:
             dataIsMapped = False
     else:
         dataIsMapped = False
+    df = merge_norm_h_to_df(atl03filepath, atl08filepath, gt, df)
+    df = merge_seg_id_to_df(atl03filepath, gt, df)
+    ph_bihr, ph_bcr, ph_rate = get_atl03_rate(atl03filepath, gt) 
+    df['ph_bihr'] = ph_bihr
+    df['ph_bcr'] = ph_bcr
+    df['ph_rate'] = ph_rate
     df = get_atl_time(df)
     df, epsg = get_atl_coords(df, epsg)
     df, rotation_data = get_atl_alongtrack(df)
@@ -667,7 +779,10 @@ def convert_atl03_to_legacy(atl03):
                               atl03.df.crosstrack, atl03.df.alongtrack, 
                               atl03.df.h_ph, atl03_zMsl, atl03.df.time, 
                               atl03.df.delta_time, atl03.df.signal_conf_ph, 
-                              atl03.df.classification, intensity, segmentID, 
+                              atl03.df.signal_conf_ph, atl03.df.signal_conf_ph,
+                              atl03.df.signal_conf_ph, atl03.df.signal_conf_ph,
+                              atl03.df.classification, intensity, intensity,
+                              segmentID, 
                               atl03.gtNum, atl03.beamNum, atl03.beamStrength,
                               atl03.zone, atl03.hemi, atl03.atlFilePath, 
                               atl03.atlFileName, atl03.trackDirection, 
@@ -735,38 +850,38 @@ def get_attribute_info(atlfilepath, gt):
     
     return info_dict
     
-if __name__ == "__main__":    
-    if os.name == 'nt':
-        basepath = 'Y:/USERS/eric/2_production/'
-    else:
-        basepath = '/LIDAR/server/USERS/eric/2_production/'
+# if __name__ == "__main__":    
+    # if os.name == 'nt':
+    #     basepath = 'Y:/USERS/eric/2_production/'
+    # else:
+    #     basepath = '/LIDAR/server/USERS/eric/2_production/'
 
-    atl03file = 'ATL03_20181021130238_03500103_002_01.h5'
-    atl08file = 'ATL08_20181021130238_03500103_002_01.h5'
-    atl09file = 'ATL09_20181016132105_02740101_002_01.h5'
-    # Inputs
-    atl03filepath = basepath + atl03file
-    atl08filepath = basepath + atl08file
-    atl09filepath = basepath + atl09file
-    gt = 'gt1r'
+    # atl03file = 'ATL03_20181021130238_03500103_002_01.h5'
+    # atl08file = 'ATL08_20181021130238_03500103_002_01.h5'
+    # atl09file = 'ATL09_20181016132105_02740101_002_01.h5'
+    # # Inputs
+    # atl03filepath = basepath + atl03file
+    # atl08filepath = basepath + atl08file
+    # atl09filepath = basepath + atl09file
+    # gt = 'gt1r'
     
 
-    print('ATL03 Heights')
-    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+    # print('ATL03 Heights')
+    # atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
 
-    print('ATL03 Geolocation')
-    geolocation = read_atl03_geolocation(atl03filepath, gt)
+    # print('ATL03 Geolocation')
+    # geolocation = read_atl03_geolocation(atl03filepath, gt)
 
-    print('ATL08 Land Segments')
-    atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+    # print('ATL08 Land Segments')
+    # atl08 = get_atl08_struct(atl08filepath, gt, atl03)
 
-    print('ATL09 High Frequency Data')    
-    atl09 = get_atl09_struct(atl09filepath, gt, atl03)
+    # print('ATL09 High Frequency Data')    
+    # atl09 = get_atl09_struct(atl09filepath, gt, atl03)
 
-    print('Append ATL03 Heights Dataframe with Geolocation')
-    heights = atl03.df
-    heights = append_atl03_geolocation(heights, geolocation, 
-                                       fields = ['segment_id'])
+    # print('Append ATL03 Heights Dataframe with Geolocation')
+    # heights = atl03.df
+    # heights = append_atl03_geolocation(heights, geolocation, 
+    #                                    fields = ['segment_id'])
     
-    print('Convert ATL03 Struct to Legacy ATL03 Struct')
-    atl03legacy, rotationData = convert_atl03_to_legacy(atl03)
+    # print('Convert ATL03 Struct to Legacy ATL03 Struct')
+    # atl03legacy, rotationData = convert_atl03_to_legacy(atl03)

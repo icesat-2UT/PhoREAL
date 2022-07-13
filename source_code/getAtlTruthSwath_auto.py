@@ -69,7 +69,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
             
             # Initialize parameters
             fileNum = 1
-            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[],[],[])
+            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[],[],[],[],[],[])
         
             # Loop over matching files
             for i in range(0,len(matchingTruthFiles)):
@@ -103,7 +103,7 @@ def getAtlTruthSwath(atlMeasuredData, rotationData, truthHeaderDF, truthFilePath
         else:
             
             # No data to process
-            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[],[],[])
+            atlTruthData = atlTruthStruct([],[],[],[],[],[],[],[],[],[],[],[],[],[])
             
             writeLog('', logFileID)
             writeLog('   WARNING: No matching reference files intersect ground track.', logFileID)
@@ -220,9 +220,29 @@ if __name__ == "__main__":
     
     atl03FilePath = 'C:/Users/malonzo/GLAM/delete/ATL03_20191129150021_09730506_003_01_sreq_3257.h5'
     atl08FilePath = []
+
+    atl03FilePath = 'E:/0_data/is2/prf/ATL03/ATL03_20190505104857_05680302_005_01.h5'
+    atl08FilePath = 'E:/0_data/is2/prf/ATL08/ATL08_20190505104857_05680302_005_01.h5'
+
+    atl03FilePath = 'E:/0_data/is2/prf/ATL03/ATL03_20191005033230_01260502_005_01.h5'
+    atl08FilePath = 'E:/0_data/is2/prf/ATL08/ATL08_20191005033230_01260502_005_01.h5'
     
+    atl03_folder = 'E:/0_data/is2/prf/ATL03/'
+    atl08_folder = 'E:/0_data/is2/prf/ATL08/'
+    
+    import os 
+    
+    atl03_list = os.listdir(atl03_folder)
+    atl08_list = os.listdir(atl08_folder)
+    
+    # for i in range(0,len(atl03_list)):
+    i = 2
+    atl03FilePath = os.path.join(atl03_folder, atl03_list[i])
+    atl08FilePath = os.path.join(atl08_folder, atl08_list[i])
+
+
     # outFilePath = '/LIDAR/server/USERS/eric/2_production/other/test'
-    outFilePath = 'C:/Users/malonzo/GLAM/delete'
+    outFilePath = 'E:/output'
 
     # Ground track number to analyze
     gtNum = 'gt1r'
@@ -255,9 +275,12 @@ if __name__ == "__main__":
 #    truthSwathDir = 'LIDAR/data/TanDEMX/MississippiValley_TDR_DSM/TDT_N37W085_02_DEM.TIF'
 #    truthSwathDir = 'N:/data/TanDEMX/S_finland_TDR DSM_20190109.1457/ULD_TanDEM-X_TDR_DSM_20190109.1457_N62E022.tif'
 #    truthSwathDir = 'C:/Users/malonzo/GLAM/delete'
-    truthSwathDir = 'Z:/data/validation/data/WSMR/ir'
+    truthSwathDir = 'E:/data/2018spl_2959_6647'
+    # truthSwathDir = 'E:/data/2019_spl_3800m'
+    # truthSwathDir = 'E:/data/2019spl_2000m'
+
 #    truthSwathDir = 'C:/Users/malonzo/GLAM/delete/ATL03_20191129150021_09730506_003_01_sreq_3257_gt1r_REFERENCE_50L50Rm_buffer.las'
-    truthFileType = '.las'
+    truthFileType = '.laz'
     createTruthFile = True      # Option to create output truth .las file
 
     
