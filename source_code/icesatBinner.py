@@ -6,12 +6,14 @@ Created on Fri Sep 17 08:26:42 2021
 @author: eguenther
 """
 
+import argparse
 import h5py
 import os
 import numpy as np
 import pandas as pd
 import scipy
 import scipy.stats
+import random
 # import matplotlib.pyplot as plt
 # from matplotlib.patches import Rectangle
 
@@ -793,15 +795,18 @@ def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_fie
                             70, 75, 80, 85, 90, 95, 98]
     
     print('Generate ATL03 Struct')
-    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath, epsg = 32618)
-    atl03.df = atl03.df[atl03.df.lat_ph < 46]
-    atl03.df = atl03.df[atl03.df.lat_ph > 45.9]
-
+    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+    atl03.df = atl03.df[atl03.df.lat_ph > 57]
+    atl03.df = atl03.df[atl03.df.lat_ph < 65]
+    #atl03.df = atl03.df[atl03.df.lon_ph > 88]
+    #atl03.df = atl03.df[atl03.df.lon_ph < 106]
     
     print('Generate ATL08 Struct')
-    atl08 = get_atl08_struct(atl08filepath, gt, atl03, epsg = 32618)
-    atl08.df = atl08.df[atl08.df.latitude < 46]
-    atl08.df = atl08.df[atl08.df.latitude > 45.9]
+    atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+    atl08.df = atl08.df[atl08.df.latitude > 57]
+    atl08.df = atl08.df[atl08.df.latitude < 65]
+    #atl08.df = atl08.df[atl08.df.longitude > 88]
+    #atl08.df = atl08.df[atl08.df.longitude < 106]
 
     
     if res_field in ['delta_time','lat_ph','lon_ph','alongtrack','northing']: 
@@ -949,150 +954,82 @@ def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_fie
     # Compute photons above set threshold
     bin_df = get_n_photons_above_threshold(atl03.df, bin_df, classes = [2,3], 
                                            h_base = h_base_val)
-        
+
+    bin_df['beamNum'] = atl03.beamNum
+    bin_df['beamStrength'] = atl03.beamStrength
+    bin_df['year'] = atl03.year
+    bin_df['month'] = atl03.month
+    bin_df['day'] = atl03.day
+    bin_df['epsg'] = atl03.epsg
+
     # Return bin_df
     return bin_df
     
-
-    
-
-
-if __name__ == '__main__':
-    print('ok')
-    if os.name == 'nt':
-        basepath03 = 'Z:/data/release/002/ATL03_r002/Finland/'
-        basepath08 = 'Z:/data/release/002/ATL08_r002/Finland/'
-        basepath03 = 'E:/0_data/is2\prf/ATL03/'
-        basepath08 = 'E:/0_data/is2\prf/ATL08/'
-
-    else:
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/Alberta_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/Alberta_nsidc/'
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/Germany_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/Germany_nsidc/'
-        basepath03 = '/laserpewpew/data/release/005/ATL03_r005/Sonoma_nsidc/'
-        basepath08 = '/laserpewpew/data/release/005/ATL08_r005/Sonoma_nsidc/'
-        #basepath03 = '/laserpewpew/data/release/004/ATL03_r004/Congo_nsidc/'
-        #basepath08 = '/laserpewpew/data/release/004/ATL08_r004/Alberta_nsidc/'
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/Ft_Benning_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/Ft_Benning_nsidc/'
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/Ft_Drum_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/Ft_Drum_nsidc/'
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/JBLM_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/JBLM_nsidc/'
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/LeonardWood_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/LeonardWood_nsidc/'
-        # basepath03 = '/laserpewpew/data/release/004/ATL03_r004/Finland_nsidc/'
-        # basepath08 = '/laserpewpew/data/release/004/ATL08_r004/Finland_nsidc/'  
-
-    outFilePath = 'E:/0_data/is2/prf/30m_csv4'
-
-    # outFilePath = '/LIDAR/server/USERS/eric/for_amy/lai_005/Sonoma_nsidc'
+def main(in_atl03, in_atl08, output_dir, res, rando, v):
     try:
-        os.mkdir(outFilePath)
+        os.mkdir(output_dir)
     except:
         print('Folder already exists')
-
     
-    atl03_list = os.listdir(basepath03)
+    atl03_list = os.listdir(in_atl03)
+
+    if rando is True:
+        print('Random sort ATL03 List')
+        random.shuffle(atl03_list)
 
     # # Inputs
     # res = 30
-    # res_field = 'alongtrack'
-    # for i in range(3,len(atl03_list)):
+    res_field = 'alongtrack'
     for i in range(0,len(atl03_list)):
-        print(i)
+        print(atl03_list[i])
         atl03file = atl03_list[i]
         atl08file = 'ATL08' + atl03_list[i].split('ATL03')[1]
-        atl03filepath =  os.path.join(basepath03, atl03file)
-        atl08filepath =  os.path.join(basepath08, atl08file)
-            
-        gt = 'gt1l'
-        
+        atl03filepath =  os.path.join(in_atl03, atl03file)
+        atl08filepath =  os.path.join(in_atl08, atl08file)
         gt_list = ['gt1r','gt1l','gt2l','gt2r','gt3l','gt3r']
         for gt in gt_list:
             try:
-                res = 30
-                res_field = 'alongtrack'
-                bin_df = calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_field)
-                csv_file = os.path.join(outFilePath, atl08file.split('.')[0] + '_' + gt + '30m.csv')
-                bin_df.to_csv(csv_file)
+                csv_file = os.path.join(output_dir, atl08file.split('.')[0] + '_' + gt + '30m.csv')
+                if os.path.exists(csv_file) == False:
+                    bin_df = calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_field)
+                    bin_df.to_csv(csv_file)
+                else:
+                    print('File already exists')
             except:
-                print('fail')
-    #     print('Generate ATL03 Struct')
-    #     # atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath, 
-    #     #                           epsg = '32618')
-        
-    #     print('Generate ATL08 Struct')
-    #     # atl08 = get_atl08_struct(atl08filepath, gt, atl03, epsg = '32618')
+                print('Binning failed')
     
-    #     gt_list = ['gt1r','gt1l','gt2l','gt2r','gt3l','gt3r']
-    
-    #     upsampled_list = []
-    #     for gt in gt_list:
-    #         try:
+if __name__ == '__main__':
+    """ Command line entry point """
+    parser = argparse.ArgumentParser()
 
-    #             print(gt)
-    #             outFilePath = 'E:/0_data/is2/prf/30m_csv2/'
-    #             df_bin_out, atl03_2 = calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_field)
-    #             csv_file = os.path.join(outFilePath, atl08file.split('.')[0] + '_' + gt + '30m.csv')
-    #             df_bin_out.to_csv(csv_file)
-    #         except:
-    #             print('failed')
-    # print('height normalized in 3 ways')
-    # df_bin_out2  = df_bin_out[['atl03_ground_median', 'h_ind']]
-    
-    # df_merge = pd.merge(atl03_2.df, df_bin_out2, on='h_ind')
-    
-    # df_merge['norm_h2'] = df_merge.h_ph - df_merge.atl03_ground_median
-    # df_merge['norm_h3'] = df_merge.h_ph + df_merge.h_offset
+    # Required positional argument
+    parser.add_argument("atl03_dir",
+                        help="Input ATL03 file or ATL03 directory")
 
+    parser.add_argument("atl08_dir",
+                        help="Input ATL08 file or ATL08 directory")
 
-    # fig = plt.figure()
-    # ax1 = plt.subplot(3, 1, 1)
-    # plt.title('New PhoREAL Ground Normalization')
-    # plt.plot(df_merge.alongtrack[df_merge.c == 3], 
-    #          df_merge.norm_h[df_merge.c == 3],'.', color = [0,0.9,0])
-    # plt.plot(df_merge.alongtrack[df_merge.c == 2], 
-    #          df_merge.norm_h[df_merge.c == 2],'.', color = [0,0.5,0]) 
-    # plt.plot(df_merge.alongtrack[df_merge.c == 1], 
-    #              df_merge.norm_h[df_merge.c == 1],'.', color = [1,0.5,0])
+    parser.add_argument("out_dir",
+                        help="Output directory")
 
-    # ax2 = plt.subplot(3, 1, 2, sharex = ax1, sharey = ax1)
-    # plt.title('Old PhoREAL Ground Normalization')    
-    # plt.plot(df_merge.alongtrack[df_merge.c == 3], 
-    #          df_merge.norm_h2[df_merge.c == 3],'.', color = [0,0.9,0])
-    # plt.plot(df_merge.alongtrack[df_merge.c == 2], 
-    #          df_merge.norm_h2[df_merge.c == 2],'.', color = [0,0.5,0])   
-    # plt.plot(df_merge.alongtrack[df_merge.c == 1], 
-    #          df_merge.norm_h2[df_merge.c == 1],'.', color = [1,0.5,0])
+    parser.add_argument("-r", "--res", nargs='?', const=1, type=int, default=30,
+                        help="Alongtrack resolution (m)")
 
-    # ax3 = plt.subplot(3, 1, 3, sharex = ax1, sharey = ax1)
-    # plt.title('ATL08 Ground Normalization')        
-    # plt.plot(df_merge.alongtrack[df_merge.c == 3], 
-    #          df_merge.h_offset[df_merge.c == 3],'.', color = [0,0.9,0])
-    # plt.plot(df_merge.alongtrack[df_merge.c == 2], 
-    #          df_merge.h_offset[df_merge.c == 2],'.', color = [0,0.5,0]) 
-    # plt.plot(df_merge.alongtrack[df_merge.c == 1], 
-    #          df_merge.h_offset[df_merge.c == 1],'.', color = [1,0.5,0])
+    parser.add_argument('-rando', '--random', action='store_true',
+                        help='Randomly iterate through directory')
 
-    # ax4 = plt.subplot(4, 1, 4, sharex = ax1, sharey = ax3)
-    # plt.title('ATL08 Original')        
-    # plt.plot(df_merge.alongtrack[df_merge.c == 3], 
-    #          df_merge.h_ph[df_merge.c == 3],'.', color = [0,0.9,0])
-    # plt.plot(df_merge.alongtrack[df_merge.c == 2], 
-    #          df_merge.h_ph[df_merge.c == 2],'.', color = [0,0.5,0]) 
-    # plt.plot(df_merge.alongtrack[df_merge.c == 1], 
-    #          df_merge.h_ph[df_merge.c == 1],'.', color = [1,0.5,0])
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Verbose Output')
 
-                # csv_file = os.path.join(outFilePath, atl08file.split('.')[0] + '_' + gt + '30m.csv')
-                
-        #         df_bin_out.to_csv(csv_file)
-    
-        #         a_dict = {col_name : df_bin_out[col_name].values for col_name \
-        #                   in df_bin_out.columns.values}
-        #         mat_file = os.path.join(outFilePath, atl08file.split('.')[0] + '_' + gt + '30m.mat')
-        #         scipy.io.savemat(mat_file,{'struct':a_dict})
-        #         print('Success')
-        #     except:
-        #         print('fail')
+    args = parser.parse_args()
+
+    args.atl03_dir = os.path.normpath(args.atl03_dir)
+    args.atl08_dir = os.path.normpath(args.atl08_dir)
+    args.out_dir = os.path.normpath(args.out_dir)
+
+    main(args.atl03_dir,
+        args.atl08_dir,
+        args.out_dir,
+        args.res,
+        args.rando,
+        args.verbose)

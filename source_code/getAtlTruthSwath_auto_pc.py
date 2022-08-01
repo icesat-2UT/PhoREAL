@@ -318,96 +318,96 @@ if __name__ == "__main__":
                                     buffer, outFilePath, createTruthFile, 
                                     truthFileType, useExistingTruth, logFileID=False)
                 
-    # End timer
-    timeEnd = runTime.time()
-    timeElapsedTotal = timeEnd - timeStart
-    timeElapsedMin = np.floor(timeElapsedTotal / 60)
-    timeElapsedSec = timeElapsedTotal % 60
+#     # End timer
+#     timeEnd = runTime.time()
+#     timeElapsedTotal = timeEnd - timeStart
+#     timeElapsedMin = np.floor(timeElapsedTotal / 60)
+#     timeElapsedSec = timeElapsedTotal % 60
         
-    # Print completion message
-    print('   Script Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
-    print('\n')
+#     # Print completion message
+#     print('   Script Completed in %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
+#     print('\n')
     
-    print('RUNNING getMeasurementError...\n')
-# atlCorrections = getMeasurementError(atl03Data, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots)
+#     print('RUNNING getMeasurementError...\n')
+# # atlCorrections = getMeasurementError(atl03Data, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots)
 
-    refHeightType = 'hae'
+#     refHeightType = 'hae'
     
-    offsetsCrossTrackBounds = np.array([-50,50])      # Cross-track limits to search for geolocation error
-    offsetsAlongTrackBounds = np.array([-50,50])      # Along-track limits to search for geolocation error
-    offsetsRasterResolutions = np.array([8, 4, 2, 1])  # Multi-resolutional step-down raster resolutions (in meters)
-    refHeightType = 'HAE'              # 'HAE' or 'MSL'
-    offsetsUseVerticalShift = False    # Option to use a vertical shift
-    offsetsVerticalShift = 0           # Vertical shift to use if above set to True (in meters)
-    useMeasSigConf = False             # Use measured signal confidence (or use ground truth)
-                                     # Meas Classes (0 = Unclass, 1 = Ground, 2 = Low Veg, 3 = High Veg), Texpert Truth Classes (0 = Unclass, 2 = Ground, 4 = Veg, 6 = Building)
-    filterData = [1]               # Signal Confidence (0, 1, 2, 3, 4)
-    offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, offsetsRasterResolutions, offsetsUseVerticalShift, offsetsVerticalShift )
-    createMeasCorrFile = True     # Option to create ouput measured corrected .las file
-    makePlots = True              # Option to make output plots
-    showPlots = False             # Option to show output plot windows
+#     offsetsCrossTrackBounds = np.array([-50,50])      # Cross-track limits to search for geolocation error
+#     offsetsAlongTrackBounds = np.array([-50,50])      # Along-track limits to search for geolocation error
+#     offsetsRasterResolutions = np.array([8, 4, 2, 1])  # Multi-resolutional step-down raster resolutions (in meters)
+#     refHeightType = 'HAE'              # 'HAE' or 'MSL'
+#     offsetsUseVerticalShift = False    # Option to use a vertical shift
+#     offsetsVerticalShift = 0           # Vertical shift to use if above set to True (in meters)
+#     useMeasSigConf = False             # Use measured signal confidence (or use ground truth)
+#                                      # Meas Classes (0 = Unclass, 1 = Ground, 2 = Low Veg, 3 = High Veg), Texpert Truth Classes (0 = Unclass, 2 = Ground, 4 = Veg, 6 = Building)
+#     filterData = [1]               # Signal Confidence (0, 1, 2, 3, 4)
+#     offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, offsetsRasterResolutions, offsetsUseVerticalShift, offsetsVerticalShift )
+#     createMeasCorrFile = True     # Option to create ouput measured corrected .las file
+#     makePlots = True              # Option to make output plots
+#     showPlots = False             # Option to show output plot windows
     
-    atlCorrections = getMeasurementError(atl03Data, atlTruthData, refHeightType, 
-                            rotationData, outFilePath, 
-                            useMeasSigConf, filterData, offsets, createMeasCorrFile, 
-                            makePlots, showPlots, logFileID = False)
+#     atlCorrections = getMeasurementError(atl03Data, atlTruthData, refHeightType, 
+#                             rotationData, outFilePath, 
+#                             useMeasSigConf, filterData, offsets, createMeasCorrFile, 
+#                             makePlots, showPlots, logFileID = False)
     
-    # Store all objects into one
-    # atlMeasuredDataAll.append(atl03Data)
-    # atlTruthDataAll.append(atlTruthData)
-    # atlCorrectionsAll.append(atlCorrections)
+#     # Store all objects into one
+#     # atlMeasuredDataAll.append(atl03Data)
+#     # atlTruthDataAll.append(atlTruthData)
+#     # atlCorrectionsAll.append(atlCorrections)
         
-    # EndFor
+#     # EndFor
     
-    # End timer
-    timeEnd = runTime.time()
-    timeElapsedTotal = timeEnd - timeStart
-    timeElapsedMin = np.floor(timeElapsedTotal / 60)
-    timeElapsedSec = timeElapsedTotal % 60
+#     # End timer
+#     timeEnd = runTime.time()
+#     timeElapsedTotal = timeEnd - timeStart
+#     timeElapsedMin = np.floor(timeElapsedTotal / 60)
+#     timeElapsedSec = timeElapsedTotal % 60
         
-    # Print completion message
-    print('   Geolocation offset Complete %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
-    print('\n')
+#     # Print completion message
+#     print('   Geolocation offset Complete %d min %d sec.' % (timeElapsedMin, timeElapsedSec))
+#     print('\n')
     
-    atlTruthData.alongTrack = atlTruthData.alongTrack - atlCorrections.alongTrack
-    atlTruthData.crossTrack = atlTruthData.crossTrack - atlCorrections.crossTrack
-    atlTruthData.z = atlTruthData.z - atlCorrections.z
+#     atlTruthData.alongTrack = atlTruthData.alongTrack - atlCorrections.alongTrack
+#     atlTruthData.crossTrack = atlTruthData.crossTrack - atlCorrections.crossTrack
+#     atlTruthData.z = atlTruthData.z - atlCorrections.z
 
-    atlTruthData.year = np.r_['c',(atlTruthData.year)]
-    atlTruthData.month = np.r_['c',(atlTruthData.month)]
-    atlTruthData.day = np.r_['c',(atlTruthData.day)]
+#     atlTruthData.year = np.r_['c',(atlTruthData.year)]
+#     atlTruthData.month = np.r_['c',(atlTruthData.month)]
+#     atlTruthData.day = np.r_['c',(atlTruthData.day)]
     
-    atl03Data, atlTruthData = superFilter(atl03Data, atlTruthData,
-                                          xBuf = 6, classCode = [], verbose=False)
+#     atl03Data, atlTruthData = superFilter(atl03Data, atlTruthData,
+#                                           xBuf = 6, classCode = [], verbose=False)
     
-    measpc, measoc = perfectClassifier(atl03Data, atlTruthData,ground = [1],canopy = [2,3], 
-                      unclassed = [0], keepsize = True)
+#     measpc, measoc = perfectClassifier(atl03Data, atlTruthData,ground = [1],canopy = [2,3], 
+#                       unclassed = [0], keepsize = True)
     
-    # Make Pandas DF with everything
-    ##Filter Truth Data by Include
-    alongtrack = atl03Data.alongTrack.flatten()
-    crosstrack = atl03Data.crossTrack.flatten()
-    z = atl03Data.z.flatten()
-    # easting = atl03Data.easting.flatten()
-    # northing = atl03Data.northing.flatten()
-    classification = atl03Data.classification.flatten()    
+#     # Make Pandas DF with everything
+#     ##Filter Truth Data by Include
+#     alongtrack = atl03Data.alongTrack.flatten()
+#     crosstrack = atl03Data.crossTrack.flatten()
+#     z = atl03Data.z.flatten()
+#     # easting = atl03Data.easting.flatten()
+#     # northing = atl03Data.northing.flatten()
+#     classification = atl03Data.classification.flatten()    
     
-    # Export Pandas DF as PC
-    import pandas as pd
-    df_meas = pd.DataFrame(z,columns=['z'])
-    df_meas = pd.concat([df_meas,pd.DataFrame(
-        crosstrack,columns=['crosstrack'])],axis=1)
-    df_meas = pd.concat([df_meas,pd.DataFrame(
-        alongtrack,columns=['alongtrack'])],axis=1)
-    # df_truth = pd.concat([df_truth,pd.DataFrame(
-    #     easting,columns=['easting'])],axis=1)
-    # df_truth = pd.concat([df_truth,pd.DataFrame(
-    #     northing,columns=['northing'])],axis=1)
-    df_meas = pd.concat([df_meas,pd.DataFrame(
-        classification,columns=['label'])],axis=1)
-    df_meas = pd.concat([df_meas,pd.DataFrame(
-        measpc,columns=['truth_label'])],axis=1)
-    out_name = atl03_list[0].split('.h5')[0] + '_' + gtNum + '.csv'
-    out_file = os.path.join(out_folder,out_name)
-    df_meas.to_csv(out_file)
+#     # Export Pandas DF as PC
+#     import pandas as pd
+#     df_meas = pd.DataFrame(z,columns=['z'])
+#     df_meas = pd.concat([df_meas,pd.DataFrame(
+#         crosstrack,columns=['crosstrack'])],axis=1)
+#     df_meas = pd.concat([df_meas,pd.DataFrame(
+#         alongtrack,columns=['alongtrack'])],axis=1)
+#     # df_truth = pd.concat([df_truth,pd.DataFrame(
+#     #     easting,columns=['easting'])],axis=1)
+#     # df_truth = pd.concat([df_truth,pd.DataFrame(
+#     #     northing,columns=['northing'])],axis=1)
+#     df_meas = pd.concat([df_meas,pd.DataFrame(
+#         classification,columns=['label'])],axis=1)
+#     df_meas = pd.concat([df_meas,pd.DataFrame(
+#         measpc,columns=['truth_label'])],axis=1)
+#     out_name = atl03_list[0].split('.h5')[0] + '_' + gtNum + '.csv'
+#     out_file = os.path.join(out_folder,out_name)
+#     df_meas.to_csv(out_file)
 
