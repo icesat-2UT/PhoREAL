@@ -20,6 +20,7 @@ import time as runTime
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath 
 from getAtlTruthSwath_auto import getAtlTruthSwath
 from getMeasurementError_auto import getMeasurementError, offsetsStruct
+from icesatIO import getTruthFilePaths, getTruthHeaders
 
 
 ##### Start Inputs for getAtlMeasuredSwath
@@ -117,26 +118,94 @@ atlMeasuredDataAll = []
 atlTruthDataAll = []
 atlCorrectionsAll = []
 
-for i in range(0,len(gtNums)):
+# for i in range(0,len(gtNums)):
     
-    gtNum = gtNums[i]
-    
-    # Call getAtlMeasuredSwath
-    print('RUNNING getAtlMeasuredSwath...\n')
-    atl03Data, atl08Data, headerData, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, gtNum, trimInfo, createAtl03LasFile, createAtl03KmlFile, createAtl08KmlFile, createAtl03CsvFile, createAtl08CsvFile)
-        
-    # Call getAtlTruthSwath
-    print('RUNNING getAtlTruthSwath...\n')
-    atlTruthData = getAtlTruthSwath(atl03Data, headerData, rotationData, useExistingTruth, truthSwathDir, buffer, outFilePath, createTruthFile)
-        
-    # Call getMeasurementError
-    print('RUNNING getMeasurementError...\n')
-    atlCorrections = getMeasurementError(atl03Data, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots)
+#     gtNum = gtNums[i]
 
-    # Store all objects into one
-    atlMeasuredDataAll.append(atl03Data)
-    atlTruthDataAll.append(atlTruthData)
-    atlCorrectionsAll.append(atlCorrections)
+import os 
+
+atl03_folder = 'E:/0_data/is2/prf/ATL03/'
+atl08_folder = 'E:/0_data/is2/prf/ATL08/'
+
+atl03_list = os.listdir(atl03_folder)
+atl08_list = os.listdir(atl08_folder)
+
+# for i in range(0,len(atl03_list)):
+i = 2
+atl03FilePath = os.path.join(atl03_folder, atl03_list[i])
+atl08FilePath = os.path.join(atl08_folder, atl08_list[i])
+
+
+# outFilePath = '/LIDAR/server/USERS/eric/2_production/other/test'
+outFilePath = 'E:/output'
+
+# Ground track number to analyze
+gtNum = 'gt1r'
+
+# atl03FilePath = 'E:/0_data/is2/prf/ATL03/ATL03_20190505104857_05680302_005_01.h5'
+# atl08FilePath = 'E:/0_data/is2/prf/ATL08/ATL08_20190505104857_05680302_005_01.h5'
+outFilePath = 'E:/output' 
+gtNum = 'gt1l'
+# Call getAtlMeasuredSwath
+print('RUNNING getAtlMeasuredSwath...\n')
+atl03Data, atl08Data, rotationData = getAtlMeasuredSwath(atl03FilePath, atl08FilePath, outFilePath, gtNum, trimInfo, createAtl03LasFile, createAtl03KmlFile, createAtl08KmlFile, createAtl03CsvFile, createAtl08CsvFile)
+    
+
+
+
+# Call getAtlTruthSwath
+truthFileType = '.laz'
+createTruthFile = True      # Option to create output truth .las file
+
+print('RUNNING getAtlTruthSwath...\n')
+truthSwathDir = 'E:/data/2018spl_2959_6647'
+
+# Get input truth file(s)
+truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False)
+          
+# Get truth file header info
+if(not(useExistingTruth)):
+    truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID=False)
+else:
+    truthHeaderDF = False
+# endIf
+
+# Call getAtlTruthSwath
+print('RUNNING getAtlTruthSwath...\n')
+atlTruthData = getAtlTruthSwath(atl03Data, rotationData, 
+                                truthHeaderDF, truthFilePaths,
+                                buffer, outFilePath, createTruthFile, 
+                                truthFileType, useExistingTruth, logFileID=False)
+    
+# Call getMeasurementError
+print('RUNNING getMeasurementError...\n')
+# atlCorrections = getMeasurementError(atl03Data, atlTruthData, rotationData, outFilePath, useMeasSigConf, filterData, offsets, createMeasCorrFile, makePlots, showPlots)
+
+refHeightType = 'hae'
+
+offsetsCrossTrackBounds = np.array([-50,50])      # Cross-track limits to search for geolocation error
+offsetsAlongTrackBounds = np.array([-50,50])      # Along-track limits to search for geolocation error
+offsetsRasterResolutions = np.array([8, 4, 2, 1])  # Multi-resolutional step-down raster resolutions (in meters)
+refHeightType = 'HAE'              # 'HAE' or 'MSL'
+offsetsUseVerticalShift = False    # Option to use a vertical shift
+offsetsVerticalShift = 0           # Vertical shift to use if above set to True (in meters)
+useMeasSigConf = False             # Use measured signal confidence (or use ground truth)
+                                 # Meas Classes (0 = Unclass, 1 = Ground, 2 = Low Veg, 3 = High Veg), Texpert Truth Classes (0 = Unclass, 2 = Ground, 4 = Veg, 6 = Building)
+filterData = [1]               # Signal Confidence (0, 1, 2, 3, 4)
+offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, offsetsRasterResolutions, offsetsUseVerticalShift, offsetsVerticalShift )
+createMeasCorrFile = True     # Option to create ouput measured corrected .las file
+makePlots = True              # Option to make output plots
+showPlots = False             # Option to show output plot windows
+
+atlCorrections = getMeasurementError(atl03Data, atlTruthData, refHeightType, 
+                        rotationData, outFilePath, 
+                        useMeasSigConf, filterData, offsets, createMeasCorrFile, 
+                        makePlots, showPlots, logFileID = False)
+
+# Store all objects into one
+atlMeasuredDataAll.append(atl03Data)
+atlTruthDataAll.append(atlTruthData)
+atlCorrectionsAll.append(atlCorrections)
     
 # EndFor
 

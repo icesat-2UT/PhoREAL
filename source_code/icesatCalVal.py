@@ -19,15 +19,15 @@ import time as runTime
 import sys
 import warnings
 from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
-from getAtlTruthSwath_ACE import getAtlTruthSwath
+#from getAtlTruthSwath_ACE import getAtlTruthSwath
 from icesatIO import *
 from icesatUtils import *
 
 from getMeasurementError_auto import *   
 from scipy import spatial
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import classification_report
+# from sklearn.metrics import confusion_matrix
+# from sklearn.metrics import classification_report
 import copy
 import matplotlib.pyplot as plt
 

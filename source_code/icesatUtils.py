@@ -254,17 +254,17 @@ def getAtl08Mapping(atl03_ph_index_beg, atl03_segment_id, atl08_classed_pc_indx,
 
     # Determine new mapping into ATL03 data
     atl03_ph_beg_inds = atl03SegsIn08Inds;
-    atl03_ph_beg_val = atl03_ph_index_beg[atl03_ph_beg_inds];
-    newMapping = atl08classed_inds + atl03_ph_beg_val - 2;
+    atl03_ph_beg_val = atl03_ph_index_beg[atl03_ph_beg_inds]
+    newMapping = atl08classed_inds + atl03_ph_beg_val - 2
     
     # Get max size of output array
     sizeOutput = newMapping[-1]
     
     # Pre-populate all photon classed array with zeroes
-    allph_classed = (np.zeros(sizeOutput + 1).astype(int)) - 1
+    allph_classed = (np.zeros(sizeOutput + 1)) - 1
     
     # Populate all photon classed array from ATL08 classifications
-    allph_classed[newMapping] = atl08classed_vals;
+    allph_classed[newMapping] = atl08classed_vals
     
     # Return all photon classed array
     return allph_classed
@@ -451,7 +451,7 @@ def find_utm_zone_point(lon, lat, module=None, m=None):
 
 
 # Find UTM zone for numpy array of lon/lat.
-def find_utm_zone_arr(lon, lat, mode=True, module=None, m=None):
+def find_utm_zone_arr(lat, lon, mode=True, module=None, m=None):
 
     """
     Input:
@@ -708,14 +708,14 @@ def getLatLon2UTM(*args):
         if len(lon) > 0 and len(lat) > 0:
             print(epsg_in)
             print(epsg_out)
-            xx, yy = transform(epsg_in, epsg_out, lon, lat)
+            xx, yy = transform(epsg_in, epsg_out, lat, lon)
         else:
             xx, yy = np.array([]), np.array([])
 
     else:
         
         # Get UTM coords
-        xx, yy, epsg_out = wgs84_to_utm_find_and_transform(lon, lat)
+        xx, yy, epsg_out = wgs84_to_utm_find_and_transform(lat, lon)
         
         if(epsg_out=='3413'):
             
@@ -1482,6 +1482,9 @@ def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = [], v
         atlTruthData.z = atlTruthData.z[filter_data]
         atlTruthData.intensity = atlTruthData.intensity[filter_data]
         atlTruthData.classification = atlTruthData.classification[filter_data]
+        atlTruthData.year = atlTruthData.year[filter_data]
+        atlTruthData.month = atlTruthData.month[filter_data]
+        atlTruthData.day = atlTruthData.day[filter_data]
         atlTruthData.time = atlTruthData.time[filter_data]
         atlTruthData.deltaTime = atlTruthData.deltaTime[filter_data]
     else:
@@ -1503,6 +1506,9 @@ def superFilter(atlMeasuredData_in, atlTruthData_in, xBuf = 7, classCode = [], v
         atlTruthData.z = atlTruthData.z[filter_data]
         atlTruthData.intensity = atlTruthData.intensity[filter_data]
         atlTruthData.classification = atlTruthData.classification[filter_data] 
+        atlTruthData.year = atlTruthData.year[filter_data]
+        atlTruthData.month = atlTruthData.month[filter_data]
+        atlTruthData.day = atlTruthData.day[filter_data]
         atlTruthData.time = atlTruthData.time[filter_data] 
         atlTruthData.deltaTime = atlTruthData.deltaTime[filter_data] 
     if(verbose):

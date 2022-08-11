@@ -944,7 +944,7 @@ if __name__ == "__main__":
     offsetsUseVerticalShift = False    # Option to use a vertical shift
     offsetsVerticalShift = 0           # Vertical shift to use if above set to True (in meters)
     useMeasSigConf = True             # Use measured signal confidence (or use ground truth)
-                                     # Meas Classes (0 = Unclass, 1 = Ground, 2 = Low Veg, 3 = High Veg), Texpert Truth Classes (0 = Unclass, 2 = Ground, 4 = Veg, 6 = Building)
+                                      # Meas Classes (0 = Unclass, 1 = Ground, 2 = Low Veg, 3 = High Veg), Texpert Truth Classes (0 = Unclass, 2 = Ground, 4 = Veg, 6 = Building)
     filterData = [3,4]               # Signal Confidence (0, 1, 2, 3, 4)
     offsets = offsetsStruct(offsetsCrossTrackBounds, offsetsAlongTrackBounds, offsetsRasterResolutions, offsetsUseVerticalShift, offsetsVerticalShift )
     createMeasCorrFile = True     # Option to create ouput measured corrected .las file
@@ -982,9 +982,9 @@ if __name__ == "__main__":
     # Call getMeasurementError
     print('RUNNING getMeasurementError...\n')
     atlCorrections = getMeasurementError(atl03Data, atlTruthData, refHeightType, 
-                                         rotationData, outFilePath, useMeasSigConf, 
-                                         filterData, offsets, createMeasCorrFile, 
-                                         makePlots, showPlots, logFileID=False)
+                                          rotationData, outFilePath, useMeasSigConf, 
+                                          filterData, offsets, createMeasCorrFile, 
+                                          makePlots, showPlots, logFileID=False)
 
     # End timer
     timeEnd = runTime.time()
