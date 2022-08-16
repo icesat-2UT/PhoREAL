@@ -269,6 +269,179 @@ def plot_confusion_matrix(y_true, y_pred, classes,
     fig.tight_layout()
     return ax
 
+# Perfect Classifer 
+def perfect_classifier(atl03, truth_swath,ground = [2],canopy = [4], 
+                      unclassed = [1, 6, 7, 18], keepsize = True):
+    # Find max/min along track
+    print('Run Perfect Classifier')
+    maxy = np.max(truth_swath.alongtrack)
+    miny = np.min(truth_swath.alongtrack)
+    
+    measy = np.array(atl03.df.alongtrack)
+    measz = np.array(atl03.df.h_ph)
+    measc = np.array(atl03.df.classification)
+    # measz = measz - 1
+    
+    # Reclass everything to generic classes
+    measc[measc == -1] = 0
+    measc[measc == 3] = 2
+    
+    # Calculate filter offsets for later
+    if keepsize == True:
+        if np.min(measy) < miny:
+            minmeasindex = next(x for x, val in enumerate(measy) if val > miny)
+        else:
+            minmeasindex = 0
+        if np.max(measy) > maxy:
+            maxmeasindex = next(x for x, val in enumerate(measy) if val > maxy)
+        else:
+            maxmeasindex = 0
+#        if (minmeasindex == 0) and (maxmeasindex == 0):
+#            minmeasindex = next(x for x, val in enumerate(measy) if val > miny) 
+#            maxmeasindex = next(x for x, val in enumerate(measy) if val > maxy)
+#            if (minmeasindex == 0) and (maxmeasindex == 0):
+#                print("Error, no indices in range")
+
+    # Apply filter based on min/max of truth data
+    measfilt = np.where((measy <= maxy) & (measy >= miny))
+
+    measyfilt = measy[measfilt]
+    measzfilt = measz[measfilt]
+    meascfilt = measc[measfilt]
+    classfilt = [np.isin(np.array(truth_swath.classification),ground) | np.isin(np.array(truth_swath.classification),canopy)]
+    ty = np.array(truth_swath.alongtrack)[classfilt]
+    tz = np.array(truth_swath.z)[classfilt]
+    tc = np.array(truth_swath.classification)[classfilt]
+    #Create KDtree and then query the tree
+    pts = np.vstack((measyfilt,measzfilt)).T
+    print('    Building KDtree')
+    tree = spatial.KDTree(list(zip(ty, tz)))
+    print('    Querying KDtree')
+    dist, index = tree.query(pts)
+    
+    # Pre-populate all photon classed array with zeroes
+    measpc = np.zeros(len(index))
+    measpc = measpc - 1
+    
+    # Populate all photon classed array from ATL08 classifications
+    measpc = tc[index]
+
+    measpc[dist > 1.5] = 0
+
+    # Reclass everything to generic classes
+    measpc[np.isin(measpc,unclassed)] = 0
+    measpc[np.isin(measpc,ground)] = 1
+    measpc[np.isin(measpc,canopy)] = 2
+    measpc[measpc > 2] = 0    
+
+    keepsize = True
+
+    # If keepsize is True, append 0's to measpc
+    if keepsize == True:
+        if ((minmeasindex == 0) & (maxmeasindex == 0)):
+            measpc = measpc
+        elif ((minmeasindex > 0) & (maxmeasindex == 0)):
+            frontzeros = np.zeros(minmeasindex)
+            measpc = np.append(frontzeros,measpc)
+        elif ((minmeasindex == 0) & (maxmeasindex > 0)):
+            backzeros = np.zeros(len(measc) - maxmeasindex)
+            # measpc = np.append(frontzeros,measpc)
+            measpc = np.append(measpc,backzeros)
+        elif minmeasindex > maxmeasindex:
+            frontzeros = np.zeros(maxmeasindex)
+            backzeros = np.zeros(len(measc) - minmeasindex)
+            measpc = np.append(frontzeros,measpc)
+            measpc = np.append(measpc,backzeros)
+        elif minmeasindex <= maxmeasindex:
+            frontzeros = np.zeros(minmeasindex)
+            backzeros = np.zeros(len(measc) - maxmeasindex)
+            measpc = np.append(frontzeros,measpc)
+            measpc = np.append(measpc,backzeros)
+        measpc = measpc.astype('int')
+        measoc = measc
+    else:
+        measpc = measpc.astype('int')
+        measoc = meascfilt
+    
+    return measpc, measoc
+
+def classificationReport(sortedMeasured, superTruth):
+    # Run Perfect Classifier
+    measpc, measoc = perfectClassifier(sortedMeasured, superTruth,ground = [2],
+                                       canopy = [4], unclassed = [1, 6, 7, 18], 
+                                       keepsize = True)
+    # Create includeFilter
+    measFilter = includeFilter(sortedMeasured, superTruth)
+    measFilter = measFilter.ravel()
+    measFilter = np.where(measFilter == 1)
+    # Apply includeFilter
+#    atl03_filter = np.where(includeFilter == 1)
+    measpcfilter = measpc[measFilter] 
+    measocfilter = measoc[measFilter]
+    
+    # Run classification Report
+    
+    report = classification_report(measpcfilter, measocfilter)
+    print(report)
+    return report
+
+
+
+def plot_confusion_matrix(y_true, y_pred, classes,
+                          normalize=False,
+                          title=None,
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if not title:
+        if normalize:
+            title = 'Normalized confusion matrix'
+        else:
+            title = 'Confusion matrix, without normalization'
+
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    # Only use the labels that appear in the data
+#    classes = classes[unique_labels(y_true, y_pred)]
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
+    ax.figure.colorbar(im, ax=ax)
+    
+    # We want to show all ticks...
+    ax.set(xticks=np.arange(cm.shape[0]),
+           yticks=np.arange(cm.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=classes, yticklabels=classes,
+           title=title,
+           ylabel='True label',
+           xlabel='Predicted label')
+    ax.axis('scaled')
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+
+    # Loop over data dimensions and create text annotations.
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    fig.tight_layout()
+    return ax
+
 
 if __name__ == "__main__":
 
