@@ -360,21 +360,32 @@ def getAtl08Mapping_seg(atl03_ph_index_beg, atl03_segment_id, atl08_classed_pc_i
 #         max5 = np.nan
 #     return max5
 
-# def normalize_heights(df):
-#     t_ind = np.int32(np.floor((df.delta_time - np.min(df.delta_time)) / 0.001))
-#     df['t_ind'] = t_ind
-#     df_g = df[df.c == 1]
-#     zgroup = df_g.groupby('t_ind')
-#     zout = zgroup.aggregate(np.median)
-#     # zout = zout.drop(columns=['h_ind', 'c', 'along', 'delta_time',
-#     #        'bckgrd_int_height_reduced', 'bckgrd_counts_reduces', 'bckgrd_rate','norm_h'])
-#     zout = zout.reindex(list(range(0,np.max(t_ind) + 1)))
-#     zout = zout.interpolate(method='linear', axis=0).ffill().bfill()
-#     ground = zout.h_ph[df.t_ind]
-#     norm_height = np.array(df.h_ph) - np.array(ground)
-#     df['norm_h'] = norm_height
-#     df = df.drop(columns = ['t_ind'])
-#     return df
+def normalize_heights(df):
+    # Statis variables
+    ground_res = 0.1
+    ground_class = 2
+    
+    t_ind = np.int32(np.floor((df.alongtrack - np.min(df.alongtrack)) / ground_res))
+    df['t_ind'] = t_ind
+    df_g = df[df.classification == ground_class]
+    zgroup = df_g.groupby('t_ind')
+    zout = zgroup.aggregate(np.median)
+    # zout = zout.drop(columns=['h_ind', 'c', 'along', 'delta_time',
+    #        'bckgrd_int_height_reduced', 'bckgrd_counts_reduces', 'bckgrd_rate','norm_h'])
+    zout = zout.reindex(list(range(0,np.max(t_ind) + 1)))
+    zout = zout.interpolate(method='linear', axis=0).ffill().bfill()
+    ground = zout.h_ph[df.t_ind]
+    norm_height = np.array(df.h_ph) - np.array(ground)
+    
+    # Re assign points below the ground to the ground class
+    df.classification[norm_height < 0] = 0 
+    
+    # 
+    norm_height[norm_height < 0] = 0
+    
+    df['norm_h'] = norm_height
+    df = df.drop(columns = ['t_ind'])
+    return df
 
 
 def get_atl03_atl08_seg_keys(atl03filepath, atl08filepath, gt):
@@ -649,8 +660,9 @@ def get_n_photons_above_threshold(atl03_df, upsampled_atl08_bin, classes = [2,3]
     zout = zgroup.aggregate(get_len)
     total = zout['norm_h']    
     total = total.rename('n_photons_above_threshold')
-    upsampled_atl08_bin = upsampled_atl08_bin.merge(total, left_index = True, right_index = True)
-    return upsampled_atl08_bin
+    # upsampled_atl08_bin = upsampled_atl08_bin.merge(total, left_index = True, right_index = True)
+    df_bin_out = pd.merge(upsampled_atl08_bin, total, how='left',on='h_ind')
+    return df_bin_out
 
 
 def interpolate_domain(atl08_at, atl08_domain, key_df_at, kind_type):
@@ -705,8 +717,8 @@ def f_mi(x):
     d.append((scipy.stats.mode(x['h_ph'][x['classification'] == 1])[0])) #h_te_mode
     d.append((len(x['h_ph'][x['classification'] == 1]))) #n_te_photons
     d.append(len((np.unique(x['delta_time'])))) #n_unique_shots
-    d.append(np.float(x['h_ph'][x['alongtrack'] == x['alongtrack'].max()]) - np.float(x['h_ph'][x['alongtrack'] == x['alongtrack'].min()])) #h_te_rise
-    d.append(np.float(x['alongtrack'].max() - x['alongtrack'].min())) #h_te_run
+    # d.append(np.float(x['h_ph'][x['alongtrack'] == x['alongtrack'].max()]) - np.float(x['h_ph'][x['alongtrack'] == x['alongtrack'].min()])) #h_te_rise
+    # d.append(np.float(x['alongtrack'].max() - x['alongtrack'].min())) #h_te_run
     d.append((np.nanpercentile(x['norm_h'][x['classification'] == 1],25))) #h_te_rh25
     d.append((len(x['h_ph']))) #n_seg_ph    
     d.append((x['ph_bihr']).mean()) #avg_bckgrd_calc_rate
@@ -740,14 +752,117 @@ def f_mi(x):
                                'h_te_mode',
                                'n_te_photons',
                                'n_unique_shots',
-                               'h_te_rise',
-                               'h_te_run',
+                               # 'h_te_rise',
+                               # 'h_te_run',
                                 'h_te_rh25',
                                'n_seg_ph',
                                'avg_bckgrd_calc_rate',
                                'avg_bckgrd_counts_reduces',
                                'avg_bckgrd_int_height_reduced'
                                ])
+def f_mi_truth(x):
+    # Static variables
+    ground_class = 2
+    canopy_class = 4
+    
+    percentile_intervals = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 
+                            70, 75, 80, 85, 90, 95, 98]
+    d = []
+    d.append((np.nanpercentile(x['norm_h'][x['classification'] == 4],percentile_intervals))) #canopy_rh
+    d.append((np.nanpercentile(x['h_ph'][x['classification'] == 4],percentile_intervals))) #canopy_rh_abs
+    d.append((x['norm_h'][x['classification'] == 4]).std()) #canopy_openness
+    d.append((x['h_ph'][x['classification'] == 2]).mean()) # centroid_height
+    d.append((np.sqrt(((x['norm_h'][x['classification'] == 4])/(x['norm_h'][x['classification'] == 2]).mean()).sum()))) # h_canopy_quad
+    d.append((x['norm_h'][x['classification'] == 4]).max()) #h_max_canopy
+    d.append((x['h_ph'][x['classification'] == 4]).max()) #h_max_canopy_abs
+    d.append((x['norm_h'][x['classification'] == 4]).mean()) #h_mean_canopy
+    d.append((x['h_ph'][x['classification'] == 4]).mean()) #h_mean_canopy_abs    
+    d.append((x['norm_h'][x['classification'] == 4]).median()) #h_median_canopy
+    d.append((x['h_ph'][x['classification'] == 4]).median()) #h_median_canopy_abs      
+    d.append((x['norm_h'][x['classification'] == 4]).min()) #h_min_canopy
+    d.append((x['h_ph'][x['classification'] == 4]).min()) #h_min_canopy_abs   
+    d.append((len(x['h_ph'][x['classification'] == 4]))) #n_ca_photons
+    d.append((scipy.stats.skew(x['alongtrack'][x['classification'] == 2]))) #h_te_skew
+    d.append((x['h_ph'][x['classification'] == 2]).std()) #h_te_std
+    d.append((x['h_ph'][x['classification'] == 2]).max()) #h_te_max
+    d.append((x['h_ph'][x['classification'] == 2]).min()) #h_te_min
+    d.append((x['h_ph'][x['classification'] == 2]).mean()) #h_te_mean
+    d.append((x['h_ph'][x['classification'] == 2]).median()) #h_te_median
+    d.append((scipy.stats.mode(x['h_ph'][x['classification'] == 2])[0])) #h_te_mode
+    d.append((len(x['h_ph'][x['classification'] == 1]))) #n_te_photons
+    d.append((np.nanpercentile(x['norm_h'][x['classification'] == 2],25))) #h_te_rh25
+    d.append((len(x['h_ph']))) #n_seg_ph    
+
+
+    return pd.Series(d, index=[
+        'canopy_rh', 
+                                'canopy_rh_abs', 
+                               'canopy_openness', 
+                               'centroid_height',
+                               'h_canopy_quad',
+                               'h_max_canopy',
+                               'h_max_canopy_abs',
+                               'h_mean_canopy',
+                               'h_mean_canopy_abs',
+                               'h_median_canopy',
+                               'h_median_canopy_abs',
+                               'h_min_canopy',
+                               'h_min_canopy_abs',
+                               'n_ca_photons',
+                               'h_te_skew',
+                               'h_te_std',
+                               'h_te_max',
+                               'h_te_min',
+                               'h_te_mean',
+                               'h_te_median',
+                               'h_te_mode',
+                               'n_te_photons',
+                               'h_te_rh25',
+                               'n_seg_ph',
+                               ])
+
+
+def f_mi_slope(x):
+    d = []
+    d.append(np.argsort(np.array(x['alongtrack'])).min())
+    d.append(np.argsort(np.array(x['alongtrack'])).max())
+
+    return pd.Series(d, index=['start', 'end'])
+
+
+def slope_df(df, df_bin, ground_class):
+    # Static variable
+    field_name = 'terrain_slope'
+    
+    df = df[df.classification == ground_class]
+    df = df.sort_values(by=['alongtrack'])
+    df = df.reset_index()
+    pos_df = df.groupby('h_ind')
+    # slope = []
+    indice_list = []
+    slope_list = []
+    # bin_df['terrain_slope'] = np.nan
+    for ind in np.unique(df.h_ind):
+        df_ind = df[df.h_ind == ind]
+        if len(df_ind) > 1:
+            # rise = np.array(df_ind.h_ph)[-1] - np.array(df_ind.h_ph)[0]
+            # run = np.array(df_ind.alongtrack)[-1] - np.array(df_ind.alongtrack)[0]
+            # slope.append(rise/run)
+            slope_calc, _ = np.polyfit(np.array(df_ind.alongtrack),np.array(df_ind.h_ph),1)
+            slope_list.append(slope_calc)
+            indice_list.append(ind)
+        else:
+            # slope.append(np.nan)
+            slope_list.append(np.nan)
+            indice_list.append(ind)
+            
+    data = {'h_ind':indice_list,field_name:slope_list}
+    df_slope = pd.DataFrame(data)
+    df_bin_out = pd.merge(df_bin, df_slope, how='left',on='h_ind')
+    # df_slope = df_slope.set_index('h_ind')
+            
+    return df_bin_out
+
 
 
 def sub_bin_canopy_metrics(df, res_at = 2):
@@ -780,6 +895,35 @@ def sub_bin_canopy_metrics(df, res_at = 2):
     # sub_bin = sub_bin[sub_bin['h_ind'] != 0]
     return sub_bin
 
+def sub_bin_canopy_metrics_truth(df, res_at = 2):
+    at = np.array(df['alongtrack'])
+    ind = np.int32(np.floor((at - np.min(at))/res_at))
+    df['c_ind'] = ind
+    df_c = df[df.classification == 4]
+    # df_c = df_c.reindex(list(range(ind03.min(),ind03.max()+1)),fill_value=0)
+    zgroup = df_c.groupby('c_ind')
+    sub_bin = zgroup.aggregate(np.max)
+    sub_bin = sub_bin.reindex(list(range(ind.min(),ind.max()+1)),fill_value=0)
+    sub_bin['alongtrack'] = (sub_bin.index * res_at) + (res_at / 2)
+
+    domain_interp = interpolate_domain(df.alongtrack, 
+                                       df.h_ind, sub_bin.alongtrack + np.min(at), 'nearest')
+    
+    norm_h = np.array(sub_bin.norm_h)
+    a_h = np.array([x - norm_h[i - 1] for i, x in enumerate(norm_h)][1:])
+    a_h = np.append(a_h, 0)
+    # test_out = np.pad(test_out, (0,1), 'constant')
+    surface_area = np.sqrt((a_h**2) + (res_at**2))
+    sub_bin = sub_bin.drop(columns=['h_ph', 'lat',
+       'lon', 'x', 'y','classification','intensity', 'date', 'easting', 'northing', 'crosstrack',
+      'alongtrack'])
+    sub_bin['surface_len'] = surface_area
+    sub_bin['ground_len'] = res_at
+    # sub_bin['h_ind'] = domain_interp.astype(int)
+
+    # sub_bin = sub_bin[sub_bin['h_ind'] != 0]
+    return sub_bin
+
 def calc_rumple_index(sub_bin):
     zgroup = sub_bin.groupby('h_ind')
     veg_df = zgroup.aggregate(np.sum)
@@ -788,23 +932,23 @@ def calc_rumple_index(sub_bin):
     veg_df = veg_df.drop(columns=['norm_h'])    
     return veg_df
 
-def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_field):
+def rebin_atl08(atl03, atl08, gt, res, res_field):
     # Get ATL03 Bin ID
 
     percentile_intervals = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 
                             70, 75, 80, 85, 90, 95, 98]
     
-    print('Generate ATL03 Struct')
-    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
-    atl03.df = atl03.df[atl03.df.lat_ph > 57]
-    atl03.df = atl03.df[atl03.df.lat_ph < 65]
-    #atl03.df = atl03.df[atl03.df.lon_ph > 88]
-    #atl03.df = atl03.df[atl03.df.lon_ph < 106]
+    # print('Generate ATL03 Struct')
+    # atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+    # # atl03.df = atl03.df[atl03.df.lat_ph > 57]
+    # # atl03.df = atl03.df[atl03.df.lat_ph < 65]
+    # #atl03.df = atl03.df[atl03.df.lon_ph > 88]
+    # #atl03.df = atl03.df[atl03.df.lon_ph < 106]
     
-    print('Generate ATL08 Struct')
-    atl08 = get_atl08_struct(atl08filepath, gt, atl03)
-    atl08.df = atl08.df[atl08.df.latitude > 57]
-    atl08.df = atl08.df[atl08.df.latitude < 65]
+    # print('Generate ATL08 Struct')
+    # atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+    # atl08.df = atl08.df[atl08.df.latitude > 57]
+    # atl08.df = atl08.df[atl08.df.latitude < 65]
     #atl08.df = atl08.df[atl08.df.longitude > 88]
     #atl08.df = atl08.df[atl08.df.longitude < 106]
 
@@ -912,8 +1056,8 @@ def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_fie
     calc_df['photon_rate_te'] = calc_df.n_te_photons / calc_df.n_unique_shots
         
     # Compute slope
-    calc_df['terrain_slope'] = calc_df.h_te_rise / calc_df.h_te_run
-    calc_df = calc_df.drop(columns=['h_te_rise','h_te_run'])
+    # calc_df['terrain_slope'] = calc_df.h_te_rise / calc_df.h_te_run
+    # calc_df = calc_df.drop(columns=['h_te_rise','h_te_run'])
 
     # Compute h_dif_can
     calc_df['h_dif_canopy'] = calc_df.canopy_h - calc_df.canopy_rh_50
@@ -922,9 +1066,7 @@ def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_fie
     calc_df['traditional_canopy_cover'] = (calc_df['n_ca_photons'] + \
             calc_df['n_toc_photons']) / (calc_df['n_ca_photons'] + \
             calc_df['n_toc_photons'] + calc_df['n_te_photons'])
-    
-    # TODO: Compute binary along track canopy cover
-        
+            
     # Compute Rumple Index (canopy surface area/ground surface area)
     sub_bin = sub_bin_canopy_metrics(atl03.df, res_at = 2)
     veg_bin = calc_rumple_index(sub_bin)
@@ -933,6 +1075,8 @@ def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_fie
     # Compute Area-Under-Canopy/Open Sky Ratio
     calc_df['canopy_ratio'] = calc_df.veg_area / (calc_df.h_max_canopy * 
                                                   calc_df.ground_len)
+    # Compute slope
+    bin_df = slope_df(atl03.df, bin_df, 1)
     
     # Merge Computed columns to bin_df
     bin_df = bin_df.join(calc_df)
@@ -964,6 +1108,139 @@ def calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_fie
 
     # Return bin_df
     return bin_df
+
+def rebin_truth(atl03, truth_swath, res, res_field):
+    ground_class = 2
+    veg_class = 4
+    other_veg_classes = [3, 5]
+    
+    # Get ATL03 Bin ID
+
+    percentile_intervals = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 
+                            70, 75, 80, 85, 90, 95, 98]
+    
+    for other_veg_class in other_veg_classes:
+        truth_swath[truth_swath.classification == other_veg_class] = veg_class
+
+    
+    if res_field in ['delta_time','lat_ph','lon_ph','alongtrack','northing']: 
+        at03 = np.array(atl03.df[res_field])
+
+        at_truth = np.array(truth_swath[res_field])
+        indtruth = np.int32(np.floor((at_truth - np.min(at03))/res))
+        truth_swath['h_ind'] = indtruth
+        
+    elif res_field == 'atl03_seg':
+        print('ok')
+    elif res_field == 'atl08_seg':
+        print('ok')
+        
+    bin_df = pd.DataFrame(np.arange(np.min(truth_swath.h_ind),np.max(truth_swath.h_ind)),columns=['h_ind'])
+
+    
+    linear_field_list = ['alongtrack', 'crosstrack', 'easting', 
+                           'northing', 'lon', 'lat']
+    
+    
+    for field in linear_field_list:
+        domain_interp = interpolate_domain(truth_swath.h_ind, 
+                                           truth_swath[field], bin_df.h_ind, 'linear')
+        bin_df = pd.concat([bin_df,pd.DataFrame(domain_interp,
+                                                columns=[field])],axis=1)
+
+
+    # Rename h_ph
+    truth_swath = truth_swath.rename(columns={'z':'h_ph'})
+
+    # Create normalized ground
+    truth_swath = normalize_heights(truth_swath)
+
+    # Calculate fields            
+    calc_df = truth_swath.groupby('h_ind').apply(f_mi_truth)
+    
+    # Unstack canopy_rh and rename (possible to drop canopy_rh_abs)
+    for i in range(0,len(percentile_intervals)):
+        arr = []
+        for j in range(0,len(calc_df)):
+            if type(calc_df.iloc[j].canopy_rh) == np.ndarray:
+                arr.append(calc_df.iloc[j].canopy_rh[i])
+            else:
+                arr.append(0)
+            
+        arr = np.array(arr)
+        title = 'canopy_rh_' + str(percentile_intervals[i])
+        calc_df[title] = arr
+
+    # Unstack canopy_rh and rename (possible to drop canopy_rh_abs)
+    for i in range(0,len(percentile_intervals)):
+        arr = []
+        for j in range(0,len(calc_df)):
+            if type(calc_df.iloc[j].canopy_rh_abs) == np.ndarray:
+                arr.append(calc_df.iloc[j].canopy_rh_abs[i])
+            else:
+                arr.append(0)
+            
+        arr = np.array(arr)
+        title = 'canopy_rh_abs_' + str(percentile_intervals[i])
+        calc_df[title] = arr
+
+    calc_df['canopy_h'] = calc_df['canopy_rh_98'] 
+    calc_df['h_canopy_abs'] = calc_df['canopy_rh_abs_98'] #        
+    
+    calc_df = calc_df.drop(columns=['canopy_rh'])
+    calc_df = calc_df.drop(columns=['canopy_rh_abs'])
+        
+    # # Compute slope
+    # calc_df['terrain_slope'] = calc_df.h_te_rise / calc_df.h_te_run
+    # calc_df = calc_df.drop(columns=['h_te_rise','h_te_run'])
+
+
+    # Compute h_dif_can
+    calc_df['h_dif_canopy'] = calc_df.canopy_h - calc_df.canopy_rh_50
+    
+    # Compute traditional canopy cover
+    calc_df['traditional_canopy_cover'] = (calc_df['n_ca_photons']) /\
+        (calc_df['n_ca_photons']  + calc_df['n_te_photons'])
+            
+    # Compute Rumple Index (canopy surface area/ground surface area)
+    sub_bin = sub_bin_canopy_metrics_truth(truth_swath, res_at = 2)
+    veg_bin = calc_rumple_index(sub_bin)
+    calc_df = calc_df.join(veg_bin)
+            
+    # Compute Area-Under-Canopy/Open Sky Ratio
+    calc_df['canopy_ratio'] = calc_df.veg_area / (calc_df.h_max_canopy * 
+                                                  calc_df.ground_len)
+    
+    # Merge Computed columns to bin_df
+    bin_df = bin_df.join(calc_df)
+
+    bin_df = slope_df(truth_swath, bin_df, ground_class)
+    
+    # Compute h_dif_ref
+    # bin_df['h_dif_ref'] = bin_df.h_te_median - bin_df.dem_h
+    
+    # Height bins (%)
+    h_bin_list = [[0,1],[1,2.5],[2.5,5],[5,7.5],[7.5,10],[10,12.5],[12.5,15],
+                  [15,17.5],[17.5,20],[20,22.5],[22.5,25],[25,27.5],[27.5,30]]
+    h_base_val = 0
+    h_bin_prefix = 'h_bin_'
+    for i in range(0,len(h_bin_list)):
+        title = h_bin_prefix + str(i)
+        bin_df = computer_vertical_density_p(truth_swath, bin_df, 
+                        h_bin_list[i][0], h_bin_list[i][1], title, 
+                        h_base = h_base_val)
+
+    # Compute photons above set threshold
+    bin_df = get_n_photons_above_threshold(truth_swath, bin_df, 
+                                           classes = [veg_class], 
+                                           h_base = h_base_val)
+
+    bin_df['year'] = truth_swath.date[0].year
+    bin_df['month'] = truth_swath.date[0].month
+    bin_df['day'] = truth_swath.date[0].day
+
+    # Return bin_df
+    return bin_df
     
 def main(in_atl03, in_atl08, output_dir, res, rando, v):
     try:
@@ -991,7 +1268,55 @@ def main(in_atl03, in_atl08, output_dir, res, rando, v):
             try:
                 csv_file = os.path.join(output_dir, atl08file.split('.')[0] + '_' + gt + '30m.csv')
                 if os.path.exists(csv_file) == False:
-                    bin_df = calc_atl03_binning_radiometry(atl03filepath, atl08filepath, gt, res, res_field)
+                    bin_df = rebin_atl08(atl03filepath, atl08filepath, gt, res, res_field)
+                    bin_df.to_csv(csv_file)
+                else:
+                    print('File already exists')
+            except:
+                print('Binning failed')
+    
+def main(in_atl03, in_atl08, output_dir, res, rando, v):
+    try:
+        os.mkdir(output_dir)
+    except:
+        print('Folder already exists')
+    
+    atl03_list = os.listdir(in_atl03)
+
+    if rando is True:
+        print('Random sort ATL03 List')
+        random.shuffle(atl03_list)
+
+    # # Inputs
+    # res = 30
+    res_field = 'alongtrack'
+    for i in range(0,len(atl03_list)):
+        print(atl03_list[i])
+        atl03file = atl03_list[i]
+        atl08file = 'ATL08' + atl03_list[i].split('ATL03')[1]
+        atl03filepath =  os.path.join(in_atl03, atl03file)
+        atl08filepath =  os.path.join(in_atl08, atl08file)
+        gt_list = ['gt1r','gt1l','gt2l','gt2r','gt3l','gt3r']
+        for gt in gt_list:
+            try:
+                csv_file = os.path.join(output_dir, atl08file.split('.')[0] + '_' + gt + '30m.csv')
+                if os.path.exists(csv_file) == False:
+                    print('Generate ATL03 Struct')
+                    atl03 = get_atl03_struct(atl03filepath, gt, atl08filepath)
+                    # atl03.df = atl03.df[atl03.df.lat_ph > 57]
+                    # atl03.df = atl03.df[atl03.df.lat_ph < 65]
+                    #atl03.df = atl03.df[atl03.df.lon_ph > 88]
+                    #atl03.df = atl03.df[atl03.df.lon_ph < 106]
+                    
+                    print('Generate ATL08 Struct')
+                    atl08 = get_atl08_struct(atl08filepath, gt, atl03)
+                    # atl08.df = atl08.df[atl08.df.latitude > 57]
+                    # atl08.df = atl08.df[atl08.df.latitude < 65]
+                    #atl08.df = atl08.df[atl08.df.longitude > 88]
+                    #atl08.df = atl08.df[atl08.df.longitude < 106]
+                    
+                    # Rebin ATL08
+                    bin_df = rebin_atl08(atl03, atl08, gt, res, res_field)
                     bin_df.to_csv(csv_file)
                 else:
                     print('File already exists')
