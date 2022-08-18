@@ -40,7 +40,7 @@ def getMeasurementError(atl03, truth_df):
     refHeightType = 'hae'
     outFilePath = ''
     useMeasSigConf = False
-    filterData = [3,4]
+    filterData = [1,2,3,4]
     createMeasCorrFile = False
     makePlots = False
     showPlots = False
