@@ -1120,7 +1120,8 @@ def rebin_truth(atl03, truth_swath, res, res_field):
                             70, 75, 80, 85, 90, 95, 98]
     
     for other_veg_class in other_veg_classes:
-        truth_swath[truth_swath.classification == other_veg_class] = veg_class
+        truth_swath.classification\
+            [truth_swath.classification == other_veg_class] = veg_class
 
     
     if res_field in ['delta_time','lat_ph','lon_ph','alongtrack','northing']: 
@@ -1212,6 +1213,7 @@ def rebin_truth(atl03, truth_swath, res, res_field):
                                                   calc_df.ground_len)
     
     # Merge Computed columns to bin_df
+    bin_df = bin_df.set_index('h_ind')
     bin_df = bin_df.join(calc_df)
 
     bin_df = slope_df(truth_swath, bin_df, ground_class)
@@ -1235,9 +1237,9 @@ def rebin_truth(atl03, truth_swath, res, res_field):
                                            classes = [veg_class], 
                                            h_base = h_base_val)
 
-    bin_df['year'] = truth_swath.date[0].year
-    bin_df['month'] = truth_swath.date[0].month
-    bin_df['day'] = truth_swath.date[0].day
+    bin_df['year'] = truth_swath.date.iloc[0].year
+    bin_df['month'] = truth_swath.date.iloc[0].month
+    bin_df['day'] = truth_swath.date.iloc[0].day
 
     # Return bin_df
     return bin_df

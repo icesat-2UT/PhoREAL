@@ -65,7 +65,8 @@ def ace(x, y, z, c, interpolate = False):
     # Grid las files                          
     x = np.floor((x - np.min(x))/x_res).astype(int)                                                     
     y = np.floor((y - np.min(y))/y_res).astype(int)      
-    dem = np.zeros([np.max(x[c == ground]) + 1, np.max(y[c == ground]) + 1])                                                       
+    # dem = np.zeros([np.max(x[c == ground]) + 1, np.max(y[c == ground]) + 1])                                                       
+    dem = np.zeros([np.max(x) + 1, np.max(y) + 1])                                                       
     dem[x[c == ground],y[c == ground]] = z[c == ground]                                                                                 
 
     # Interpolate DEM
