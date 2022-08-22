@@ -816,7 +816,25 @@ def getMeasurementError(atl03, truth_df):
     else:
         
         # Either no measured data or truth data after filtering, so send empty data out
-        atlCorrections = []
+        # atlCorrections = []
+        atlCorrections = atlCorrectionsStruct([], [], \
+                                                              [], [], \
+                                                              [], [], \
+                                                              [], [], \
+                                                              [], [], \
+                                                              [], \
+                                                              [], \
+                                                              [], [], \
+                                                              [], [], \
+                                                              [], [], \
+                                                              [], \
+                                                              [], [], [], \
+                                                              [], \
+                                                              [], \
+                                                              [], \
+                                                              [], \
+                                                              [], \
+                                                              [])
         
         if(not measDataExists):
             print('   WARNING: No ICESat-2 data in selected filter options: %s' %filterData)
