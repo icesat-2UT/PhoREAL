@@ -19,13 +19,15 @@ Created on Fri Aug  2 11:18:58 2019
 
 import numpy as np
 import pandas as pd
+import datetime
 
 # import time
 # from icesatUtils import identifyEPSG
 from icesatUtils import getCoordRotFwd
 from icesatUtils import transform
 
-from getAtlTruthSwath_auto import getAtlTruthSwath, getTruthFilePaths
+# from getAtlTruthSwath_auto import getAtlTruthSwath
+from getAtlTruthSwath_auto import getTruthFilePaths
 
 # from getMeasurementError_auto import getMeasurementError, offsetsStruct
 # from icesatReader import read_atl03_geolocation
@@ -34,8 +36,9 @@ from getAtlTruthSwath_auto import getAtlTruthSwath, getTruthFilePaths
 # from icesatIO import getTruthHeaders, readGeoidFilem, readLas
 from icesatIO import getTruthHeaders
 from icesatIO import readLasHeader
-from icesatIO import loadTifFile
-from icesatIO import readLas
+from icesatIO import formatDEM
+# from icesatIO import loadTifFile
+# from icesatIO import readLas
 # from icesatUtils import identifyEPSG
 # from icesatUtils import getCoordRotFwd
 # from icesatUtils import transform
@@ -46,62 +49,62 @@ from icesatUtils import getCoordRotRev
 # from icesatUtils import getUTM2LatLon
 from laspy.file import File
 from icesatUtils import indexMatch
-from icesatUtils import indexMatch
+# from icesatUtils import indexMatch
 from ace import ace
 from getMeasurementError import getMeasurementError
 from icesatReader import get_atl_alongtrack
 from icesatCalVal import perfect_classifier
 
 
-def estimate_segment_id_legacy(geolocation, gt, atlTruthStructLegacy):
+# def estimate_segment_id_legacy(geolocation, gt, atlTruthStructLegacy):
 
-    # geolocation = read_atl03_geolocation(atl03filepath, gt)
+#     # geolocation = read_atl03_geolocation(atl03filepath, gt)
     
-    # geolocation, rotation_data, epsg = match_atl_to_atl03(geolocation, atl03) 
+#     # geolocation, rotation_data, epsg = match_atl_to_atl03(geolocation, atl03) 
     
-    # Find closest (within 10 meters) 
-    seg_id = np.array(geolocation.segment_id)
-    seg_at = np.array(geolocation.alongtrack)
-    truth_at = atlTruthStructLegacy.alongTrack.flatten()
-    index = indexMatch(seg_at, truth_at)
-    datalen = len(seg_at)
-    index[index >= datalen] = (datalen - 1)
-    include = np.zeros(len(truth_at))
-    seg_at_comp = np.array([seg_at[x] for x in index])
-    seg_id_truth = np.array([seg_id[x] for x in index])
-    diff = np.abs(seg_at_comp - truth_at)
+#     # Find closest (within 10 meters) 
+#     seg_id = np.array(geolocation.segment_id)
+#     seg_at = np.array(geolocation.alongtrack)
+#     truth_at = atlTruthStructLegacy.alongTrack.flatten()
+#     index = indexMatch(seg_at, truth_at)
+#     datalen = len(seg_at)
+#     index[index >= datalen] = (datalen - 1)
+#     include = np.zeros(len(truth_at))
+#     seg_at_comp = np.array([seg_at[x] for x in index])
+#     seg_id_truth = np.array([seg_id[x] for x in index])
+#     diff = np.abs(seg_at_comp - truth_at)
     
-    # include[diff < 12] = 1
+#     # include[diff < 12] = 1
     
-    return seg_id_truth, include
+#     return seg_id_truth, include
     
-def legacy_get_truth_swath(atl03legacy, rotationData, truthSwathDir, truthFileType, 
-                           outFilePath, buffer = 50, useExistingTruth = False,
-                           createTruthFile = True):
+# def legacy_get_truth_swath(atl03legacy, rotationData, truthSwathDir, truthFileType, 
+#                            outFilePath, buffer = 50, useExistingTruth = False,
+#                            createTruthFile = True):
 
-    # Get input truth file(s)
-    truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False)
+#     # Get input truth file(s)
+#     truthFilePaths = getTruthFilePaths(truthSwathDir, truthFileType, logFileID=False)
               
-    # Get truth file header info
-    if(not(useExistingTruth)):
-        truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID=False)
-    else:
-        truthHeaderDF = False
-    # endIf
+#     # Get truth file header info
+#     if(not(useExistingTruth)):
+#         truthHeaderDF = getTruthHeaders(truthFilePaths, truthFileType, logFileID=False)
+#     else:
+#         truthHeaderDF = False
+#     # endIf
     
-    # Call getAtlTruthSwath
-    print('RUNNING getAtlTruthSwath...\n')
-    atlTruthData = getAtlTruthSwath(atl03legacy, rotationData, 
-                                    truthHeaderDF, truthFilePaths,
-                                    buffer, outFilePath, createTruthFile, 
-                                    truthFileType, useExistingTruth, 
-                                    logFileID=False)
+#     # Call getAtlTruthSwath
+#     print('RUNNING getAtlTruthSwath...\n')
+#     atlTruthData = getAtlTruthSwath(atl03legacy, rotationData, 
+#                                     truthHeaderDF, truthFilePaths,
+#                                     buffer, outFilePath, createTruthFile, 
+#                                     truthFileType, useExistingTruth, 
+#                                     logFileID=False)
 
-    # Reclassify anything 
-    atlTruthData.classification[atlTruthData.classification == 3] = 4
-    atlTruthData.classification[atlTruthData.classification == 5] = 4
+#     # Reclassify anything 
+#     atlTruthData.classification[atlTruthData.classification == 3] = 4
+#     atlTruthData.classification[atlTruthData.classification == 5] = 4
     
-    return atlTruthData
+#     return atlTruthData
     
 # def legacy_get_meas_error(atl03legacy, atlTruthData, rotationData, outFilePath, truthgroundclass=2):
 #     # truthgroundclass = 2
@@ -130,12 +133,12 @@ def legacy_get_truth_swath(atl03legacy, rotationData, truthSwathDir, truthFileTy
 
 #     return atlCorrections
     
-def apply_offset_legacy(atl03struct, atlCorrections):
-    atl03struct.df.alongtrack = atl03struct.df.alongtrack +\
-        atlCorrections.alongTrackBounds
-    atl03struct.df.crosstrack = atl03struct.df.crosstrack +\
-        atlCorrections.crossTrackBounds
-    atl03struct.df.h_ph = atl03struct.df.h_ph + atlCorrections.verticalShift
+# def apply_offset_legacy(atl03struct, atlCorrections):
+#     atl03struct.df.alongtrack = atl03struct.df.alongtrack +\
+#         atlCorrections.alongTrackBounds
+#     atl03struct.df.crosstrack = atl03struct.df.crosstrack +\
+#         atlCorrections.crossTrackBounds
+#     atl03struct.df.h_ph = atl03struct.df.h_ph + atlCorrections.verticalShift
 
 def loadTruthFile(truthFilePath, atlMeasuredData, rotationData, truthFileType, outFilePath, logFileID=False):
     
@@ -235,6 +238,66 @@ def loadLasFile(truthFilePath, epsg_atl, rotationData, decimate_n = 3):
     # endIf
     
     return lasTruthData
+
+### Function to load .tif file
+def loadTifFile(truthFilePath, epsg_atl, rotationData):
+    
+    # Read Tif file
+    xarr0, yarr0, zarr, intensity, classification, epsg = formatDEM(truthFilePath)
+    
+    # Convert ints to floats
+    xarr0 = xarr0.astype(float)
+    yarr0 = yarr0.astype(float)
+    zarr = zarr.astype(float)
+    
+    # Find EPSG Code from tif
+    epsg_truth = 'epsg:' + epsg
+    
+    # Determine if EPSG Code is the same for the ATL03 Measured
+    # epsg_atl = identifyEPSG(atlMeasuredData.hemi,atlMeasuredData.zone)
+    
+    # Store values
+    xarr = xarr0
+    yarr = yarr0
+    
+    # Reproject if necessary
+    if(epsg_truth == 'None'):
+        
+        print('      *WARNING: Invalid reference EPSG code, skipping file.')
+        # atlTruthData = False
+        tif_df = pd.DataFrame()
+        
+    else:
+        
+        if(epsg_truth != epsg_atl):
+            
+            # If EPSG code does not match, use GDAL Warp to create new Tif
+            print('      *Reference file EPSG code does not match ICESat-2, reprojecting reference file...')
+            xarr, yarr = transform(epsg_truth, epsg_atl, xarr0, yarr0)
+                    
+        # Rotate Data for along-track/cross-track
+        x_newRot, y_newRot, _, _, _, _ = getCoordRotFwd(xarr, yarr, 
+                                                        rotationData.R_mat, 
+                                                        rotationData.xRotPt, 
+                                                        rotationData.yRotPt, 
+                                                        rotationData.desiredAngle)
+        
+        # Get reference lat/lon
+        lat, lon = transform(epsg_truth, 'epsg:4326', xarr, yarr)
+        
+        # Store Data as Object
+        tif_df = pd.DataFrame()
+        tif_df['x'] = xarr
+        tif_df['y'] = xarr
+        tif_df['z'] = xarr
+        tif_df['lon'] = xarr
+        tif_df['lat'] = xarr
+        tif_df['alongtrack'] = xarr
+        tif_df['crosstrack'] = xarr
+        tif_df['classification'] = xarr
+        tif_df['date'] = datetime.datetime.now() # TODO: find actual date of tif
+
+    return tif_df
 
 ### Function to find and reproject min/max extents in header data
 def reprojectHeaderData(truthHeaderDF, epsg_atl):
