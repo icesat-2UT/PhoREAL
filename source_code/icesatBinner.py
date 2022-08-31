@@ -212,154 +212,6 @@ def getAtl08Mapping_seg(atl03_ph_index_beg, atl03_segment_id, atl08_classed_pc_i
     # Return all photon classed array
     return allph_seg
 
-
-# def get_max100(series):
-#     try:
-#         max98 = np.nanmax(series)
-#     except:
-#         max98 = np.nan
-#     return max98
-
-# def get_max98(series):
-#     try:
-#         max98 = np.percentile(series, 98)
-#     except:
-#         max98 = np.nan
-#     return max98
-
-# def get_max95(series):
-#     try:
-#         max95 = np.percentile(series, 95)
-#     except:
-#         max95 = np.nan
-#     return max95
-
-# def get_max90(series):
-#     try:
-#         max90 = np.percentile(series, 90)
-#     except:
-#         max90 = np.nan
-#     return max90
-
-# def get_max85(series):
-#     try:
-#         max85 = np.percentile(series, 85)
-#     except:
-#         max85 = np.nan
-#     return max85
-
-# def get_max80(series):
-#     try:
-#         max80 = np.percentile(series, 80)
-#     except:
-#         max80 = np.nan
-#     return max80
-
-# def get_max75(series):
-#     try:
-#         max75 = np.percentile(series, 75)
-#     except:
-#         max75 = np.nan
-#     return max75
-
-# def get_max70(series):
-#     try:
-#         max70 = np.percentile(series, 70)
-#     except:
-#         max70 = np.nan
-#     return max70
-
-# def get_max65(series):
-#     try:
-#         max65 = np.percentile(series, 65)
-#     except:
-#         max65 = np.nan
-#     return max65
-
-# def get_max60(series):
-#     try:
-#         max60 = np.percentile(series, 60)
-#     except:
-#         max60 = np.nan
-#     return max60
-
-# def get_max55(series):
-#     try:
-#         max55 = np.percentile(series, 55)
-#     except:
-#         max55 = np.nan
-#     return max55
-
-# def get_max50(series):
-#     try:
-#         max50 = np.percentile(series, 50)
-#     except:
-#         max50 = np.nan
-#     return max50
-
-# def get_max45(series):
-#     try:
-#         max45 = np.percentile(series, 45)
-#     except:
-#         max45 = np.nan
-#     return max45
-
-# def get_max40(series):
-#     try:
-#         max40 = np.percentile(series, 40)
-#     except:
-#         max40 = np.nan
-#     return max40
-
-# def get_max35(series):
-#     try:
-#         max35 = np.percentile(series, 35)
-#     except:
-#         max35 = np.nan
-#     return max35
-
-# def get_max30(series):
-#     try:
-#         max30 = np.percentile(series, 30)
-#     except:
-#         max30 = np.nan
-#     return max30
-
-# def get_max25(series):
-#     try:
-#         max25 = np.percentile(series, 25)
-#     except:
-#         max25 = np.nan
-#     return max25
-
-# def get_max20(series):
-#     try:
-#         max20 = np.percentile(series, 20)
-#     except:
-#         max20 = np.nan
-#     return max20
-
-# def get_max15(series):
-#     try:
-#         max15 = np.percentile(series, 15)
-#     except:
-#         max15 = np.nan
-#     return max15
-
-# def get_max10(series):
-#     try:
-#         max10 = np.percentile(series, 10)
-#     except:
-#         max10 = np.nan
-#     return max10
-
-# def get_max5(series):
-#     try:
-#         max5 = np.percentile(series, 5)
-#     except:
-#         max5 = np.nan
-#     return max5
-
 def normalize_heights(df):
     # Statis variables
     ground_res = 0.1
@@ -447,8 +299,9 @@ def get_atl03_atl08_seg_keys(atl03filepath, atl08filepath, gt):
 #     upsampled_atl08_bin = upsampled_atl08_bin.merge(dense, left_index = True, right_index = True)
 #     return upsampled_atl08_bin
 
-def computer_vertical_density_n(atl03_df, upsampled_atl08_bin, max_h, min_h, title):
-    df_canopy = atl03_df[atl03_df.classification > 1]
+def computer_vertical_density_n(atl03_df, upsampled_atl08_bin, max_h, min_h, title, veg_class = [2,3]):
+    # df_canopy = atl03_df[atl03_df.classification > 1]
+    df_canopy = atl03_df[atl03_df.classification.isin(veg_class)]
     df_select = df_canopy[df_canopy.norm_h < max_h]
     df_select = df_select[df_select.norm_h >= min_h]
     zgroup = df_select.groupby('h_ind')
@@ -459,8 +312,9 @@ def computer_vertical_density_n(atl03_df, upsampled_atl08_bin, max_h, min_h, tit
     upsampled_atl08_bin = upsampled_atl08_bin.merge(dense, left_index = True, right_index = True)
     return upsampled_atl08_bin
 
-def computer_vertical_density_p(atl03_df, upsampled_atl08_bin, min_h, max_h, title, h_base = 0):
-    df_canopy = atl03_df[atl03_df.classification > 1]
+def computer_vertical_density_p(atl03_df, upsampled_atl08_bin, min_h, max_h, title, veg_class = [2,3], h_base = 0):
+    # df_canopy = atl03_df[atl03_df.classification > 1]
+    df_canopy = atl03_df[atl03_df.classification.isin(veg_class)]
     df_canopy = df_canopy[df_canopy.norm_h > h_base]
     zgroup = df_canopy.groupby('h_ind')
     zout = zgroup.aggregate(get_len)
@@ -584,75 +438,6 @@ def get_binned_rate(atl03_df, upsampled_atl08_bin, atl03filepath, gt):
                                         left_index = True, right_index = True)
     return upsampled_atl08_bin
 
-# def get_photon_rate_ground(atl03_df, upsampled_atl08_bin):
-#     # Count number of shots
-#     zgroup = atl03_df.groupby('h_ind')
-#     zout = zgroup.aggregate(get_len_unique)
-#     f08_shots = zout['delta_time']
-#     f08_shots = f08_shots.rename('shots')
-    
-#     # Count number of photons
-#     atl03_df = atl03_df[atl03_df.c == 1]
-#     zgroup = atl03_df.groupby('h_ind')
-#     zout = zgroup.aggregate(get_len)
-#     f08_photons = zout['delta_time']
-#     f08_photons = f08_photons.rename('photons')
-    
-#     # Calculate photon rate
-#     f08_shots = f08_shots.to_frame()
-#     f08_shots = f08_shots.merge(f08_photons, left_index = True, right_index = True)
-#     rate = f08_shots.photons/f08_shots.shots
-#     rate = rate.rename('atl03_radiometry_ground')
-#     upsampled_atl08_bin = upsampled_atl08_bin.merge(rate, left_index = True, right_index = True)
-    
-#     return upsampled_atl08_bin
-
-# def get_photon_rate_can(atl03_df, upsampled_atl08_bin):
-#     # Count number of shots
-#     zgroup = atl03_df.groupby('h_ind')
-#     zout = zgroup.aggregate(get_len_unique)
-#     f08_shots = zout['delta_time']
-#     f08_shots = f08_shots.rename('shots')
-    
-#     # Count number of photons
-#     atl03_df = atl03_df[atl03_df.c > 1]
-#     zgroup = atl03_df.groupby('h_ind')
-#     zout = zgroup.aggregate(get_len)
-#     f08_photons = zout['delta_time']
-#     f08_photons = f08_photons.rename('photons')
-    
-#     # Calculate photon rate
-#     f08_shots = f08_shots.to_frame()
-#     f08_shots = f08_shots.merge(f08_photons, left_index = True, right_index = True)
-#     rate = f08_shots.photons/f08_shots.shots
-#     rate = rate.rename('atl03_radiometry_canopy')
-#     upsampled_atl08_bin = upsampled_atl08_bin.merge(rate, left_index = True, right_index = True)
-    
-#     return upsampled_atl08_bin
-
-# def get_photon_rate_signal(atl03_df, upsampled_atl08_bin):
-#     # Count number of shots
-#     zgroup = atl03_df.groupby('h_ind')
-#     zout = zgroup.aggregate(get_len_unique)
-#     f08_shots = zout['delta_time']
-#     f08_shots = f08_shots.rename('shots')
-    
-#     # Count number of photons
-#     atl03_df = atl03_df[atl03_df.c > 0]
-#     zgroup = atl03_df.groupby('h_ind')
-#     zout = zgroup.aggregate(get_len)
-#     f08_photons = zout['delta_time']
-#     f08_photons = f08_photons.rename('photons')
-    
-#     # Calculate photon rate
-#     f08_shots = f08_shots.to_frame()
-#     f08_shots = f08_shots.merge(f08_photons, left_index = True, right_index = True)
-#     rate = f08_shots.photons/f08_shots.shots
-#     rate = rate.rename('atl03_radiometry_signal')
-#     upsampled_atl08_bin = upsampled_atl08_bin.merge(rate, left_index = True, right_index = True)
-    
-#     return upsampled_atl08_bin
-
 def get_n_photons_above_threshold(atl03_df, upsampled_atl08_bin, classes = [2,3], h_base = 0):
     df = atl03_df[atl03_df.classification.isin(classes)]
     df = df[df.norm_h > h_base]
@@ -670,23 +455,6 @@ def interpolate_domain(atl08_at, atl08_domain, key_df_at, kind_type):
                               fill_value='extrapolate')
     interp_domain = intep_func(key_df_at)
     return interp_domain
-
-# def plots():
-#     ax1 = plt.subplot(3,1,1)
-#     plt.plot(atl03.df.alongtrack[atl03.df.classification < 1],
-#              atl03.df.h_ph[atl03.df.classification < 1],'.', color = [0, 0, 0.8])
-#     plt.plot(atl03.df.alongtrack[atl03.df.classification == 2],
-#              atl03.df.h_ph[atl03.df.classification == 2],'.', color = [0, 0.5, 0])
-#     plt.plot(atl03.df.alongtrack[atl03.df.classification == 1],
-#              atl03.df.h_ph[atl03.df.classification == 1],'.', color = [0.7, 0.3, 0])
-#     plt.plot(atl03.df.alongtrack[atl03.df.classification == 3],
-#              atl03.df.h_ph[atl03.df.classification == 3],'.', color = [0, 0.7, 0])
-    
-#     ax2 = plt.subplot(3,1,2, sharex = ax1)
-#     plt.plot(test.alongtrack,test.rumple_index)
-    
-#     ax3 = plt.subplot(3,1,3, sharex = ax1)
-#     plt.plot(test.alongtrack,test.veg_area)
 
 def f_mi(x):
     percentile_intervals = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 
@@ -762,8 +530,8 @@ def f_mi(x):
                                ])
 def f_mi_truth(x):
     # Static variables
-    ground_class = 2
-    canopy_class = 4
+    # ground_class = 2
+    # canopy_class = 4
     
     percentile_intervals = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 
                             70, 75, 80, 85, 90, 95, 98]
@@ -789,7 +557,7 @@ def f_mi_truth(x):
     d.append((x['h_ph'][x['classification'] == 2]).mean()) #h_te_mean
     d.append((x['h_ph'][x['classification'] == 2]).median()) #h_te_median
     d.append((scipy.stats.mode(x['h_ph'][x['classification'] == 2])[0])) #h_te_mode
-    d.append((len(x['h_ph'][x['classification'] == 1]))) #n_te_photons
+    d.append((len(x['h_ph'][x['classification'] == 2]))) #n_te_photons
     d.append((np.nanpercentile(x['norm_h'][x['classification'] == 2],25))) #h_te_rh25
     d.append((len(x['h_ph']))) #n_seg_ph    
 
@@ -1093,7 +861,7 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
         title = h_bin_prefix + str(i)
         bin_df = computer_vertical_density_p(atl03.df, bin_df, 
                         h_bin_list[i][0], h_bin_list[i][1], title, 
-                        h_base = h_base_val)
+                        veg_class = [2,3], h_base = h_base_val)
 
     # Compute photons above set threshold
     bin_df = get_n_photons_above_threshold(atl03.df, bin_df, classes = [2,3], 
@@ -1229,12 +997,12 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     for i in range(0,len(h_bin_list)):
         title = h_bin_prefix + str(i)
         bin_df = computer_vertical_density_p(truth_swath, bin_df, 
-                        h_bin_list[i][0], h_bin_list[i][1], title, 
+                        h_bin_list[i][0], h_bin_list[i][1], title, veg_class = [3,4,5],
                         h_base = h_base_val)
 
     # Compute photons above set threshold
     bin_df = get_n_photons_above_threshold(truth_swath, bin_df, 
-                                           classes = [veg_class], 
+                                           classes = [3,4,5], 
                                            h_base = h_base_val)
 
     bin_df['year'] = truth_swath.date.iloc[0].year
@@ -1243,6 +1011,22 @@ def rebin_truth(atl03, truth_swath, res, res_field):
 
     # Return bin_df
     return bin_df
+
+def match_truth_fields(truth_bin, atl08_bin):
+    # Set core fields to be equal to atl03_bin
+    drop_fields = ['alongtrack', 'crosstrack', 'easting', 
+                           'northing', 'lon', 'lat']
+    
+    truth_bin = truth_bin.loc[:, ~truth_bin.columns.isin(drop_fields)]
+    
+    include_fields = ['h_ind','alongtrack', 'crosstrack', 'easting', 
+                      'northing', 'longitude', 'latitude', 'delta_time','time']
+    
+    atl08_bin = atl08_bin.loc[:, atl08_bin.columns.isin(include_fields)]
+    
+    truth_bin = pd.merge(truth_bin, atl08_bin, on = 'h_ind')
+    
+    return truth_bin
     
 def main(in_atl03, in_atl08, output_dir, res, rando, v):
     try:
