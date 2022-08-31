@@ -25,6 +25,7 @@ if __name__ == "__main__":
 
     from icesatBinner import rebin_atl08
     from icesatBinner import rebin_truth
+    from icesatBinner import match_truth_fields
 
     from getMeasurementError import getMeasurementError
 
@@ -32,6 +33,7 @@ if __name__ == "__main__":
     import numpy as np
     import scipy.io as sio
     import pandas as pd
+    import random
 
 
     # import pandas as pd
@@ -56,6 +58,7 @@ if __name__ == "__main__":
     atl08_list = os.listdir(in_atl08)
     # atl03file = atl03_list[2]
     # atl08file = atl08_list[2]
+    random.shuffle(atl03_list)
 
     for i in range(0,len(atl03_list)):
             print(atl03_list[i])
@@ -63,7 +66,8 @@ if __name__ == "__main__":
             atl08file = 'ATL08' + atl03_list[i].split('ATL03')[1]
             atl03filepath =  os.path.join(in_atl03, atl03file)
             atl08filepath =  os.path.join(in_atl08, atl08file)
-            gt_list = ['gt1r','gt1l','gt2l','gt2r','gt3l','gt3r']
+            gt_list = ['gt1l','gt2l','gt3l','gt2r','gt3r','gt1r']
+            random.shuffle(gt_list)
             for gt in gt_list:
 
                 # Inputs
@@ -113,93 +117,101 @@ if __name__ == "__main__":
                         atl08 = get_atl08_struct(atl08filepath, gt, atl03) 
                         atl08.df = atl08.df[atl08.df.latitude > np.min(atl03.df.lat_ph)]
                         atl08.df = atl08.df[atl08.df.latitude < np.max(atl03.df.lat_ph)]
-                        
-                        # Find truth files that intersect ICESat-2 track
-                        #### atlMeasuredData = atlMeasuredData.df
-                        buffer = 25
-                        _, matchingTruthFileInds = findMatchingTruthFiles(truthHeaderNewDF, 
-                                                                           atl03.df,  atl03.rotationData, buffer)
-                        matchingTruthFiles = np.array(truthFilePaths)[matchingTruthFileInds]
-                        
-                        if len(matchingTruthFiles) > 0:
-                            print(matchingTruthFiles)
+                        if len(atl08.df) > 1:
+                            # Find truth files that intersect ICESat-2 track
+                            #### atlMeasuredData = atlMeasuredData.df
+                            buffer = 25
+                            _, matchingTruthFileInds = findMatchingTruthFiles(truthHeaderNewDF, 
+                                                                               atl03.df,  atl03.rotationData, buffer)
+                            matchingTruthFiles = np.array(truthFilePaths)[matchingTruthFileInds]
                             
-                            # truthFilePath = matchingTruthFiles[1]
+                            if len(matchingTruthFiles) > 0:
+                                print(matchingTruthFiles)
+                                
+                                # truthFilePath = matchingTruthFiles[1]
+                                
+                                truth_swath = pd.DataFrame()
+                                
+                                for i in range(0,len(matchingTruthFiles)):
+                                    truth_df = loadLasFile(matchingTruthFiles[i], epsg_atl, atl03.rotationData, decimate_n = 5)
+                                    truth_df['classification'] = ace(np.array(truth_df.easting), np.array(truth_df.northing), 
+                                                 np.array(truth_df.z), np.array(truth_df.classification))
+                                    truth_df = make_buffer(atl03, truth_df, buffer)
+                                    truth_swath = truth_swath.append(truth_df)
                             
-                            truth_swath = pd.DataFrame()
+                                # Calculate off-set corrections for ATL03        
+                                atlCorrections = getMeasurementError(atl03, truth_swath)
+                                # TODO: make atlCorrections not bad
+                                # if type(atlCorrections.alongTrack ) != list:
+                                
+                                
+                                    # Apply along-track/cross-track, and height corrections to ATL03    
+                                    # atl03.df.alongtrack = atl03.df.alongtrack + atlCorrections.alongTrack 
+                                    # atl03.df.crosstrack = atl03.df.crosstrack + atlCorrections.crossTrack 
+                                    # atl03.df.h_ph = atl03.df.h_ph + atlCorrections.z 
+                                    
+                                truth_swath.alongtrack = truth_swath.alongtrack - atlCorrections.alongTrack 
+                                truth_swath.crosstrack = truth_swath.crosstrack - atlCorrections.crossTrack 
+                                truth_swath.z = truth_swath.z - atlCorrections.z 
+                                
+                                # # Apply beam width measurement
+                                truth_swath = make_buffer(atl03, truth_swath, 5)
+                                # truth_swath.z  = truth_swath.z  +
+                                # Do Perfect Classifier
+                                measpc, measoc = perfect_classifier(atl03, truth_swath,ground = [2],canopy = [3,4,5], 
+                                                  unclassed = [1, 6, 7, 18], keepsize = True)
+                                
+                                
+                                res = 30
+                                res_field = 'alongtrack'
+                                
+                                
+                                # atl03.df['classification'] = measoc
+                                # ATL08 30m
+                                atl08_bin = rebin_atl08(atl03, atl08, gt, res, res_field)
+                                
+                                out_folder = 'E:/PRF/atl08_30m'
+                                out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '.mat'
+                                out_file = os.path.normpath(os.path.join(out_folder, out_name))
                             
-                            for i in range(0,len(matchingTruthFiles)):
-                                truth_df = loadLasFile(matchingTruthFiles[i], epsg_atl, atl03.rotationData, decimate_n = 5)
-                                truth_df['classification'] = ace(np.array(truth_df.easting), np.array(truth_df.northing), 
-                                             np.array(truth_df.z), np.array(truth_df.classification))
-                                truth_df = make_buffer(atl03, truth_df, buffer)
-                                truth_swath = truth_swath.append(truth_df)
-                        
-                            # Calculate off-set corrections for ATL03        
-                            atlCorrections = getMeasurementError(atl03, truth_swath)
-                        
-                            # Apply along-track/cross-track, and height corrections to ATL03    
-                            # atl03.df.alongtrack = atl03.df.alongtrack + atlCorrections.alongTrack 
-                            # atl03.df.crosstrack = atl03.df.crosstrack + atlCorrections.crossTrack 
-                            # atl03.df.h_ph = atl03.df.h_ph + atlCorrections.z 
+                                dictionary = {}
+                                dictionary['struct'] = atl08_bin.to_dict('list')
+                                sio.savemat(out_file,dictionary)
                             
-                            truth_swath.alongtrack = truth_swath.alongtrack - atlCorrections.alongTrack 
-                            truth_swath.crosstrack = truth_swath.crosstrack - atlCorrections.crossTrack 
-                            truth_swath.z = truth_swath.z - atlCorrections.z 
+                                out_folder = 'E:/PRF/atl08_30m'
+                                out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '.csv'
+                                out_file = os.path.normpath(os.path.join(out_folder, out_name))
+                                atl08_bin.to_csv(out_file)
                             
-                            # # Apply beam width measurement
-                            truth_swath = make_buffer(atl03, truth_swath, 5)
-                            # truth_swath.z  = truth_swath.z  +
-                            # Do Perfect Classifier
-                            measpc, measoc = perfect_classifier(atl03, truth_swath,ground = [2],canopy = [3,4,5], 
-                                              unclassed = [1, 6, 7, 18], keepsize = True)
-                            
-                            
-                            res = 30
-                            res_field = 'alongtrack'
-                            
-                            
-                            # atl03.df['classification'] = measoc
-                            # ATL08 30m
-                            atl08_bin = rebin_atl08(atl03, atl08, gt, res, res_field)
-                            
-                            out_folder = 'E:/PRF/atl08_30m'
-                            out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '.mat'
-                            out_file = os.path.normpath(os.path.join(out_folder, out_name))
-                        
-                            dictionary = atl08_bin.to_dict('list')
-                            sio.savemat(out_file,dictionary)
-                        
-                            out_folder = 'E:/PRF/atl08_30m'
-                            out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '.csv'
-                            out_file = os.path.normpath(os.path.join(out_folder, out_name))
-                            atl08_bin.to_csv(out_file)
-                        
-                            # Truth 30m
-                            out_folder = 'E:/PRF/truth_30m'
-                            out_name = 'truth_ ' + atl03.atlFileName.split('ATL03_')[1] + '_' + gt + '_' + str(res) + '.mat'
-                            out_file = os.path.join(out_folder, out_name)
-                            
-                            truth_bin = rebin_truth(atl03, truth_swath, res, res_field)
-                            dictionary = truth_bin.to_dict('list')
-                            sio.savemat(out_file,dictionary)
-                            
-                            out_folder = 'E:/PRF/truth_30m'
-                            out_name = 'truth_ ' + atl03.atlFileName.split('ATL03_')[1] + '_' + gt + '_' + str(res) + '.csv'
-                            out_file = os.path.normpath(os.path.join(out_folder, out_name))
-                            truth_bin.to_csv(out_file)
-                            
-                            # ATL08 PC 30m
-                            out_folder = 'E:/PRF/atl08_30m_pc'
-                            out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '_pc.mat'
-                            out_file = os.path.join(out_folder, out_name)
-                            
-                            atl03.df['classification'] = measpc[0:len(atl03.df)]
-                            atl08_bin_pc = rebin_atl08(atl03, atl08, gt, res, res_field)
-                            dictionary = atl08_bin_pc.to_dict('list')
-                            sio.savemat(out_file,dictionary)
-                            
-                            out_folder = 'E:/PRF/atl08_30m_pc'
-                            out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '_pc.csv'
-                            out_file = os.path.join(out_folder, out_name)
-                            atl08_bin.to_csv(out_file)
+                                # Truth 30m
+                                out_folder = 'E:/PRF/truth_30m'
+                                out_name = 'truth_ ' + atl03.atlFileName.split('ATL03_')[1] + '_' + gt + '_' + str(res) + '.mat'
+                                out_file = os.path.join(out_folder, out_name)
+                                
+                                truth_bin = rebin_truth(atl03, truth_swath, res, res_field)
+                                truth_bin = match_truth_fields(truth_bin, atl08_bin)
+                                dictionary = {}
+                                dictionary['struct'] =truth_bin.to_dict('list')
+                                sio.savemat(out_file,dictionary)
+                                
+                                out_folder = 'E:/PRF/truth_30m'
+                                out_name = 'truth_ ' + atl03.atlFileName.split('ATL03_')[1] + '_' + gt + '_' + str(res) + '.csv'
+                                out_file = os.path.normpath(os.path.join(out_folder, out_name))
+                                truth_bin.to_csv(out_file)
+                                
+                                # ATL08 PC 30m
+                                out_folder = 'E:/PRF/atl08_30m_pc'
+                                out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '_pc.mat'
+                                out_file = os.path.join(out_folder, out_name)
+                                
+                                if len(atl03.df['classification']) == len(measpc[0:len(atl03.df)]):
+                                    atl03.df['classification'] = measpc[0:len(atl03.df)]
+                                    atl08_bin_pc = rebin_atl08(atl03, atl08, gt, res, res_field)
+                                    dictionary = {}
+                                    dictionary['struct'] =atl08_bin_pc.to_dict('list')
+                                    sio.savemat(out_file,dictionary)
+                                    
+                                    out_folder = 'E:/PRF/atl08_30m_pc'
+                                    out_name = atl03.atlFileName + '_' + gt + '_' + str(res) + '_pc.csv'
+                                    out_file = os.path.join(out_folder, out_name)
+                                    atl08_bin.to_csv(out_file)
