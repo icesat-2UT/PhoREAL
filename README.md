@@ -20,7 +20,7 @@ https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.30.png)
 
-<h4>Copyright 2020 Applied Research Laboratories, University of Texas at Austin
+<h4>Copyright 2020 University of Texas at Austin
 
 This package is free software; the copyright holder gives unlimited
 permission to copy and/or distribute, with or without modification, as
