@@ -18,10 +18,10 @@ import time as runTime
 import sys
 # from getAtlMeasuredSwath_auto import getAtlMeasuredSwath
 # from getAtlTruthSwath_auto import getAtlTruthSwath
-from icesatIO import (writeLas, getTruthFilePaths, getTruthHeaders,
+from phoreal.io import (writeLas, getTruthFilePaths, getTruthHeaders,
                       atlMeasuredDataReducedStruct, atlCorrectionsStruct, offsetsStruct)
-from icesatUtils import (ismember, getRaster, getIntersection2d, getCoordRotRev, getUTM2LatLon)
-from icesatPlot import (plotContour, plotZY, plotZT)
+from phoreal.utils import (ismember, getRaster, getIntersection2d, getCoordRotRev, getUTM2LatLon)
+from phoreal.plot import (plotContour, plotZY, plotZT)
 
 def limBounds(x, y, lim):
     # x = max([x, lim[0]])

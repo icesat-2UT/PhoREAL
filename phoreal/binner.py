@@ -14,12 +14,13 @@ import pandas as pd
 import scipy
 import scipy.stats
 import random
+import time
 # import matplotlib.pyplot as plt
 # from matplotlib.patches import Rectangle
 
 # from icesatIO import GtToBeamNum, GtToBeamSW
-from phoreal.icesatReader import get_atl08_struct
-from phoreal.icesatReader import get_atl03_struct
+from phoreal.reader import get_atl08_struct
+from phoreal.reader import get_atl03_struct
 
 import warnings
 warnings.simplefilter("ignore")
