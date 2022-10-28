@@ -21,9 +21,7 @@ https://utexas.box.com/v/DownloadPhoREALGUI
 ![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.30.png)
 
 <h3>How to use Python Library</h3>
-1. Copy or Clone repo
-
-2. Build and install PhoREAL Library
+Simply build and install the PhoREAL python library
 ```
 $ python setup.py build
 $ python setup.py install
