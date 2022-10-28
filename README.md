@@ -20,6 +20,16 @@ https://utexas.box.com/v/DownloadPhoREALGUI
 
 ![PhoREALScreenshot](/images/PhoREAL_screenshot_v3.30.png)
 
+<h3>How to use Python Library</h3>
+1. Copy or Clone repo
+
+2. Build and install PhoREAL Library
+```
+$ python setup.py build
+$ python setup.py install
+```
+
+
 <h4>Copyright 2020 University of Texas at Austin
 
 This package is free software; the copyright holder gives unlimited
