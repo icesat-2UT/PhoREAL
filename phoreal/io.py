@@ -38,7 +38,7 @@ import simplekml
 
 # Import ICESat-2 modules
 from phoreal.gui_addins import (viewerBlank_html, viewerBlankOnline_html)
-from phoreal.icesatUtils import (identifyEPSG, getCoordRotFwd, transform, getGeoidHeight, \
+from phoreal.utils import (identifyEPSG, getCoordRotFwd, transform, getGeoidHeight, \
                          getCoordRotRev, superFilter, getRaster, getUTM2LatLon)
 
 

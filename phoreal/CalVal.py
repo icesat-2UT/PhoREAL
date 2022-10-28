@@ -18,8 +18,8 @@ import numpy as np
 import time as runTime
 import sys
 import warnings
-from icesatIO import *
-from icesatUtils import *
+#from icesatIO import *
+#from icesatUtils import *
 
 from phoreal.getMeasurementError import *   
 from scipy import spatial

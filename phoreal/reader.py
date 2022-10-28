@@ -21,12 +21,12 @@ import numpy as np
 import os
 import h5py
 
-from phoreal.icesatUtils import getH5Keys, ismember
-from phoreal.icesatIO import readAtl03H5, readAtlH5, readAtl03DataMapping, readAtl08DataMapping
-from phoreal.icesatUtils import getAtl08Mapping, wgs84_to_utm_find_and_transform,\
+from phoreal.utils import getH5Keys, ismember
+from phoreal.io import readAtl03H5, readAtlH5, readAtl03DataMapping, readAtl08DataMapping
+from phoreal.utils import getAtl08Mapping, wgs84_to_utm_find_and_transform,\
     wgs84_to_epsg_transform, getCoordRotFwd, getNameParts, get_h5_meta,\
         identify_hemi_zone, identify_hemi_zone
-from phoreal.icesatIO import GtToBeamNum, GtToBeamSW, readTruthRegionsTxtFile, writeLas
+from phoreal.io import GtToBeamNum, GtToBeamSW, readTruthRegionsTxtFile, writeLas
 # from icesatIO import readHeaderMatFile                           
 # from getAtlMeasuredSwath_auto import atl03Struct as Atl03StructLegacy
 
@@ -83,19 +83,21 @@ class AtlStruct:
             max_lat = np.min([min_lat, max_lat])
             min_lon = np.min([min_lon, max_lon])
             max_lon = np.max([min_lon, max_lon])
-            self.df = self.df = self.df[test.df.lat_ph > min_lat]
-            self.df = self.df = self.df[test.df.lat_ph < max_lat]
-            self.df = self.df = self.df[test.df.longitude > min_lat]
-            self.df = self.df = self.df[test.df.longitude < max_lat]
+            self.df = self.df = self.df[self.df.lat_ph > min_lat]
+            self.df = self.df = self.df[self.df.lat_ph < max_lat]
+            self.df = self.df = self.df[self.df.lon_ph > min_lon]
+            self.df = self.df = self.df[self.df.lon_ph < max_lon]
+            self.df = self.df.reset_index()
+            self.df, self.rotationData = get_atl_alongtrack(self.df)
         elif self.atlProduct == 'ATL08':
             min_lat = np.min([min_lat, max_lat])
             max_lat = np.min([min_lat, max_lat])
             min_lon = np.min([min_lon, max_lon])
             max_lon = np.max([min_lon, max_lon])
-            self.df = self.df = self.df[test.df.latitude > min_lat]
-            self.df = self.df = self.df[test.df.latitude < max_lat]
-            self.df = self.df = self.df[test.df.longitude > min_lat]
-            self.df = self.df = self.df[test.df.longitude < max_lat]
+            self.df = self.df = self.df[self.df.latitude > min_lat]
+            self.df = self.df = self.df[self.df.latitude < max_lat]
+            self.df = self.df = self.df[self.df.longitude > min_lat]
+            self.df = self.df = self.df[self.df.longitude < max_lat]
     
     def to_csv(self, output_csv):
         self.df.to_csv(output_csv)

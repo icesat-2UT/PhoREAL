@@ -9,13 +9,14 @@ import numpy as np
 import pandas as pd
 import datetime
 
+
 from phoreal.icesatUtils import getCoordRotFwd, transform, getCoordRotRev, indexMatch
 from phoreal.icesatIO import getTruthHeaders, readLasHeader, formatDEM, getCoordRotRev
 from laspy.file import File
 from phoreal.ace import ace
 from phoreal.getMeasurementError import getMeasurementError
-from phoreal.icesatReader import get_atl_alongtrack
-from phoreal.icesatCalVal import perfect_classifier
+from phoreal.reader import get_atl_alongtrack
+from phoreal.CalVal import perfect_classifier
 
 def loadTruthFile(truthFilePath, atlMeasuredData, rotationData, truthFileType, outFilePath, logFileID=False):
     
