@@ -10,8 +10,8 @@ import pandas as pd
 import datetime
 
 
-from phoreal.icesatUtils import getCoordRotFwd, transform, getCoordRotRev, indexMatch
-from phoreal.icesatIO import getTruthHeaders, readLasHeader, formatDEM, getCoordRotRev
+from phoreal.utils import getCoordRotFwd, transform, getCoordRotRev, indexMatch
+from phoreal.io import getTruthHeaders, readLasHeader, formatDEM, getCoordRotRev
 from laspy.file import File
 from phoreal.ace import ace
 from phoreal.getMeasurementError import getMeasurementError
