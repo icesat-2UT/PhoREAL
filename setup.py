@@ -12,8 +12,7 @@ requirements = [
         'pandas',
         'numpy',
         'simplekml',
-        "matplotlib",
-        "sliderule"]
+        "matplotlib"]
 
 setuptools.setup(
         name="phoreal",
