@@ -256,7 +256,7 @@ def getMeasurementError(atl03, truth_df):
                 measRasterXRot = np.c_[np.ravel(measRasterRot.x)]
                 measRasterYRot = np.c_[np.ravel(measRasterRot.y)]
                 measRasterZ    = np.c_[np.ravel(measRasterRot.grid)]
-                measRasterT    = np.c_[np.ravel(measRasterRot.t)]
+                # measRasterT    = np.c_[np.ravel(measRasterRot.t)]
                 
                 # Store TRUTH data into array variables
                 truthRasterXRot = np.c_[np.ravel(truthRasterRot.x)]
@@ -276,7 +276,7 @@ def getMeasurementError(atl03, truth_df):
                 measRasterXRot_common = measRasterXRot[measIndsCommon]
                 measRasterYRot_common = measRasterYRot[measIndsCommon]
                 measRasterZ_common = measRasterZ[measIndsCommon]
-                measRasterT_common = measRasterT[measIndsCommon]
+                # measRasterT_common = measRasterT[measIndsCommon]
                 
                 # Find row, col for indices in TRUTH raster (that are in common with MEASURED raster)
                 truthColsInit = (truthIndsCommon%np.shape(truthRasterRot.x)[1]).astype(int)
@@ -448,7 +448,7 @@ def getMeasurementError(atl03, truth_df):
                 measRasterXRotFinal= measRasterXRot + correctionsCrossTrack
                 measRasterYRotFinal = measRasterYRot + correctionsAlongTrack
                 measRasterZFinal = measRasterZ + correctionsVertical
-                measRasterTFinal = measRasterT
+                # measRasterTFinal = measRasterT
         
                 # Get amount to shift X,Y indices
                 moveIndsX = (correctionsCrossTrack/rasterResolution).astype(int)
@@ -474,7 +474,7 @@ def getMeasurementError(atl03, truth_df):
                 measRasterXRotCommonFinal = measRasterXRot_common[indsToKeep] + correctionsCrossTrack
                 measRasterYRotCommonFinal = measRasterYRot_common[indsToKeep] + correctionsAlongTrack
                 measRasterZCommonFinal = measRasterZ_common[indsToKeep] + correctionsVertical
-                measRasterTCommonFinal = measRasterT_common[indsToKeep]
+                # measRasterTCommonFinal = measRasterT_common[indsToKeep]
                 
                 # Get Z Error raster (MEASURED - TRUTH)
                 zErrorCommonFinal = measRasterZCommonFinal - truthRasterZCommonFinal
@@ -493,7 +493,7 @@ def getMeasurementError(atl03, truth_df):
                 measRasterXRotCommonFinal = measRasterXRotCommonFinal[allNotNan]
                 measRasterYRotCommonFinal = measRasterYRotCommonFinal[allNotNan]
                 measRasterZCommonFinal = measRasterZCommonFinal[allNotNan]
-                measRasterTCommonFinal = measRasterTCommonFinal[allNotNan]
+                # measRasterTCommonFinal = measRasterTCommonFinal[allNotNan]
                   
                 # Filter out non-NaN values in error data
                 zErrorCommonFinal = zErrorCommonFinal[allNotNan]
@@ -655,7 +655,7 @@ def getMeasurementError(atl03, truth_df):
             measRasterXRot = measRasterRot.x[measIndsToKeep]
             measRasterYRot = measRasterRot.y[measIndsToKeep]
             measRasterZ    = measRasterRot.grid[measIndsToKeep]
-            measRasterT    = measRasterRot.t[measIndsToKeep]
+            # measRasterT    = measRasterRot.t[measIndsToKeep]
             
             # Get final MEASURED raster data
             measRasterXRotFinal= measRasterXRot

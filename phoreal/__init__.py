@@ -4,3 +4,4 @@ from . import utils
 from . import io
 from . import binner
 from . import reader
+from . import reference

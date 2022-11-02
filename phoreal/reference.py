@@ -12,7 +12,8 @@ import datetime
 
 from phoreal.utils import getCoordRotFwd, transform, getCoordRotRev, indexMatch
 from phoreal.io import getTruthHeaders, readLasHeader, formatDEM, getCoordRotRev
-from laspy.file import File
+import laspy
+import pyproj
 from phoreal.ace import ace
 from phoreal.getMeasurementError import getMeasurementError
 from phoreal.reader import get_atl_alongtrack
@@ -35,17 +36,15 @@ def loadTruthFile(truthFilePath, atlMeasuredData, rotationData, truthFileType, o
 
 def las_to_df(lasFilePath):
     
-    with File(lasFilePath, mode = 'r') as lasFile:
-        
-        # Create Pandas DF
-        las_df = pd.DataFrame()
-        # Store output from .las file
-        las_df['x'] = lasFile.x
-        las_df['y'] = lasFile.y
-        las_df['z'] = lasFile.z
-        las_df['classification'] = lasFile.classification
-        las_df['intensity'] = lasFile.intensity
-        las_df['date'] = lasFile.header.get_date()
+    las_file = laspy.read(lasFilePath)
+    las_df = pd.DataFrame()
+    # Store output from .las file
+    las_df['x'] = np.array(las_file.x)
+    las_df['y'] = np.array(las_file.y)
+    las_df['z'] = np.array(las_file.z)
+    las_df['classification'] = np.array(las_file.classification)
+    las_df['intensity'] = np.array(las_file.intensity)
+    las_df['date'] = las_file.header.creation_date
     
     return las_df
 
@@ -56,8 +55,10 @@ def loadLasFile(truthFilePath, epsg_atl, rotationData, decimate_n = 3):
     lasTruthData = lasTruthData.iloc[::decimate_n, :]
     
     # Find EPSG Code from truth file
-    truthHeader = readLasHeader(truthFilePath)
-    epsg_truth = truthHeader['epsg'][0]
+    # truthHeader = readLasHeader(truthFilePath)
+    las_file = laspy.read(truthFilePath)
+    epsg_truth = 'EPSG:' + str(las_file.header.parse_crs().to_epsg(min_confidence=1))
+    # epsg_truth = truthHeader['epsg'][0]
     
     # Find EPSG Code from input file
     # epsg_atl = identifyEPSG(atlMeasuredData.hemi,atlMeasuredData.zone)

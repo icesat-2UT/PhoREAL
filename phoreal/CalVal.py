@@ -123,9 +123,9 @@ def perfect_classifier(atl03, truth_swath,ground = [2],canopy = [4],
     measzfilt = measz[measfilt]
     meascfilt = measc[measfilt]
     classfilt = [np.isin(np.array(truth_swath.classification),ground) | np.isin(np.array(truth_swath.classification),canopy)]
-    ty = np.array(truth_swath.alongtrack)[classfilt]
-    tz = np.array(truth_swath.z)[classfilt]
-    tc = np.array(truth_swath.classification)[classfilt]
+    ty = np.array(truth_swath.alongtrack)[classfilt[0]]
+    tz = np.array(truth_swath.z)[classfilt[0]]
+    tc = np.array(truth_swath.classification)[classfilt[0]]
     #Create KDtree and then query the tree
     pts = np.vstack((measyfilt,measzfilt)).T
     print('    Building KDtree')

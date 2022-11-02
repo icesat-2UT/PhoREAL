@@ -432,9 +432,9 @@ def get_atl_coords(df, epsg = None):
     
     # Specify EPSG Code or automatically find zone
     if epsg:
-        xcoord, ycoord = wgs84_to_epsg_transform(epsg,  lat, lon)
+        xcoord, ycoord = wgs84_to_epsg_transform(epsg, lon, lat)
     else:
-        xcoord, ycoord, epsg = wgs84_to_utm_find_and_transform(lat, lon)
+        xcoord, ycoord, epsg = wgs84_to_utm_find_and_transform(lon, lat)
         
     if 'easting' not in columns:
         df = pd.concat([df,pd.DataFrame(xcoord,

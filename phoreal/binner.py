@@ -1118,11 +1118,11 @@ def rebin_truth(atl03, truth_swath, res, res_field):
 
     # Calculate fields      
     # canopy_rh
-    bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], percentile_rh, 'norm_h', 
-                   'canopy_rh', key_field = 'h_ind', classfield = 'classification')
+    bin_df = calculate_seg_percentile(truth_swath, bin_df, [4], percentile_rh, 'norm_h', 
+                   'canopy_rh_', key_field = 'h_ind', classfield = 'classification')
     # canopy_rh_abs
-    bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], percentile_rh, 'h_ph', 
-                   'canopy_rh_abs', key_field = 'h_ind', classfield = 'classification')
+    bin_df = calculate_seg_percentile(truth_swath, bin_df, [4], percentile_rh, 'h_ph', 
+                   'canopy_rh_abs_', key_field = 'h_ind', classfield = 'classification')
     #canopy_openness
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], get_std, 'norm_h', 
                    'canopy_openness', key_field = 'h_ind', classfield = 'classification')
@@ -1190,37 +1190,37 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [2,4], get_len, 'h_ph', 
                    'n_seg_ph', key_field = 'h_ind', classfield = 'classification')
     
-    # Unstack canopy_rh and rename (possible to drop canopy_rh_abs)
-    for i in range(0,len(percentile_intervals)):
-        arr = []
-        for j in range(0,len(calc_df)):
-            if type(calc_df.iloc[j].canopy_rh) == np.ndarray:
-                arr.append(bin_df.iloc[j].canopy_rh[i])
-            else:
-                arr.append(0)
+    # # Unstack canopy_rh and rename (possible to drop canopy_rh_abs)
+    # for i in range(0,len(percentile_intervals)):
+    #     arr = []
+    #     for j in range(0,len(calc_df)):
+    #         if type(calc_df.iloc[j].canopy_rh) == np.ndarray:
+    #             arr.append(bin_df.iloc[j].canopy_rh[i])
+    #         else:
+    #             arr.append(0)
             
-        arr = np.array(arr)
-        title = 'canopy_rh_' + str(percentile_intervals[i])
-        bin_df[title] = arr
+        # arr = np.array(arr)
+        # title = 'canopy_rh_' + str(percentile_intervals[i])
+        # bin_df[title] = arr
 
-    # Unstack canopy_rh and rename (possible to drop canopy_rh_abs)
-    for i in range(0,len(percentile_intervals)):
-        arr = []
-        for j in range(0,len(bin_df)):
-            if type(bin_df.iloc[j].canopy_rh_abs) == np.ndarray:
-                arr.append(bin_df.iloc[j].canopy_rh_abs[i])
-            else:
-                arr.append(0)
+    # # Unstack canopy_rh and rename (possible to drop canopy_rh_abs)
+    # for i in range(0,len(percentile_intervals)):
+    #     arr = []
+    #     for j in range(0,len(bin_df)):
+    #         if type(bin_df.iloc[j].canopy_rh_abs) == np.ndarray:
+    #             arr.append(bin_df.iloc[j].canopy_rh_abs[i])
+    #         else:
+    #             arr.append(0)
             
-        arr = np.array(arr)
-        title = 'canopy_rh_abs_' + str(percentile_intervals[i])
-        bin_df[title] = arr
+        # arr = np.array(arr)
+        # title = 'canopy_rh_abs_' + str(percentile_intervals[i])
+        # bin_df[title] = arr
 
-    bin_df['canopy_h'] = calc_df['canopy_rh_98'] 
-    bin_df['h_canopy_abs'] = calc_df['canopy_rh_abs_98'] #        
+    bin_df['canopy_h'] = bin_df['canopy_rh_98'] 
+    bin_df['h_canopy_abs'] = bin_df['canopy_rh_abs_98'] #        
     
-    bin_df = bin_df.drop(columns=['canopy_rh'])
-    bin_df = bin_df.drop(columns=['canopy_rh_abs'])
+    # bin_df = bin_df.drop(columns=['canopy_rh_98'])
+    # bin_df = bin_df.drop(columns=['canopy_rh_abs_98'])
         
     # # Compute slope
     # calc_df['terrain_slope'] = calc_df.h_te_rise / calc_df.h_te_run
@@ -1240,12 +1240,11 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     bin_df = bin_df.join(veg_bin)
             
     # Compute Area-Under-Canopy/Open Sky Ratio
-    bin_df['canopy_ratio'] = calc_df.veg_area / (bin_df.h_max_canopy * 
+    bin_df['canopy_ratio'] = bin_df.veg_area / (bin_df.h_max_canopy * 
                                                   bin_df.ground_len)
     
     # Merge Computed columns to bin_df
     bin_df = bin_df.set_index('h_ind')
-    bin_df = bin_df.join(calc_df)
 
     bin_df = slope_df(truth_swath, bin_df, ground_class)
     
@@ -1271,8 +1270,6 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     bin_df['year'] = truth_swath.date.iloc[0].year
     bin_df['month'] = truth_swath.date.iloc[0].month
     bin_df['day'] = truth_swath.date.iloc[0].day
-
-    # Return bin_df
     return bin_df
 
 def match_truth_fields(truth_bin, atl08_bin):
