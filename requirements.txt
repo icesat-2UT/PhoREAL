@@ -1,4 +1,4 @@
-numpy == 1.16.4
+numpy == 1.22.0
 h5py 
 scipy == 1.5.2
 pandas == 1.1.5
