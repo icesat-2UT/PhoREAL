@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 requirements = [
-        'laspy == 1.5.1',
+        'laspy',
         'fiona ~= 1.8.3',
         'rasterio',
         'scipy',
@@ -12,11 +12,12 @@ requirements = [
         'pandas',
         'numpy',
         'simplekml',
-        "matplotlib"]
+	'pyproj',
+        'matplotlib']
 
 setuptools.setup(
         name="phoreal",
-        version = "3.31.0",
+        version = "3.31.1",
         author = "University of Texas CSR",
         author_email = "phoreal@csr.utexas.edu",
         license = 'UT AUSTIN RESEARCH LICENCE',
@@ -32,6 +33,7 @@ setuptools.setup(
             "Operating System :: OS Idependent",
         ],
         packages=['phoreal'],
-        python_requires=">=3.6",
+	python_requires=">=3.6",
+        include_package_data=True,
         install_requires=requirements,
 )

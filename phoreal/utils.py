@@ -1063,32 +1063,32 @@ def getRaster(x, y, z, resolution, method, fillValue = -999, time = [], xAllArra
     rasterDataZ = np.flipud(rasterDataZ)
     
     # Grid 'time' array if necessary
-    if(any(time)):
+    # if(any(time)):
         
-        if(manual_xy):
-            time = time[indsInside]
+    #     if(manual_xy):
+    #         time = time[indsInside]
         
-        # Get x-rastered, y-rastered, and time data into array
-        if(time.dtype!='float64'):
-            time = time.astype('float')
-        dataTime = np.column_stack([xRnd, yRnd, time])
+    #     # Get x-rastered, y-rastered, and time data into array
+    #     if(time.dtype!='float64'):
+    #         time = time.astype('float')
+    #     dataTime = np.column_stack([xRnd, yRnd, time])
         
-        # Put array into Pandas dataframe
-        dfTime = pd.DataFrame(dataTime, columns=['xRnd', 'yRnd', 'time'])
+    #     # Put array into Pandas dataframe
+    #     dfTime = pd.DataFrame(dataTime, columns=['xRnd', 'yRnd', 'time'])
         
-        # Do groupby.agg to get get rastered operation for group
-        groupedDataTime = dfTime.groupby(['xRnd', 'yRnd']).agg({'time': [npOperation]})
-        groupedDataTime.columns = ['time_agg']
-        groupedDataTime = groupedDataTime.reset_index()
-        tValsNew = np.array(groupedDataTime['time_agg'])
+    #     # Do groupby.agg to get get rastered operation for group
+    #     groupedDataTime = dfTime.groupby(['xRnd', 'yRnd']).agg({'time': [npOperation]})
+    #     groupedDataTime.columns = ['time_agg']
+    #     groupedDataTime = groupedDataTime.reset_index()
+    #     tValsNew = np.array(groupedDataTime['time_agg'])
         
-        # Populate rastered Z data into array
-        rasterDataT = fillValue*np.ones((np.shape(rasterDataX)))
-        rasterDataT[rowIndsNew, colIndsNew] = tValsNew
-        rasterDataT = np.flipud(rasterDataT)
+    #     # Populate rastered Z data into array
+    #     rasterDataT = fillValue*np.ones((np.shape(rasterDataX)))
+    #     rasterDataT[rowIndsNew, colIndsNew] = tValsNew
+    #     rasterDataT = np.flipud(rasterDataT)
         
-    else:
-        rasterDataT = []
+    # else:
+    rasterDataT = []
         
     return GridStruct(rasterDataX, rasterDataY, rasterDataZ, rasterDataT)
 
