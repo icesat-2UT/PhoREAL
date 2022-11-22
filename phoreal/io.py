@@ -2132,7 +2132,7 @@ def readTifHeader(tifFileInput, outputFilePath = False, logFileID = False):
             xmin = dem.bounds[0] #left
             ymax = dem.bounds[3] #top
             ymin = dem.bounds[1] #bottom
-            ymax = dem.bounds[2] #right
+            xmax = dem.bounds[2] #right
 
             # Get EPSG code
             epsg = 'epsg:' + readDEMepsg(fileName)
