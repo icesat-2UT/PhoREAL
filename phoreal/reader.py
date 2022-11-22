@@ -269,6 +269,7 @@ def get_atl03_classification(atl03filepath, atl08filepath, gt):
     f = h5py.File(atl03filepath, 'r')
     atl03_ph_index_beg  = np.array(f[gt + '/geolocation/ph_index_beg'])
     atl03_segment_id = np.array(f[gt + '/geolocation/segment_id'])
+    atl03_heights = np.array(f[gt + '/heights/h_ph'])
     
     # Read ATL08 for class mapping
     f = h5py.File(atl08filepath, 'r')
@@ -281,6 +282,11 @@ def get_atl03_classification(atl03filepath, atl08filepath, gt):
                                     atl08_classed_pc_indx, 
                                     atl08_classed_pc_flag, 
                                     atl08_segment_id)
+    
+    if len(allph_classed) < len(atl03_heights):
+        n_zeros = len(atl03_heights) - len(allph_classed)
+        zeros = np.zeros(n_zeros)
+        allph_classed = np.append(allph_classed, zeros)
     
     return allph_classed
 
@@ -299,7 +305,8 @@ def get_atl03_heights_offset(atl03filepath, atl08filepath, gt):
     f = h5py.File(atl03filepath, 'r')
     atl03_ph_index_beg  = np.array(f[gt + '/geolocation/ph_index_beg'])
     atl03_segment_id = np.array(f[gt + '/geolocation/segment_id'])
-    
+    atl03_heights = np.array(f[gt + '/heights/h_ph'])
+
     # Read ATL08 for class mapping
     f = h5py.File(atl08filepath, 'r')
     atl08_classed_pc_indx = np.array(f[gt + '/signal_photons/classed_pc_indx'])
@@ -332,6 +339,13 @@ def get_atl03_heights_offset(atl03filepath, atl08filepath, gt):
     # Populate all photon classed array from ATL08 classifications
     allph_heights[newMapping] = atl08classed_vals
     allph_heights[allph_heights == 3.4028234663852886e+38] = np.nan
+
+    if len(allph_heights) < len(atl03_heights):
+        n_zeros = len(atl03_heights) - len(allph_heights)
+        zeros = np.zeros(n_zeros)
+        zeros = zeros * np.nan
+        allph_heights = np.append(allph_heights, zeros)
+    
     return allph_heights
 
 def get_atl03_rate(atl03filepath, gt):
