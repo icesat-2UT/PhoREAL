@@ -1,0 +1,260 @@
+# Import packages
+import os
+import numpy as np
+import scipy.io as sio
+import pandas as pd
+import random
+import argparse
+import logging
+import h5py
+import re
+
+print('Packages imported successful')
+
+# Read specific packages from PhoREAL
+from phoreal.reader import get_atl03_struct
+from phoreal.reader import get_atl08_struct
+from phoreal.reader import get_atl_alongtrack
+from phoreal.binner import rebin_atl08
+from phoreal.binner import rebin_truth
+from phoreal.binner import match_truth_fields
+from phoreal.io import getTruthFilePaths, getTruthHeaders, readAtl08H5
+from phoreal.reference import reprojectHeaderData
+from phoreal.reference import findMatchingTruthFiles
+from phoreal.reference import loadLasFile
+from phoreal.reference import make_buffer
+from phoreal.ace import ace
+
+print('PhoREAL packages imported successful')
+
+print('import successful')
+
+'''
+    (1) Aggregates all atl03 and atl08 data files from their respective directories 
+    under /mnt/walker/Data/ICESat-2/REL005/.../PRF.
+    (2) Matches atl03 and atl08 alongtrack information for a specified region.
+    (3) Re-bins matched/mapped atl08 data from 100m to 30m.
+
+    Key Variables
+    ----------
+    See argparse section.
+
+    Outputs
+    -------
+    csv file
+        Contains processed data ready for comparison to ASL
+    mat file (optional) 
+        Contains processed data ready for comparison to ASL
+
+    See Also
+    --------
+    prf_processing_example.ipynb
+
+    '''
+
+def parse_arguments() -> dict:
+    '''Command line entry point'''
+    parser = argparse.ArgumentParser()
+    '''Required arguments:'''
+    parser.add_argument('-atl03', '--atl03_dir', required=True, type=str
+                        , help='Input ATL03 directory')
+
+    parser.add_argument('-atl08', '--atl08_dir', required=True, type=str
+                        , help='Input ATL08 directory')
+    
+    parser.add_argument('-out', '--output_dir', required=True, type=str
+                        , help='CSV output file /directory/')
+
+    parser.add_argument('-gt', '--gtXX', required=True, type=str
+                        , help='Alongtrack (gt1l, gt1r, gt2l, gt2r, gt3l, gt3r)')
+
+    parser.add_argument('-ec', '--epsg_code', required=True, type=str
+                        , help='UTM Zone')
+    '''Optional arguments:'''
+    parser.add_argument('-r', '--res', nargs='?', const=1, type=int
+                        , default=30, help='Alongtrack resolution (m)')
+    
+    parser.add_argument('-lat', '--latitude', nargs='+', type=float
+                        , help='Min/max list of latitude for data trimming')
+    
+    parser.add_argument('-lon', '--longitude', nargs='+', type=float
+                        , help='Min/max list of longitude for data trimming')
+    
+    parser.add_argument('-mat', '--mat_out', action='store_true'
+                        , help='Output to *mat (override *csv default)')
+    
+    parser.add_argument('-log', '--log_fn', type=str
+                        , help='Logging output /directory/filename')
+    args = parser.parse_args()
+        # Using dict for readability and to work with logging more easily.
+    arg_dict = {  'in_atl03'      : args.atl03_dir
+                , 'in_atl08'      : args.atl08_dir
+                , 'in_gt'         : args.gtXX
+                , 'in_epsg'       : args.epsg_code
+                , 'in_res'        : args.res
+                , 'in_lat'        : args.latitude
+                , 'in_lon'        : args.longitude
+                , 'out_dir'       : args.output_dir
+                , 'out_mat'       : args.mat_out
+                , 'out_log'       : [args.log_fn] }
+    return arg_dict
+
+def _initialize_logging(logging_fn):
+    """
+    Initialize logging object.
+    
+    Parameters:
+        logging_fn (str): log /dir/fn from argparse command line input
+    
+    Returns:
+        logger (logging obj): initialized logging object
+    
+    """
+        # Log filename: argparse /dir/fn
+        # Format: asc time, log msg
+        # Date/Time Format: month/day/year HH:MM:SS
+        # Log file mode: write 
+    logging.basicConfig(filename=logging_fn
+                        , format='%(asctime)s %(message)s'
+                        , datefmt='%m/%d/%Y %H:%M:%S'
+                        , filemode='w')
+    logger = logging.getLogger()
+        # Setting threshold tentatively at WARNING 
+    logger.setLevel(logging.WARNING)
+    return logger
+
+def collect_atl_files(arg_dict) -> dict:
+    """
+    Aggregate atl03 and atl08 files from atl data directories.
+    
+    Parameters:
+        arg_dict (dict): dictionary of argparse command line inputs
+    
+    Returns:
+        atl_data_dict (dict): dictionary of string pairs representing atl03, atl08 files
+                              in /dir/fn format
+    """
+    atl_data_dict = {}
+    dataset_count = 0
+    for data_file in os.listdir(arg_dict['in_atl03']):
+        atl03_file = os.path.join(arg_dict['in_atl03'], data_file)
+            # atl08 file names are generated by modifying atl03 file names (identical minus 'atl03')
+        atl08_file = os.path.join(arg_dict['in_atl08'], 'ATL08' + data_file[5:])
+            # Ensure that a matching atl08 file exists, ensure that both the atl03 and atl08
+            # files contain data. Log and continue if not.
+        try:
+            if os.path.getsize(atl03_file) and os.path.getsize(atl08_file):
+                atl_data_dict['dataset' + str(dataset_count)] = {'atl03_file': atl03_file
+                                                                 , 'atl08_file': atl08_file}
+                dataset_count += 1  
+            else:
+                if arg_dict['out_log']: 
+                    arg_dict['out_log'][1].error('The following atl file is empty: ' 
+                                                 + atl03_file if not os.path.getsize(atl03_file) else atl08_file)
+                    continue
+                else:
+                    print('The following file is empty: '
+                          , atl03_file if not os.path.getsize(atl03_file) else atl08_file )
+                    continue
+        except OSError:
+            if arg_dict['out_log']:
+                arg_dict['out_log'][1].error('Missing the following atl file: ' 
+                                             + atl03_file if not os.path.isfile(atl03_file) else atl08_file)
+            else:
+                print('Missing the following atl file: '
+                      , atl03_file if not os.path.isfile(atl03_file) else atl08_file)
+    return atl_data_dict
+
+def trim_and_bin(arg_dict, dataset_dict) -> dict:
+    """
+    Create atl03/atl08 objects (structs). Trim to regional
+    lat/lon (optional). Re-bin atl03 to 30m.
+    
+    Parameters:
+        arg_dict (dict): dictionary of argparse command line inputs
+    
+    Returns:
+        dataset_dict (subset of atl_data_dict) (dict): dictionary of string 
+                      pairs representing atl03, atl08 files in /dir/fn format; 
+                      atl03 obj; atl08 obj; atl08 rebinned obj
+    """
+    res_field = 'alongtrack'
+        # Create atl03 object and trim lat/lon to desired region (optional).
+        # Create atl08 object and trim lat/lon to desired region (optional).
+        # Log and retry if trimming fails
+    dataset_dict['atl03'] = get_atl03_struct(dataset_dict['atl03_file']
+                                             , arg_dict['in_gt']
+                                             , dataset_dict['atl08_file']
+                                             , epsg = arg_dict['in_epsg'])
+    try:
+        if arg_dict['in_lat']:
+            dataset_dict['atl03'].trim_by_lat(min(arg_dict['in_lat'])
+                                              , max(arg_dict['in_lat']))    
+        if arg_dict['in_lon']:
+            dataset_dict['atl03'].trim_by_lon(min(arg_dict['in_lon'])
+                                              , max(arg_dict['in_lon']))
+        dataset_dict['atl08'] = get_atl08_struct(dataset_dict['atl08_file']
+                                                 , arg_dict['in_gt'], dataset_dict['atl03'])
+        if arg_dict['in_lat']:
+            dataset_dict['atl08'].trim_by_lat(min(arg_dict['in_lat'])
+                                              , max(arg_dict['in_lat']))
+        if arg_dict['in_lon']:
+            dataset_dict['atl08'].trim_by_lon(min(arg_dict['in_lon'])
+                                              , max(arg_dict['in_lon']))
+    except ValueError:
+        if arg_dict['out_log']:
+            arg_dict['out_log'][1].error('An invalid value was encountered. \
+                                         Making another attempt without lat/lon trimming.')
+        else:
+            print('An invalid value was encountered. \
+                  Making another attempt without lat/lon trimming.')
+        dataset_dict['atl03'] = get_atl03_struct(dataset_dict['atl03_file']
+                                                 , arg_dict['in_gt']
+                                                 , dataset_dict['atl08_file']
+                                                 , epsg = arg_dict['in_epsg'])
+        dataset_dict['atl08'] = get_atl08_struct(dataset_dict['atl08_file']
+                                                 , arg_dict['in_gt']
+                                                 , dataset_dict['atl03'])
+        # Re-bin atl03 object to 30m from 100m.
+    dataset_dict['atl08_bin'] = rebin_atl08(dataset_dict['atl03']
+                                            , dataset_dict['atl08']
+                                            , arg_dict['in_gt']
+                                            , arg_dict['in_res'], res_field)
+    return dataset_dict
+
+def generate_output(arg_dict, dataset_dict) -> None:
+    """
+    Generate re-binned atl08 output file in *csv. 
+    Optionally, can generate *mat files as well as *csv.
+    
+    Parameters:
+        arg_dict (dict): Dictionary of argparse options
+        dataset_dict (dict): Dictionary of entire dataset 
+                              generated from each atl03 file, atl08 file set
+    Returns:
+        None
+    """
+    csv_fn = arg_dict['out_dir'] + '/atl08_bin' + re.sub(r'^.*?ATL08_', ''
+                                                         , dataset_dict['atl08_file'])
+    csv_fn = csv_fn.strip('.h5') + '.csv'
+    dataset_dict['atl08_bin'].to_csv(csv_fn)
+    if arg_dict['out_mat'] is True:
+        mat_fn = csv_fn.strip('.csv') + '.mat'
+        df = pd.read_csv(csv_fn)
+        dictionary = {}
+        dictionary['struct'] = df.to_dict('list')
+        sio.savemat(mat_fn, dictionary)
+
+def main(arg_dict):
+    if arg_dict['out_log'][0]:
+        logger = _initialize_logging(arg_dict['out_log'][0])
+        arg_dict['out_log'].append(logger)
+    atl_data_dict = collect_atl_files(arg_dict)
+        # Loop through atl03/atl08 file set dictionary.
+    for dataset_dict in atl_data_dict.values():
+        dataset_dict = trim_and_bin(arg_dict, dataset_dict)
+        generate_output(arg_dict, dataset_dict)
+
+if __name__ == '__main__':
+    arg_dict = parse_arguments()
+    main(arg_dict)    

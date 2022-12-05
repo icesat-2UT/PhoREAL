@@ -77,28 +77,34 @@ class AtlStruct:
         self.ancillary = ancillary
         self.orbit_info = orbit_info
         
-    def trim_by_lat_lon(self, min_lat, max_lat, min_lon, max_lon):
+    def trim_by_lat(self, min_lat, max_lat):
         if self.atlProduct == 'ATL03':
             min_lat = np.min([min_lat, max_lat])
-            max_lat = np.min([min_lat, max_lat])
-            min_lon = np.min([min_lon, max_lon])
-            max_lon = np.max([min_lon, max_lon])
+            max_lat = np.max([min_lat, max_lat])
             self.df = self.df = self.df[self.df.lat_ph > min_lat]
             self.df = self.df = self.df[self.df.lat_ph < max_lat]
+            self.df = self.df.reset_index()
+            self.df, self.rotationData = get_atl_alongtrack(self.df, self)
+        elif self.atlProduct == 'ATL08':
+            min_lat = np.min([min_lat, max_lat])
+            max_lat = np.max([min_lat, max_lat])
+            self.df = self.df = self.df[self.df.latitude > min_lat]
+            self.df = self.df = self.df[self.df.latitude < max_lat]
+            
+    def trim_by_lon(self, min_lon, max_lon):
+        if self.atlProduct == 'ATL03':
+            min_lon = np.min([min_lon, max_lon])
+            max_lon = np.max([min_lon, max_lon])
             self.df = self.df = self.df[self.df.lon_ph > min_lon]
             self.df = self.df = self.df[self.df.lon_ph < max_lon]
             self.df = self.df.reset_index()
-            self.df, self.rotationData = get_atl_alongtrack(self.df)
+            self.df, self.rotationData = get_atl_alongtrack(self.df, self)
         elif self.atlProduct == 'ATL08':
-            min_lat = np.min([min_lat, max_lat])
-            max_lat = np.min([min_lat, max_lat])
             min_lon = np.min([min_lon, max_lon])
             max_lon = np.max([min_lon, max_lon])
-            self.df = self.df = self.df[self.df.latitude > min_lat]
-            self.df = self.df = self.df[self.df.latitude < max_lat]
-            self.df = self.df = self.df[self.df.longitude > min_lat]
-            self.df = self.df = self.df[self.df.longitude < max_lat]
-    
+            self.df = self.df = self.df[self.df.longitude > min_lon]
+            self.df = self.df = self.df[self.df.longitude < max_lon]   
+            
     def to_csv(self, output_csv):
         self.df.to_csv(output_csv)
         
@@ -477,11 +483,11 @@ def get_atl_alongtrack(df, atl03struct = None):
         yRotPt = atl03struct.rotationData.yRotPt
         desiredAngle = 90
         crossTrack, alongTrack, R_mat, xRotPt, yRotPt, phi = \
-        getCoordRotFwd(easting, northing, R_mat, xRotPt, yRotPt, [])    
+            getCoordRotFwd(easting, northing, R_mat, xRotPt, yRotPt, [])    
     else:
         desiredAngle = 90
         crossTrack, alongTrack, R_mat, xRotPt, yRotPt, phi = \
-        getCoordRotFwd(easting, northing, [], [], [], desiredAngle)
+            getCoordRotFwd(easting, northing, [], [], [], desiredAngle)
 
     if 'crosstrack' not in list(df.columns):
         df = pd.concat([df,pd.DataFrame(crossTrack,
