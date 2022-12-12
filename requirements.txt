@@ -8,3 +8,4 @@ simplekml
 laspy
 matplotlib
 pyproj
+icepyx
