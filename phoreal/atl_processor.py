@@ -1,12 +1,9 @@
 # Import packages
 import os
-import numpy as np
 import scipy.io as sio
 import pandas as pd
-import random
 import argparse
 import logging
-import h5py
 import re
 
 print('Packages imported successful')
@@ -14,16 +11,7 @@ print('Packages imported successful')
 # Read specific packages from PhoREAL
 from phoreal.reader import get_atl03_struct
 from phoreal.reader import get_atl08_struct
-from phoreal.reader import get_atl_alongtrack
 from phoreal.binner import rebin_atl08
-from phoreal.binner import rebin_truth
-from phoreal.binner import match_truth_fields
-from phoreal.io import getTruthFilePaths, getTruthHeaders, readAtl08H5
-from phoreal.reference import reprojectHeaderData
-from phoreal.reference import findMatchingTruthFiles
-from phoreal.reference import loadLasFile
-from phoreal.reference import make_buffer
-from phoreal.ace import ace
 
 print('PhoREAL packages imported successful')
 
@@ -234,7 +222,7 @@ def generate_output(arg_dict, dataset_dict) -> None:
     Returns:
         None
     """
-    csv_fn = arg_dict['out_dir'] + '/atl08_bin' + re.sub(r'^.*?ATL08_', ''
+    csv_fn = arg_dict['out_dir'] + '/atl08_bin_' + re.sub(r'^.*?ATL08_', ''
                                                          , dataset_dict['atl08_file'])
     csv_fn = csv_fn.strip('.h5') + '.csv'
     dataset_dict['atl08_bin'].to_csv(csv_fn)
