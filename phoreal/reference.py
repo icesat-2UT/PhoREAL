@@ -48,7 +48,7 @@ def las_to_df(lasFilePath):
     
     return las_df
 
-def loadLasFile(truthFilePath, epsg_atl, rotationData, decimate_n = 3):
+def loadLasFile(truthFilePath, epsg_atl, rotationData, decimate_n = 3, epsg_truth = 'EPSG:0'):
     
     # Read .las file
     lasTruthData = las_to_df(truthFilePath)
@@ -57,7 +57,9 @@ def loadLasFile(truthFilePath, epsg_atl, rotationData, decimate_n = 3):
     # Find EPSG Code from truth file
     # truthHeader = readLasHeader(truthFilePath)
     las_file = laspy.read(truthFilePath)
-    epsg_truth = 'EPSG:' + str(las_file.header.parse_crs().to_epsg(min_confidence=1))
+    if epsg_truth == 0:
+        epsg_truth = 'EPSG:' + str(las_file.header.parse_crs().to_epsg(min_confidence=1))
+
     # epsg_truth = truthHeader['epsg'][0]
     
     # Find EPSG Code from input file
@@ -67,7 +69,7 @@ def loadLasFile(truthFilePath, epsg_atl, rotationData, decimate_n = 3):
     if(epsg_truth == 'None'):
         
         print('      *WARNING: Invalid reference EPSG code, skipping file.')
-        atlTruthData = False
+        # atlTruthData = False
         
     else:
         
@@ -104,6 +106,9 @@ def loadTifFile(truthFilePath, epsg_atl, rotationData):
     # Find EPSG Code from tif
     epsg_truth = 'epsg:' + epsg
     
+    if isinstance(epsg_atl, str) and 'epsg:' not in  epsg_atl:
+        epsg_atl = 'epsg:' + epsg_atl
+    
     # Determine if EPSG Code is the same for the ATL03 Measured
     # epsg_atl = identifyEPSG(atlMeasuredData.hemi,atlMeasuredData.zone)
     
@@ -139,13 +144,13 @@ def loadTifFile(truthFilePath, epsg_atl, rotationData):
         # Store Data as Object
         tif_df = pd.DataFrame()
         tif_df['x'] = xarr
-        tif_df['y'] = xarr
-        tif_df['z'] = xarr
-        tif_df['lon'] = xarr
-        tif_df['lat'] = xarr
-        tif_df['alongtrack'] = xarr
-        tif_df['crosstrack'] = xarr
-        tif_df['classification'] = xarr
+        tif_df['y'] = yarr
+        tif_df['z'] = zarr
+        tif_df['lon'] = lat
+        tif_df['lat'] = lon
+        tif_df['alongtrack'] = x_newRot
+        tif_df['crosstrack'] = y_newRot
+        tif_df['classification'] = 2
         tif_df['date'] = datetime.datetime.now() # TODO: find actual date of tif
 
     return tif_df

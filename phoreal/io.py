@@ -1540,7 +1540,7 @@ def getDEMArrays(in_tif):
     # Suppress warnings that may come from rasterio
     if not sys.warnoptions:
         warnings.simplefilter("ignore")
-    dem = rasterio.open(in_file)
+    dem = rasterio.open(in_tif)
     data = dem.read(1)
     
     # Get Geotransform Information

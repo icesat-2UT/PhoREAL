@@ -751,8 +751,10 @@ def sub_bin_canopy_metrics_truth(df, res_at = 2):
     a_h = np.append(a_h, 0)
     # test_out = np.pad(test_out, (0,1), 'constant')
     surface_area = np.sqrt((a_h**2) + (res_at**2))
+    if 'date' in sub_bin.columns:
+        sub_bin = sub_bin.drop(columns='date')
     sub_bin = sub_bin.drop(columns=['h_ph', 'lat',
-       'lon', 'x', 'y','classification','intensity', 'date', 'easting', 'northing', 'crosstrack',
+       'lon', 'x', 'y','classification','intensity', 'easting', 'northing', 'crosstrack',
       'alongtrack'])
     sub_bin['surface_len'] = surface_area
     sub_bin['ground_len'] = res_at
@@ -856,6 +858,9 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
     t1 = time.time()
     # Compute standard metrics
     # canopy_rh
+    bin_df = calculate_seg_percentile(atl03.df, bin_df, [1, 2,3], percentile_rh, 'norm_h', 
+                   'canopy_rh_ground_', key_field = 'h_ind', classfield = 'classification')
+
     bin_df = calculate_seg_percentile(atl03.df, bin_df, [2,3], percentile_rh, 'norm_h', 
                    'canopy_rh_', key_field = 'h_ind', classfield = 'classification')
     # canopy_rh_abs
@@ -986,6 +991,7 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
     print(time.time() - t1)
     t1 = time.time()
 
+    bin_df['canopy_h_ground'] = bin_df['canopy_rh_98'] 
     bin_df['canopy_h'] = bin_df['canopy_rh_98'] 
     bin_df['h_canopy_abs'] = bin_df['canopy_rh_abs_98'] #        
     
@@ -1267,15 +1273,32 @@ def rebin_truth(atl03, truth_swath, res, res_field):
                                            classes = [3,4,5], 
                                            h_base = h_base_val)
 
-    bin_df['year'] = truth_swath.date.iloc[0].year
-    bin_df['month'] = truth_swath.date.iloc[0].month
-    bin_df['day'] = truth_swath.date.iloc[0].day
+    if 'date' in truth_swath.columns:
+        bin_df['year'] = truth_swath.date.iloc[0].year
+        bin_df['month'] = truth_swath.date.iloc[0].month
+        bin_df['day'] = truth_swath.date.iloc[0].day
     return bin_df
 
 def match_truth_fields(truth_bin, atl08_bin):
     # Set core fields to be equal to atl03_bin
     drop_fields = ['alongtrack', 'crosstrack', 'easting', 
                            'northing', 'lon', 'lat']
+    
+    truth_bin = truth_bin.loc[:, ~truth_bin.columns.isin(drop_fields)]
+    
+    include_fields = ['h_ind','alongtrack', 'crosstrack', 'easting', 
+                      'northing', 'longitude', 'latitude', 'delta_time','time']
+    
+    atl08_bin = atl08_bin.loc[:, atl08_bin.columns.isin(include_fields)]
+    
+    truth_bin = pd.merge(truth_bin, atl08_bin, on = 'h_ind')
+    
+    return truth_bin
+
+def match_atl_fields(truth_bin, atl08_bin):
+    # Set core fields to be equal to atl03_bin
+    drop_fields = ['h_ind','alongtrack', 'crosstrack', 'easting', 
+                      'northing', 'longitude', 'latitude', 'delta_time','time']
     
     truth_bin = truth_bin.loc[:, ~truth_bin.columns.isin(drop_fields)]
     
