@@ -1110,27 +1110,30 @@ def selectwkt(proj,hemi=None,zone=None):
         print("No defined Projected Coordinate System Selected")
     return wkt
 
-### Function to write .las file (1.4 format)
+### Function to write .las file (2.3 format)
 def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,hemi=None,zone=None):
     
     wkt = selectwkt(proj,hemi,zone)
     
     #Create new VLR
-    new_vlr = laspy.header.VLR(user_id = "LASF_Projection",
+    new_vlr = laspy.VLR(user_id = "LASF_Projection",
                            record_id = 2112,
-                           VLR_body = wkt,
+                           record_data = wkt,
                            description = "OGC Coordinate System WKT")
     inVLRs = []
     inVLRs.append(new_vlr)
 
     #Create new Header
-    hdr = laspy.header.Header(file_version=1.4)
+    hdr = laspy.LasHeader(version='1.4')
     hdr.file_sig = 'LASF'
     
     #Create new las file with Header and VLR  
-    outfile = laspy.file.File(output_file, mode="w", header=hdr)
-    outfile.header.vlrs = inVLRs
-    outfile.header.set_wkt = 1
+    new_las = laspy.LasData(hdr)
+    new_las.header.vlr = inVLRs
+    new_las.header.set_wkt = 1
+    # outfile = laspy.file.File(output_file, mode="w", header=hdr)
+    # outfile.header.vlr = inVLRs
+    # outfile.header.set_wkt = 1
     
     #Establish offset
     xmin = np.min(xx)
@@ -1158,24 +1161,25 @@ def writeLas(xx,yy,zz,proj,output_file,classification,intensity,signalConf=None,
     
     in_scale = [xscale, yscale, zscale]
     
-    outfile.header.offset = [xmin,ymin,zmin]
+    new_las.header.offset = [xmin,ymin,zmin]
     
     #Establish scale
-    outfile.header.scale = in_scale
+    new_las.header.scale = in_scale
     
     #Write x, y, z data and if available classification and intensity data
-    outfile.x = xx
-    outfile.y = yy
-    outfile.z = zz
+    new_las.x = xx
+    new_las.y = yy
+    new_las.z = zz
     if classification is not None:
-        outfile.raw_classification = classification
+        new_las.raw_classification = classification
     if intensity is not None:
-        outfile.intensity = intensity
+        new_las.intensity = intensity
     if signalConf is not None:
-        outfile.scan_angle_rank = signalConf
+        new_las.scan_angle_rank = signalConf
     
     #Close las
-    outfile.close()
+    new_las.write(output_file)
+    #new_las.close()
     
 # endDef
     
