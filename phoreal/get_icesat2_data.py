@@ -157,9 +157,11 @@ def main(args_dict):
             region.download_granules( args_dict['uid_email_opath'][2] )
             break
         except:
-            print("Login to EarthData failed. Attempting to connect again.")
             if login_count == 1:
                 print("Connection to EarthData failed. Exiting.")
+                break
+            else:
+                print("Login to EarthData failed. Attempting to connect again.")
     
 if __name__ == '__main__':
     args_dict = parse_arguments()
