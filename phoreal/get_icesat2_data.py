@@ -14,7 +14,7 @@ Command line input example below:
 >>> python3 get_icesat2_data.py -p ATL08 -lat 61.92 63 -lon 25 28.7 -d 2021-04-02 2021-04-04 
     -uep my_uid me@gmail.com /home/me/data_dir
 
-You MUST include a temporal (date range) and/or orbital (cycles, trakcs) boundary for the dataset.
+You MUST include a temporal (date range) and/or orbital (cycles, tracks) boundary for the dataset.
 """
 
 def parse_arguments() -> dict:
@@ -40,7 +40,7 @@ def parse_arguments() -> dict:
                         , help='Min/max longitude for data selection \
                                 (i.e., 45.930351153400515 46.02060957038562)')
         # @TODO may refactor/separate the login credentials and download path later
-        # but will keep Earthdata input together for now
+        # but will keep Earthdata input together for now 
     parser.add_argument('-uep', '--uid_email_opath'
                         , required=True
                         , nargs='+'
@@ -97,7 +97,13 @@ def parse_arguments() -> dict:
                         , help='Version of the data product to use (i.e., 002).')
     
     args = parser.parse_args()
-        
+    
+    # For (ATL<=13) you must include at least one of the 
+    # following inputs (temporal or orbital constraints):
+    # date_range, cycles, tracks
+    if args.date_range is None and args.cycles is None and args.tracks is None:
+        parser.error('You must provide a date range, cycle, or track.')
+    
         # Spatial extent needs to be redefined to fit either bounding box,
         # polygon vertices, or file.
         # Not doing a whole lot of checking here because query.py handles 
@@ -133,7 +139,7 @@ def parse_arguments() -> dict:
     return args_dict
 
 def main(args_dict):
-    print('args_dict: ', args_dict)
+
     region = ipx.Query(   args_dict['product']
                         , args_dict['spatial_extent']
                         , args_dict['date_range']
@@ -143,14 +149,17 @@ def main(args_dict):
                         , args_dict['cycles']
                         , args_dict['tracks']   )
     
-    region.earthdata_login(  args_dict['uid_email_opath'][0]
-                           , args_dict['uid_email_opath'][1]  )
-    
-    region.download_granules( args_dict['uid_email_opath'][2] )
-    
-    #cyclemap, rgtmap = region.visualize_elevation()
-    #cyclemap
-    #rgtmap
+    for login_count in range(2):
+        try:
+            region.earthdata_login(  args_dict['uid_email_opath'][0]
+                                , args_dict['uid_email_opath'][1]  )
+            
+            region.download_granules( args_dict['uid_email_opath'][2] )
+            break
+        except:
+            print("Login to EarthData failed. Attempting to connect again.")
+            if login_count == 1:
+                print("Connection to EarthData failed. Exiting.")
     
 if __name__ == '__main__':
     args_dict = parse_arguments()
