@@ -487,7 +487,7 @@ def get_std(series):
 
 def get_mode(series):
     try:
-        mode = stats.mode(np.array(series))[0][0]
+        mode = scipy.stats.mode(np.array(series))[0][0]
     except:
         mode = np.nan
     return mode
@@ -605,67 +605,6 @@ def calculate_seg_percentile(df_in, df_out, classification, operation, field,
     zout.drop(columns=[outfield], inplace=True)
     df_out = df_out.merge(zout, on=key_field,how='left')  
     return df_out
-
-def f_mi_truth(x):
-    # Static variables
-    # ground_class = 2
-    # canopy_class = 4
-    
-    percentile_intervals = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 
-                            70, 75, 80, 85, 90, 95, 98]
-    d = []
-    d.append((np.nanpercentile(x['norm_h'][x['classification'] == 4],percentile_intervals))) #canopy_rh
-    d.append((np.nanpercentile(x['h_ph'][x['classification'] == 4],percentile_intervals))) #canopy_rh_abs
-    d.append((x['norm_h'][x['classification'] == 4]).std()) #canopy_openness
-    d.append((x['h_ph'][x['classification'] == 2]).mean()) # centroid_height
-    d.append((np.sqrt(((x['norm_h'][x['classification'] == 4])/(x['norm_h'][x['classification'] == 2]).mean()).sum()))) # h_canopy_quad
-    d.append((x['norm_h'][x['classification'] == 4]).max()) #h_max_canopy
-    d.append((x['h_ph'][x['classification'] == 4]).max()) #h_max_canopy_abs
-    d.append((x['norm_h'][x['classification'] == 4]).mean()) #h_mean_canopy
-    d.append((x['h_ph'][x['classification'] == 4]).mean()) #h_mean_canopy_abs    
-    d.append((x['norm_h'][x['classification'] == 4]).median()) #h_median_canopy
-    d.append((x['h_ph'][x['classification'] == 4]).median()) #h_median_canopy_abs      
-    d.append((x['norm_h'][x['classification'] == 4]).min()) #h_min_canopy
-    d.append((x['h_ph'][x['classification'] == 4]).min()) #h_min_canopy_abs   
-    d.append((len(x['h_ph'][x['classification'] == 4]))) #n_ca_photons
-    d.append((scipy.stats.skew(x['alongtrack'][x['classification'] == 2]))) #h_te_skew
-    d.append((x['h_ph'][x['classification'] == 2]).std()) #h_te_std
-    d.append((x['h_ph'][x['classification'] == 2]).max()) #h_te_max
-    d.append((x['h_ph'][x['classification'] == 2]).min()) #h_te_min
-    d.append((x['h_ph'][x['classification'] == 2]).mean()) #h_te_mean
-    d.append((x['h_ph'][x['classification'] == 2]).median()) #h_te_median
-    d.append((scipy.stats.mode(x['h_ph'][x['classification'] == 2])[0])) #h_te_mode
-    d.append((len(x['h_ph'][x['classification'] == 2]))) #n_te_photons
-    d.append((np.nanpercentile(x['norm_h'][x['classification'] == 2],25))) #h_te_rh25
-    d.append((len(x['h_ph']))) #n_seg_ph    
-
-
-    return pd.Series(d, index=[
-        'canopy_rh', 
-                                'canopy_rh_abs', 
-                               'canopy_openness', 
-                               'centroid_height',
-                               'h_canopy_quad',
-                               'h_max_canopy',
-                               'h_max_canopy_abs',
-                               'h_mean_canopy',
-                               'h_mean_canopy_abs',
-                               'h_median_canopy',
-                               'h_median_canopy_abs',
-                               'h_min_canopy',
-                               'h_min_canopy_abs',
-                               'n_ca_photons',
-                               'h_te_skew',
-                               'h_te_std',
-                               'h_te_max',
-                               'h_te_min',
-                               'h_te_mean',
-                               'h_te_median',
-                               'h_te_mode',
-                               'n_te_photons',
-                               'h_te_rh25',
-                               'n_seg_ph',
-                               ])
 
 def slope_df(df, df_bin, ground_class):
     # Static variable
@@ -1041,7 +980,8 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
     
     # Height bins (%)
     h_bin_list = [[0,1],[1,2.5],[2.5,5],[5,7.5],[7.5,10],[10,12.5],[12.5,15],
-                  [15,17.5],[17.5,20],[20,22.5],[22.5,25],[25,27.5],[27.5,30]]
+                  [15,17.5],[17.5,20],[20,22.5],[22.5,25],[25,27.5],[27.5,30],
+                  [30,200]]
     h_base_val = 0
     h_bin_prefix = 'h_bin_'
     for i in range(0,len(h_bin_list)):
@@ -1163,7 +1103,7 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], get_min, 'h_ph', 
                    'h_min_canopy_abs', key_field = 'h_ind', classfield = 'classification')
     #n_ca_photons
-    bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_len, 'h_ph', 
+    bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], get_len, 'h_ph', 
                    'n_ca_photons', key_field = 'h_ind', classfield = 'classification')
     #h_te_skew
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_skew, 'alongtrack', 
@@ -1259,7 +1199,8 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     
     # Height bins (%)
     h_bin_list = [[0,1],[1,2.5],[2.5,5],[5,7.5],[7.5,10],[10,12.5],[12.5,15],
-                  [15,17.5],[17.5,20],[20,22.5],[22.5,25],[25,27.5],[27.5,30]]
+                  [15,17.5],[17.5,20],[20,22.5],[22.5,25],[25,27.5],[27.5,30],
+                  [30,200]]
     h_base_val = 0
     h_bin_prefix = 'h_bin_'
     for i in range(0,len(h_bin_list)):
