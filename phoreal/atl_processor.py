@@ -126,7 +126,7 @@ def collect_atl_files(arg_dict) -> dict:
     dataset_count = 0
     for data_file in os.listdir(arg_dict['in_atl03']):
             # Ensure that file is of ATL03 h5 type.
-        if data_file[:5] == 'ATL03'
+        if data_file[:5] == 'ATL03':
             atl03_file = os.path.join(arg_dict['in_atl03'], data_file)
         else:
             continue
