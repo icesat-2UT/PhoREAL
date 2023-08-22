@@ -598,8 +598,6 @@ def readAtl03H5(in_file03, fieldName, label):
           dsname=''.join([label, fieldName])
           if dsname in f:
               dataOut = np.array(f[dsname])
-              if('signal_conf_ph' in fieldName.lower()):
-                  dataOut = dataOut[:,0]
           else:
               dataOut = []
     except Exception as e:
