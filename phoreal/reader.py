@@ -122,10 +122,15 @@ def read_atl03_heights_data(atl03filepath, gt):
     # Read each key, put it in pandas df
     for idx, key in enumerate(keys):
         data = readAtl03H5(atl03filepath, '/heights/' + key, gt)
+        if('signal_conf_ph' in key.lower()):
+            key = ['signal_conf_ph_land','signal_conf_ph_ocean','signal_conf_ph_sea_ice','signal_conf_ph_land_ice','signal_conf_ph_inland_water']
+        else:
+            key = [key]
         if idx == 0:
             df = pd.DataFrame(data,columns=[key])
+            df = pd.DataFrame(data,columns=key)
         else:
-            df = pd.concat([df,pd.DataFrame(data,columns=[key])],axis=1)
+            df = pd.concat([df,pd.DataFrame(data,columns=key)],axis=1)
     return df
 
 def read_atl03_geolocation(atl03filepath, gt):
@@ -678,8 +683,6 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     df['ph_bihr'], df['ph_bcr'], df['ph_rate'] =\
         get_atl03_rate(atl03filepath, gt) 
     df['dist_ph_along'] = get_atl03_dist_ph_along(atl03filepath, gt)
-    df['time'] = df['delta_time'] -\
-        np.min(np.array(df.delta_time)[np.nonzero(np.array(df.delta_time))])
     df = get_atl_time(df)
     df, epsg = get_atl_coords(df, epsg)
     df, rotation_data = get_atl_alongtrack(df)
