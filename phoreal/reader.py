@@ -683,8 +683,6 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     df['ph_bihr'], df['ph_bcr'], df['ph_rate'] =\
         get_atl03_rate(atl03filepath, gt) 
     df['dist_ph_along'] = get_atl03_dist_ph_along(atl03filepath, gt)
-    df['time'] = df['delta_time'] -\
-        np.min(np.array(df.delta_time)[np.nonzero(np.array(df.delta_time))])
     df = get_atl_time(df)
     df, epsg = get_atl_coords(df, epsg)
     df, rotation_data = get_atl_alongtrack(df)
