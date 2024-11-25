@@ -299,8 +299,7 @@ def get_atl03_classification(atl03filepath, atl08filepath, gt):
 def merge_label_to_df(atl03filepath, atl08filepath, gt, df):
     allph_classed = get_atl03_classification(atl03filepath, atl08filepath, gt)
     # Add classifications to ATL03 DF
-    df = pd.concat([df,pd.DataFrame(allph_classed,
-                                    columns=['classification'])],axis=1)
+    df['classification'] = allph_classed
     
     # Replace nan with -1 (unclassified)
     df.replace({'classification' : np.nan}, -1)
@@ -381,8 +380,7 @@ def merge_norm_h_to_df(atl03filepath, atl08filepath, gt, df):
     # Get allph_heights
     allph_heights = get_atl03_heights_offset(atl03filepath, atl08filepath, gt)
     # Add classifications to ATL03 DF
-    df = pd.concat([df,pd.DataFrame(allph_heights,
-                                    columns=['norm_h'])],axis=1)
+    df['norm_h'] = allph_heights
     return df
 
 def get_atl03_segment_id(atl03filepath, gt):
@@ -422,8 +420,7 @@ def merge_seg_id_to_df(atl03filepath, gt, df):
     h_seg = get_atl03_segment_id(atl03filepath, gt)
     
     # Add classifications to ATL03 DF
-    df = pd.concat([df,pd.DataFrame(h_seg,
-                                    columns=['seg_id'])],axis=1)
+    df['seg_id'] = h_seg
     return df
 
 # Calculate alongtrack time
@@ -432,8 +429,7 @@ def get_atl_time(df):
     min_detla_time = np.min(delta_time[np.nonzero(delta_time)])
     time = delta_time - min_detla_time
     
-    df = pd.concat([df,pd.DataFrame(time,
-                                    columns=['time'])],axis=1)
+    df['time'] = time
     return df
     
 # Calcualte Easting/Northing
@@ -457,19 +453,15 @@ def get_atl_coords(df, epsg = None):
         xcoord, ycoord, epsg = wgs84_to_utm_find_and_transform(lon, lat)
         
     if 'easting' not in columns:
-        df = pd.concat([df,pd.DataFrame(xcoord,
-                                        columns=['easting'])],axis=1)
-        df = pd.concat([df,pd.DataFrame(ycoord,
-                                        columns=['northing'])],axis=1)
+        df['easting'] = xcoord
+        df['northing'] = ycoord
     else:
         print('Warning: Overwritting Existing Coordinates')
         df = df.drop(columns = ['easting'])
         df = df.drop(columns = ['northing'])
 
-        df = pd.concat([df,pd.DataFrame(xcoord,
-                                        columns=['easting'])],axis=1)
-        df = pd.concat([df,pd.DataFrame(ycoord,
-                                        columns=['northing'])],axis=1)        
+        df['easting'] = xcoord
+        df['northing'] = ycoord     
     
     return df, epsg
 
@@ -490,18 +482,14 @@ def get_atl_alongtrack(df, atl03struct = None):
             getCoordRotFwd(easting, northing, [], [], [], desiredAngle)
 
     if 'crosstrack' not in list(df.columns):
-        df = pd.concat([df,pd.DataFrame(crossTrack,
-                                    columns=['crosstrack'])],axis=1)
-        df = pd.concat([df,pd.DataFrame(alongTrack,
-                                        columns=['alongtrack'])],axis=1)
+        df['crosstrack'] = crossTrack
+        df['alongtrack'] = alongTrack
     else:
         print('Warning: Overwriting Existing Alongtrack/Crosstrack')
         df = df.drop(columns = ['crosstrack'])
         df = df.drop(columns = ['alongtrack'])
-        df = pd.concat([df,pd.DataFrame(crossTrack,
-                                        columns=['crosstrack'])],axis=1)
-        df = pd.concat([df,pd.DataFrame(alongTrack,
-                                        columns=['alongtrack'])],axis=1)  
+        df['crosstrack'] = crossTrack
+        df['alongtrack'] = alongTrack
 
     
     rotation_data = AtlRotationStruct(R_mat, xRotPt, yRotPt, desiredAngle, phi)
@@ -650,8 +638,7 @@ def match_atl_to_atl03(df, atl03struct):
     delta_time03 = np.array(atl03struct.df.delta_time)
     time = np.array(df.delta_time) -\
         np.min(delta_time03[np.nonzero(delta_time03)])
-    df = pd.concat([df,pd.DataFrame(time,
-                            columns=['time'])],axis=1)
+    df['time'] = time
     # Calculate Projected Coordinates
     df, epsg = get_atl_coords(df, atl03struct.epsg)
     # Calculate Along track
@@ -678,8 +665,8 @@ def get_atl03_struct(atl03filepath, gt, atl08filepath = None, epsg = None,
     df['ph_bihr'], df['ph_bcr'], df['ph_rate'] =\
         get_atl03_rate(atl03filepath, gt) 
     df['dist_ph_along'] = get_atl03_dist_ph_along(atl03filepath, gt)
-    df['time'] = df['delta_time'] -\
-        np.min(np.array(df.delta_time)[np.nonzero(np.array(df.delta_time))])
+    #df['time'] = df['delta_time'] -\
+    #    np.min(np.array(df.delta_time)[np.nonzero(np.array(df.delta_time))])
     df = get_atl_time(df)
     df, epsg = get_atl_coords(df, epsg)
     df, rotation_data = get_atl_alongtrack(df)

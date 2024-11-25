@@ -648,7 +648,7 @@ def sub_bin_canopy_metrics(df, res_at = 2):
     df_c = df[df.classification > 1]
     # df_c = df_c.reindex(list(range(ind03.min(),ind03.max()+1)),fill_value=0)
     zgroup = df_c.groupby('c_ind')
-    sub_bin = zgroup.aggregate(np.max)
+    sub_bin = zgroup.aggregate("max")
     sub_bin = sub_bin.reindex(list(range(ind03.min(),ind03.max()+1)),fill_value=0)
     sub_bin['alongtrack'] = (sub_bin.index * res_at) + (res_at / 2)
 
@@ -678,7 +678,7 @@ def sub_bin_canopy_metrics_truth(df, res_at = 2):
     df_c = df[df.classification == 4]
     # df_c = df_c.reindex(list(range(ind03.min(),ind03.max()+1)),fill_value=0)
     zgroup = df_c.groupby('c_ind')
-    sub_bin = zgroup.aggregate(np.max)
+    sub_bin = zgroup.aggregate("max")
     sub_bin = sub_bin.reindex(list(range(ind.min(),ind.max()+1)),fill_value=0)
     sub_bin['alongtrack'] = (sub_bin.index * res_at) + (res_at / 2)
 
@@ -704,7 +704,7 @@ def sub_bin_canopy_metrics_truth(df, res_at = 2):
 
 def calc_rumple_index(sub_bin):
     zgroup = sub_bin.groupby('h_ind')
-    veg_df = zgroup.aggregate(np.sum)
+    veg_df = zgroup.aggregate("sum")
     veg_df['rumple_index'] = veg_df.surface_len / veg_df.ground_len
     veg_df['veg_area'] = veg_df.norm_h
     veg_df = veg_df.drop(columns=['norm_h'])    
@@ -825,7 +825,7 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
                    'h_mean_canopy', key_field = 'h_ind', classfield = 'classification')
     #h_mean_canopy_abs
     bin_df = calculate_seg_meteric(atl03.df, bin_df, [2,3], get_mean, 'h_ph', 
-                   'h_canopy_quad', key_field = 'h_ind', classfield = 'classification')
+                   'h_mean_canopy_abs', key_field = 'h_ind', classfield = 'classification')
     #h_median_canopy
     bin_df = calculate_seg_meteric(atl03.df, bin_df, [2,3], get_median, 'norm_h', 
                    'h_median_canopy', key_field = 'h_ind', classfield = 'classification')
@@ -848,8 +848,8 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
     bin_df = calculate_seg_meteric(atl03.df, bin_df, [3], get_std, 'norm_h', 
                    'toc_roughness', key_field = 'h_ind', classfield = 'classification')
     #h_te_skew
-    bin_df = calculate_seg_meteric(atl03.df, bin_df, [1], get_skew, 'alongtrack', 
-                   'h_canopy_quad', key_field = 'h_ind', classfield = 'classification')
+    bin_df = calculate_seg_meteric(atl03.df, bin_df, [1], get_skew, 'h_ph', 
+                   'h_te_skew', key_field = 'h_ind', classfield = 'classification')
     #h_te_std
     bin_df = calculate_seg_meteric(atl03.df, bin_df, [1], get_std, 'h_ph', 
                    'h_te_std', key_field = 'h_ind', classfield = 'classification')
@@ -861,7 +861,7 @@ def rebin_atl08(atl03, atl08, gt, res, res_field):
                    'h_te_min', key_field = 'h_ind', classfield = 'classification')
     #h_te_mean
     bin_df = calculate_seg_meteric(atl03.df, bin_df, [1], get_mean, 'h_ph', 
-                   'h_canopy_quad', key_field = 'h_ind', classfield = 'classification')
+                   'h_te_mean', key_field = 'h_ind', classfield = 'classification')
     #h_te_median
     bin_df = calculate_seg_meteric(atl03.df, bin_df, [1], get_median, 'h_ph', 
                    'h_te_median', key_field = 'h_ind', classfield = 'classification')
@@ -1089,7 +1089,7 @@ def rebin_truth(atl03, truth_swath, res, res_field):
                    'h_mean_canopy', key_field = 'h_ind', classfield = 'classification')
     #h_mean_canopy_abs
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], get_mean, 'h_ph', 
-                   'h_canopy_quad', key_field = 'h_ind', classfield = 'classification')
+                   'h_mean_canopy_abs', key_field = 'h_ind', classfield = 'classification')
     #h_median_canopy
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], get_median, 'norm_h', 
                    'h_median_canopy', key_field = 'h_ind', classfield = 'classification')
@@ -1106,8 +1106,8 @@ def rebin_truth(atl03, truth_swath, res, res_field):
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [4], get_len, 'h_ph', 
                    'n_ca_photons', key_field = 'h_ind', classfield = 'classification')
     #h_te_skew
-    bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_skew, 'alongtrack', 
-                   'h_canopy_quad', key_field = 'h_ind', classfield = 'classification')
+    bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_skew, 'h_ph', 
+                   'h_te_skew', key_field = 'h_ind', classfield = 'classification')
     #h_te_std
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_std, 'h_ph', 
                    'h_te_std', key_field = 'h_ind', classfield = 'classification')
@@ -1119,7 +1119,7 @@ def rebin_truth(atl03, truth_swath, res, res_field):
                    'h_te_min', key_field = 'h_ind', classfield = 'classification')
     #h_te_mean
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_mean, 'h_ph', 
-                   'h_canopy_quad', key_field = 'h_ind', classfield = 'classification')
+                   'h_te_mean', key_field = 'h_ind', classfield = 'classification')
     #h_te_median
     bin_df = calculate_seg_meteric(truth_swath, bin_df, [2], get_median, 'h_ph', 
                    'h_te_median', key_field = 'h_ind', classfield = 'classification')

@@ -517,7 +517,7 @@ def find_utm_zone_arr(lat, lon, mode=True, module=None, m=None):
                 zone = zone[1]
             elif len(zone) > 3:
                 from scipy.stats import mode as mode_func
-                zone = mode_func(zone)[0][0]
+                zone = mode_func(zone)[0]
                 print("Warning: Input ground track present in more than 3 UTM zones. \
                          \nRecommend manually selecting GCS.")
             else:
@@ -550,7 +550,7 @@ def find_utm_zone_arr(lat, lon, mode=True, module=None, m=None):
 
         if mode:
             from scipy.stats import mode as mode_func
-            epsg_code = mode_func(epsg_code_arr)[0][0]
+            epsg_code = mode_func(epsg_code_arr)[0]
             return epsg_code
 
         else:
@@ -1365,7 +1365,7 @@ def pause(msg='enter to continue'):
 
 def mode(arr):
     from scipy.stats import mode as mode_func
-    val = mode_func(arr)[0][0]
+    val = mode_func(arr)[0]
     return val
 
 def sort_first(arr):
