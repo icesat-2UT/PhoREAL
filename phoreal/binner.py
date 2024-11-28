@@ -565,7 +565,7 @@ def percentile_rh(arr):
 
 def calculate_seg_meteric(df_in, df_out, classification, operation, field, 
                outfield, key_field = 'bin_id', classfield = 'classification'):
-    df_filter = df_in[df_in[classfield].isin(classification)]
+    df_filter = df_in[df_in[classfield].isin(classification)].copy()
     df_filter.drop(df_filter.columns.difference([key_field,field]),
                        1,inplace=True)
     zgroup = df_filter.groupby(key_field)
@@ -581,7 +581,7 @@ def calculate_seg_meteric(df_in, df_out, classification, operation, field,
 def calculate_seg_percentile(df_in, df_out, classification, operation, field, 
                outfield, key_field = 'bin_id', classfield = 'classification'):
     q_list = [10,20,25,30,40,50,60,70,75,80,90,98,100]
-    df_filter = df_in[df_in[classfield].isin(classification)]
+    df_filter = df_in[df_in[classfield].isin(classification)].copy()
     df_filter.drop(df_filter.columns.difference([key_field,field]), 
                    1,inplace=True)
     zgroup = df_filter.groupby(key_field)
